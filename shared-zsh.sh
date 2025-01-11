@@ -3,20 +3,39 @@
 # shellcheck source="./shared.sh"
 source "${HOME}/.config/sh/shared.sh"
 
+if file_exists "${HOME}/.env"; then
+  source "${HOME}/.env"
+fi
 
 alias k='kubectl'
-alias v='nvim'
-alias lg='lazygit'
-alias top='htop'
+if has_command "nvim"; then
+  alias v='nvim'
+fi
 
+if has_command "lazygit"; then
+alias lg='lazygit'
+fi
+
+if has_command "htop"; then
+  alias top='htop'
+fi
+
+if has_command "python3"; then
 alias python='python3'
 alias pip='pip3'
+fi
 
+if has_command "eza"; then 
 alias ls='eza -a --icons=always'
 alias ll='eza -lhga --git '
 alias ld='eza -lDga --git'
 alias lt='eza -lTL 3 --icons=always'
-
+elif has_command "exa"; then
+alias ls='exa -a --icons=always'
+alias ll='exa -lhga --git '
+alias ld='exa -lDga --git'
+alias lt='exa -lTL 3 --icons=always'
+fi
 
 # FZF 
 eval "$(fzf --zsh)"
@@ -44,10 +63,6 @@ _fzf_comprun() {
   *)              fzf --preview "--preview 'bat -n --color=always --lin-range :500 {}" "$@" ;;
   esac
 }
-
-export BAT_THEME=toykonight_night
-
-
 
 # Wezterm Aliases
 function name() {
@@ -435,15 +450,15 @@ function setEnv() {
   log ""
 
   # Get user's choice
-  read -rp "Please enter the name of the environment to activate: " selected_env
+  printf "Please enter the name of the environment to activate: "
+  read -r selected_env
 
-  conda_bin=$(dirname "$(which conda)")
-  
-  cat > .envrc << EOF
-source "${conda_bin}/activate" "${selected_env}"
-EOF
-
+  echo "source $(which activate) ${selected_env}" > .envrc
   direnv allow .
 
   log "Environment '${GREEN}${BOLD}${selected_env}${RESET}' will now always be used in this directory."
+  log ""
+  log "- update the .envrc file to change the preferred environment if you wish to change"
+  log "- you can also run ${BLUE}${BOLD}conda info --envs${RESET} at any point to validate the preferred env."
+  log ""
 }
