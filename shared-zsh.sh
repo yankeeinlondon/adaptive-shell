@@ -3,11 +3,21 @@
 # shellcheck source="./shared.sh"
 source "${HOME}/.config/sh/shared.sh"
 
+if ! is_empty "${WEZTERM_UNIX_SOCKET}"; then 
+  # shellcheck source="./wezterm.sh"
+  source "${HOME}/.config/sh/wezterm.sh"
+fi
+
+# source user's `.env` in home directory
+# if it exists.
 if file_exists "${HOME}/.env"; then
   source "${HOME}/.env"
 fi
 
+if has_command "kubectl"; then
 alias k='kubectl'
+fi
+
 if has_command "nvim"; then
   alias v='nvim'
 fi
@@ -25,25 +35,28 @@ alias python='python3'
 alias pip='pip3'
 fi
 
+if has_command "fzf"; then
+export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
+export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --lin-range :500 {}"
+fi
+
 if has_command "eza"; then 
 alias ls='eza -a --icons=always'
 alias ll='eza -lhga --git '
 alias ld='eza -lDga --git'
 alias lt='eza -lTL 3 --icons=always'
+export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"
 elif has_command "exa"; then
 alias ls='exa -a --icons=always'
 alias ll='exa -lhga --git '
 alias ld='exa -lDga --git'
 alias lt='exa -lTL 3 --icons=always'
+export FZF_ALT_C_OPTS="--preview 'exa --tree -color=always {} | head -200'"
 fi
 
 # FZF 
+if has_command "fzf"; then
 eval "$(fzf --zsh)"
-
-export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
-export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --lin-range :500 {}"
-export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"
-
 _fzf_compgen_path() {
   fd --hidden --exclude .git . "$1"
 }
@@ -63,152 +76,17 @@ _fzf_comprun() {
   *)              fzf --preview "--preview 'bat -n --color=always --lin-range :500 {}" "$@" ;;
   esac
 }
-
-# Wezterm Aliases
-function name() {
-  local -r name="${1:-pwd}"
-
-  if [[ "${name}" == "pwd" ]]; then
-    wezterm cli set-tab-title "$(pwd)"
-  else
-    wezterm cli set-tab-title "${name}"
-  fi
-}
-function left() {
-  local percent="50"
-  local name="undefined"
-
-  if is_numeric "$1"; then
-    percent="$1"
-  fi
-
-  if is_numeric "$2"; then
-    percent="$2"
-  fi
-
-  if is_string "$1"; then
-    name="$1"
-  fi
-  if is_string "$2"; then
-    name="$2"
-  fi
-
-  if [[ "${name}" == "undefined" ]]; then 
-    wezterm cli split-pane --left --percent "${percent}" 1>/dev/null 2>/dev/null
-    log "open tab to ${BOLD}left${RESET} (${DIM}${percent}%${RESET})"
-  else
-    log "open tab to ${BOLD}left${NO_BOLD} (${percent}%) named ${name}"
-    wezterm cli split-pane --left --percent "${percent}" --title "${name}"
-  fi
-}
-
-function right() {
-  local percent="50"
-  local name="undefined"
-
-  if is_numeric "$1"; then
-    percent="$1"
-  fi
-
-  if is_numeric "$2"; then
-    percent="$2"
-  fi
-
-  if is_string "$1"; then
-    name="$1"
-  fi
-  if is_string "$2"; then
-    name="$2"
-  fi
-
-  if [[ "${name}" == "undefined" ]]; then 
-    wezterm cli split-pane --right --percent "${percent}" 1>/dev/null 2>/dev/null
-    log "open tab to ${BOLD}right${RESET} (${DIM}${percent}%${RESET})"
-  else
-    log "open tab to ${BOLD}right${NO_BOLD} (${percent}%) named ${name}"
-    wezterm cli split-pane --right --percent "${percent}" --title "${name}"
-  fi
-}
-
-function below() {
-  local percent="50"
-  local name="undefined"
-
-  if is_numeric "$1"; then
-    percent="$1"
-  fi
-
-  if is_numeric "$2"; then
-    percent="$2"
-  fi
-
-  if is_string "$1"; then
-    name="$1"
-  fi
-  if is_string "$2"; then
-    name="$2"
-  fi
-
-  if [[ "${name}" == "undefined" ]]; then 
-    wezterm cli split-pane --bottom --percent "${percent}" 1>/dev/null 2>/dev/null
-    log "open tab to ${BOLD}bottom${RESET} (${DIM}${percent}%${RESET})"
-  else
-    log "open tab to ${BOLD}bottom${NO_BOLD} (${percent}%) named ${name}"
-    wezterm cli split-pane --bottom --percent "${percent}" --title "${name}"
-  fi
-}
-
-function above()  {
-  local percent="50"
-  local name="undefined"
-
-  if is_numeric "$1"; then
-    percent="$1"
-  fi
-
-  if is_numeric "$2"; then
-    percent="$2"
-  fi
-
-  if is_string "$1"; then
-    name="$1"
-  fi
-  if is_string "$2"; then
-    name="$2"
-  fi
-
-  if [[ "${name}" == "undefined" ]]; then 
-    wezterm cli split-pane --top --percent "${percent}" 1>/dev/null 2>/dev/null
-    log "open tab to ${BOLD}above${RESET} (${DIM}${percent}%${RESET})"
-  else
-    log "open tab to ${BOLD}above${NO_BOLD} (${percent}%) named ${name}"
-    wezterm cli split-pane --top --percent "${percent}" --title "${name}"
-  fi
-}
+fi
 
 # use "dust" over base "du" if available
 function du() {
   if has_command "dust"; then
-    $(dust -X .git -X node_modules "$*") && echo "\nExcluded .git and node_modules directory from results" && echo "use 'dust' to not exclude"
+    dust -X .git -X node_modules "$*" && log "\nExcluded .git and node_modules directory from results" && log "use 'dust' to not exclude"
   else
     /usr/bin/du "$*"
   fi
 }
 
-
-function nixy() {
-  if is_os "macos"; then 
-    "${HOME}/.config/nixy/nixy" "${@}"
-  else
-    log "The ${ITALIC}${BOLD}nixy${RESET} command is primarily for macOS (${DIM}found $(os)${RESET})"
-    log ""
-    log "Some common commands in NixOS however are:"
-    log " - uno"
-    log " - dos"
-    log " - tres"
-    log ""
-  fi
-}
 
 function vitesse() {
   if [ -z "$1" ]; then
