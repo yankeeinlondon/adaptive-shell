@@ -8,6 +8,9 @@ if ! is_empty "${WEZTERM_UNIX_SOCKET}"; then
   source "${HOME}/.config/sh/wezterm.sh"
 fi
 
+# shellcheck source="./prep.sh"
+source "${HOME}/.config/sh/prep.sh"
+
 # source user's `.env` in home directory
 # if it exists.
 if file_exists "${HOME}/.env"; then
@@ -97,78 +100,6 @@ function vitesse() {
   npx degit antfu/vitesse "$1" --force
 }
 
-# preps a repo with common files where they don't exist
-function prep() {
-  if has_package_json; then
-    mdlint
-    gitignore
-    if [ -f "./eslint.config.ts" ]; then
-      log "- the ${BLUE}eslint.config.ts${RESET} file already exists, ${ITALIC}skipping${RESET}"
-    else
-      cat "${HOME}/.config/sh/resources/eslint.config.ts" > eslint.config.ts
-      log "- added ${BLUE}eslint.config.ts${RESET} to repo"
-    fi
-
-    if file_exists ".shellcheckrc"; then
-      log "- the ${BLUE}.shellcheckrc${RESET} file already exists, ${ITALIC}skipping${RESET}"
-    else
-      echo "external-sources=true" > .shellcheckrc
-      log "- added a ${BLUE}.shellcheckrc${RESET} file"
-    fi
-
-    if file_exists "./tsconfig.json"; then
-      log "- the ${BLUE}tsconfig.json${RESET} file already exists, ${ITALIC}skipping${RESET}"
-    else
-      cat "${HOME}/.config/sh/resources/tsconfig.json" > tsconfig.json
-      log "- added ${BLUE}tsconfig.json${RESET} to repo"
-    fi
-    
-    log ""
-
-    npm_install_devdep "bumpp"
-    npm_install_devdep "eslint"
-    npm_install_devdep "eslint-plugin-format"
-    npm_install_devdep "@antfu/eslint-config"
-    npm_install_devdep "typescript"
-    npm_install_devdep "npm-run-all"
-    npm_install_devdep "@type-challenges/utils"
-    npm_install_devdep "jiti"
-    npm_install_devdep "vitest"
-    npm_install_devdep "husky"
-
-    if not_in_package_json 'eslint --flag unstable_ts_config'; then
-      log ""
-      log "- consider adding a script target ${GREEN}lint${RESET} as: ${DIM}eslint --flag unstable_ts_config src tests${RESET}"
-    fi
-
-    log ""
-
-    if [ -d "./.github/workflows" ]; then
-      log "- ${BOLD}Github Actions${RESET} exists, ${ITALIC}skipping${RESET}"
-    else 
-      mkdir -p "./.github/workflows"
-      cat "${HOME}/.config/sh/resources/github.main.yaml" > ./.github/workflows/main.yaml
-      cat "${HOME}/.config/sh/resources/github.other.yaml" > ./.github/workflows/other.yaml
-      log "- created ${BOLD}Github Actions${RESET} in ${BLUE}.github/workflows${RESET}"
-    fi
-
-    if [ -f "./.husky/pre-push" ]; then
-      log "- ${BOLD}Husky${RESET} ${GREEN}${DIM}pre-push${RESET} event exists, ${ITALIC}skipping${RESET}"
-    else
-      if [ -d "./.husky" ]; then
-        echo "" 1>/dev/null
-      else
-        mkdir "./.husky"
-      fi
-      cat "${HOME}/.config/sh/resources/pre-push" > "./.husky/pre-push"
-      log "- created ${GREEN}pre-push${RESET} event in Husky directory"
-    fi
-
-    log ""
-  else
-    log "- no ${BLUE}package.json${RESET} found, ${ITALIC}skipping prep activities${RESET}"
-  fi
-}
 
 function vitesse-ext() {
   if [ -z "$1" ]; then
@@ -247,96 +178,4 @@ EOF
   fi
 }
 
-function mdlint() {
-  # test if file exists
-  if [ ! -f "./.markdownlint.json" ]; then
-    if [ ! -f "./.markdownlint.jsonc" ]; then
-      cat <<'EOF' > "./.markdownlint.jsonc"
-// [markdown lint file](https://github.com/DavidAnson/markdownlint)
-{
-  "MD041": false, // [don't require first line to be H1](https://github.com/DavidAnson/markdownlint/blob/main/doc/md041.md) 
-  "MD013": false, // [allow any line length](https://github.com/DavidAnson/markdownlint/blob/main/doc/md013.md)
-  "MD012": false, // [allow multiple consecutive blank lines](https://github.com/DavidAnson/markdownlint/blob/main/doc/md012.md)
-  "MD009": false, // [allow trailing spaces](https://github.com/DavidAnson/markdownlint/blob/main/doc/md009.md)
-}
-EOF
-      log ""
-      log "Added a ${BOLD}.markdownlint.jsonc${RESET} file to the currrent directory"
-      log ""
-      cat "./.markdownlint.jsonc"
-      return
-    fi
-  fi
 
-  log "- the ${BLUE}.markdownlint.jsonc${RESET} file already exists, ${ITALIC}skipping${RESET}"
-}
-
-function justfile() {
-
-  if [ ! -f "./.justfile" ]; then
-    cat <<'EOF' > "./.justfile"
-set dotenv-load
-
-repo := `pwd`
-
-BOLD := '\033[1m'
-RESET := '\033[0m'
-YELLOW2 := '\033[38;5;3m'
-BLACK := '\033[30m'
-RED := '\033[31m'
-GREEN := '\033[32m'
-YELLOW := '\033[33m'
-BLUE := '\033[34m'
-MAGENTA := '\033[35m'
-CYAN := '\033[36m'
-WHITE := '\033[37m'
-
-default:
-  @echo
-  @echo TITLE 
-  @just --list
-  @echo 
-
-# do something cool
-something:
-  @echo "no really ... do something cool!"
-EOF
-
-    echo ""
-    echo "Added a ${BOLD}${BLUE}justfile${RESET} to the currrent directory"
-    echo ""
-  else 
-    echo "- there is already a .justfile here!"
-    echo ""
-  fi
-}
-
-function setEnv() {
-  if ! has_command "conda"; then
-    log "${RED}${BOLD}Error:${RESET} conda is not installed."
-    return 1
-  fi
-
-  if ! has_command "direnv"; then
-    log "${RED}${BOLD}Error:${RESET} direnv is not installed. Please install direnv to use this script."
-    return 1
-  fi
-
-  # List available conda environments
-  log "Available conda environments:"
-  conda info --envs
-  log ""
-
-  # Get user's choice
-  printf "Please enter the name of the environment to activate: "
-  read -r selected_env
-
-  echo "source $(which activate) ${selected_env}" > .envrc
-  direnv allow .
-
-  log "Environment '${GREEN}${BOLD}${selected_env}${RESET}' will now always be used in this directory."
-  log ""
-  log "- update the .envrc file to change the preferred environment if you wish to change"
-  log "- you can also run ${BLUE}${BOLD}conda info --envs${RESET} at any point to validate the preferred env."
-  log ""
-}

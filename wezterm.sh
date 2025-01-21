@@ -1,3 +1,7 @@
+#!/usr/bin/env bash
+
+# shellcheck source="./shared.sh"
+source "${HOME}/.config/sh/shared.sh"
 
 # Wezterm Aliases
 function name() {

@@ -1,34 +1,7 @@
-export RESET='\033[0m'
-export GREEN='\033[38;5;2m'
-export RED='\033[38;5;1m'
-export YELLOW2='\033[38;5;3m'
-export BLACK='\033[30m'
-export RED='\033[31m'
-export GREEN='\033[32m'
-export YELLOW='\033[33m'
-export BLUE='\033[34m'
-export MAGENTA='\033[35m'
-export CYAN='\033[36m'
-export WHITE='\033[37m'
-export BRIGHT_BLACK='\033[90m'
-export BRIGHT_RED='\033[91m'
-export BRIGHT_GREEN='\033[92m'
-export BRIGHT_YELLOW='\033[93m'
-export BRIGHT_BLUE='\033[94m'
-export BRIGHT_MAGENTA='\033[95m'
-export BRIGHT_CYAN='\033[96m'
-export BRIGHT_WHITE='\033[97m'
+#!/usr/bin/env bash
 
-export BOLD='\033[1m'
-export NO_BOLD='\033[21m'
-export DIM='\033[2m'
-export NO_DIM='\033[22m'
-export ITALIC='\033[3m'
-export NO_ITALIC='\033[23m'
-export STRIKE='\033[9m'
-export NO_STRIKE='\033[29m'
-export REVERSE='\033[7m'
-export NO_REVERSE='\033[27m'
+# shellcheck source="./color.sh"
+source "${HOME}/.config/sh/color.sh";
 
 export ANDROID_HOME="${HOME}/Library/Android/sdk"
 export NDK_HOME="${ANDROID_HOME}/nd/$(ls -1 ${ANDROID_HOME}/ndk)"
@@ -207,6 +180,20 @@ function is_os() {
   fi
 }
 
+# has_command <cmd>
+#
+# checks whether a particular program passed in via $1 is installed 
+# on the OS or not (at least within the $PATH)
+function has_command() {
+    local -r cmd="${1:?cmd is missing}"
+
+    if command -v "${cmd}" &> /dev/null; then
+        return 0
+    else 
+        return 1
+    fi
+}
+
 # file_exists <filepath>
 #
 # tests whether a given filepath exists in the filesystem
@@ -219,6 +206,19 @@ function file_exists() {
         return 1;
     fi
 }
+
+
+
+function has_file() {
+    local -r filepath="${1:?no filepath passsed to filepath()!}"
+
+    if [ -f "${filepath}" ]; then
+        return 0;
+    else
+        return 1;
+    fi
+}
+
 
 # validates that the current directory has a package.json file
 function has_package_json() {
