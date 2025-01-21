@@ -207,7 +207,18 @@ function file_exists() {
     fi
 }
 
+# dir_exists <filepath>
+#
+# tests whether a given directory path exists in the filesystem
+function dir_exists() {
+    local filepath="${1:?filepath is missing}"
 
+    if [ -d "${filepath}" ]; then
+        return 0;
+    else
+        return 1;
+    fi
+}
 
 function has_file() {
     local -r filepath="${1:?no filepath passsed to filepath()!}"
