@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+# shellcheck source="./shared.sh"
 source "${HOME}/.config/sh/shared.sh"
 
 # mdlint()
@@ -185,7 +186,15 @@ function ts_prep() {
       cat "${HOME}/.config/sh/resources/vitest.config.ts" > vitest.config.ts
       log "- added ${BLUE}vitest.config.ts${RESET} to repo"
     fi
-    
+
+    if ! dir_exists "./src"; then
+        mkdir "src"
+    fi
+    if ! dir_exists "./tests"; then
+        mkdir "tests"
+    fi
+
+
     log ""
 
     npm_install_devdep "bumpp"
