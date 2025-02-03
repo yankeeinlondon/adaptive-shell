@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 export RED=$'\033[38;5;1m'
-export YELLOW2=$'\033[38;5;3m'
 export BLACK=$'\033[30m'
 export RED=$'\033[31m'
 export GREEN=$'\033[32m'

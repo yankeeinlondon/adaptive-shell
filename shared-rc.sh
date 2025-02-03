@@ -72,25 +72,6 @@ function du() {
   fi
 }
 
-
-
-
-# moves executing into a kubernetes container
-function into () {
-  if [[ -z "$1" ]]; then
-      echo "Syntax: into \$1 \$2, ... where:" 1>&2
-      echo "  \$1 - is the name of the POD you're wanting to shell into" 1>&2
-      echo "  \$2 - is the shell you want to use; will use 'bash' by default" 1>&2
-      return 1
-  else
-      SHELL="${2-bash}"
-      printf '%s' "Going into POD ${1} using the $SHELL command:\n  kubectl exec -it ${1} ${SHELL}" 1>&2
-      kubectl exec -it "${1}" -- "$SHELL"
-      echo "Back into parent shell" 1>&2
-      return 0
-  fi
-}
-
 # checks for given text in either stdin or a filename
 function has () {
   LOOK_FOR=${1}

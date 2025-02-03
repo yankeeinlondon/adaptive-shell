@@ -187,13 +187,19 @@ function ts_prep() {
       log "- added ${BLUE}vitest.config.ts${RESET} to repo"
     fi
 
+    if file_exists "./.markdownlint.jsonc"; then
+        log "- the ${BLUE}.markdownlint.jsonc${RESET} file already exists, ${ITALIC}skipping${RESET}"
+    else
+        cat "${HOME}/.config/sh/resources/.markdownlint.jsonc" > .markdownlint.jsonc 
+        log "- added ${BLUE}.markdownlint.jsonc${RESET} to repo"
+    fi
+
     if ! dir_exists "./src"; then
         mkdir "src"
     fi
     if ! dir_exists "./tests"; then
         mkdir "tests"
     fi
-
 
     log ""
 

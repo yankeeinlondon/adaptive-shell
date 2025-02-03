@@ -8,6 +8,12 @@ if ! is_empty "${WEZTERM_UNIX_SOCKET}"; then
   source "${HOME}/.config/sh/wezterm.sh"
 fi
 
+if dir_exists "${HOME}/Library/Android/sdk"; then
+    export ANDROID_HOME="${HOME}/Library/Android/sdk"
+    # shellcheck disable=SC2155
+    export NDK_HOME="${ANDROID_HOME}/nd/$(ls -1 "${ANDROID_HOME}/ndk")"
+fi
+
 # shellcheck source="./prep.sh"
 source "${HOME}/.config/sh/prep.sh"
 
@@ -44,41 +50,41 @@ export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --lin-range :500 {}"
 fi
 
 if has_command "eza"; then 
-alias ls='eza -a --icons=always'
-alias ll='eza -lhga --git '
-alias ld='eza -lDga --git'
-alias lt='eza -lTL 3 --icons=always'
-export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"
+    alias ls='eza -a --icons=always'
+    alias ll='eza -lhga --git '
+    alias ld='eza -lDga --git'
+    alias lt='eza -lTL 3 --icons=always'
+    export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"
 elif has_command "exa"; then
-alias ls='exa -a --icons=always'
-alias ll='exa -lhga --git '
-alias ld='exa -lDga --git'
-alias lt='exa -lTL 3 --icons=always'
-export FZF_ALT_C_OPTS="--preview 'exa --tree -color=always {} | head -200'"
+    alias ls='exa -a '
+    alias ll='exa -lhga --git '
+    alias ld='exa -lDga --git'
+    alias lt='exa -lTL 3 '
+    export FZF_ALT_C_OPTS="--preview 'exa --tree -color=always {} | head -200'"
 fi
 
 # FZF 
 if has_command "fzf"; then
-eval "$(fzf --zsh)"
-_fzf_compgen_path() {
-  fd --hidden --exclude .git . "$1"
-}
+    eval "$(fzf --zsh)"
+    _fzf_compgen_path() {
+        fd --hidden --exclude .git . "$1"
+    }
 
-_fzf_compgen_dir() {
-  fd --type=d --hidden --exclude .git . "$1"
-}
+    _fzf_compgen_dir() {
+        fd --type=d --hidden --exclude .git . "$1"
+    }
 
-_fzf_comprun() {
-  local command=$1
-  shift
+    _fzf_comprun() {
+        local command=$1
+        shift
 
-  case "$command" in 
-  cd)             fzf --preview 'eza --tree --color=always {} | head -200' "$@" ;;
-  export|unset)   fzf --preview "eval 'echo \$' {}" "$@" ;;
-  ssh)            fzf --preview 'dig {}' "$@" ;;
-  *)              fzf --preview "--preview 'bat -n --color=always --lin-range :500 {}" "$@" ;;
-  esac
-}
+        case "$command" in 
+        cd)             fzf --preview 'eza --tree --color=always {} | head -200' "$@" ;;
+        export|unset)   fzf --preview "eval 'echo \$' {}" "$@" ;;
+        ssh)            fzf --preview 'dig {}' "$@" ;;
+        *)              fzf --preview "--preview 'bat -n --color=always --lin-range :500 {}" "$@" ;;
+        esac
+    }
 fi
 
 # use "dust" over base "du" if available
