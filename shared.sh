@@ -3,8 +3,8 @@
 # shellcheck source="./color.sh"
 source "${HOME}/.config/sh/color.sh";
 
-export ANDROID_HOME="${HOME}/Library/Android/sdk"
-export NDK_HOME="${ANDROID_HOME}/nd/$(ls -1 ${ANDROID_HOME}/ndk)"
+# shellcheck source="./os.sh"
+source "${HOME}/.config/sh/os.sh";
 
 
 # log
@@ -125,7 +125,7 @@ function is_bound() {
 # starts_with <look-for> <content>
 function starts_with() {
     local -r look_for="${1:?No look-for string provided to starts_with}"
-    local -r content="${2:-}"
+    local -r content="${2:?No content passed to starts_with() fn!}"
 
     if is_empty "${content}"; then
         debug "starts_with" "starts_with(${look_for}, "") was passed empty content so will always return false"
@@ -138,6 +138,46 @@ function starts_with() {
     else
         debug "starts_with" "true (\"${DIM}${look_for}${RESET}\")"
         return 0; #: found "look_for"
+    fi
+}
+
+# find_in_file <filepath> <key>
+#
+# Finds the first occurance of <key> in the given file
+# and if that line is the form "<key>=<value>" then 
+# it returns the <value>, otherwise it will return 
+# the line.
+function find_in_file() {
+    local -r filepath="${1:?find_in_file() called but no filepath passed in!}"
+    local -r key="${2:?find_in_file() called but key value passed in!}"
+
+    if file_exists "${filepath}"; then
+        debug "find_in_file(${filepath})" "file found"
+        local found=""
+
+        while read -r line; do
+            if not_empty "${line}" && contains "${key}" "${line}"; then
+                if starts_with "${key}=" "${line}"; then
+                    found="$(strip_leading "${key}=" "${line}")"
+                else
+                    found="${line}"
+                fi
+                break
+            fi
+        done < "$filepath"
+
+        if not_empty "$found"; then
+            debug "find_in_file" "found ${key}: ${found}"
+            printf "%s" "$found"
+            return 0
+        else
+            debug "find_in_file" "Did not find '${key}' in the file at '${filepath}'"
+            echo ""
+            return 0
+        fi
+    else
+        debug "find_in_file" "no file at filepath"
+        return 1
     fi
 }
 
@@ -287,46 +327,14 @@ function contains() {
 # tests whether the <test> value passed in is an empty string (or is unset)
 # and returns 0 when it is empty and 1 when it is NOT.
 function is_empty() {
-    local -n __ref__=$1 2>/dev/null
 
-    if is_bound __ref__; then
-        if is_array __ref__; then
-            if [[ ${#__ref__[@]} -eq 0 ]]; then
-                debug "is_empty" "found an array with no elements so returning true"
-                return 0
-            else
-                debug "is_empty" "found an array with some elements so returning false"
-                return 1
-            fi
-        elif is_assoc_array __ref__; then
-            if [[ ${#!__ref__[@]} -eq 0 ]]; then
-                debug "is_empty" "found an associative array with no keys so returning true"
-                return 0
-            else
-                debug "is_empty" "found an associative array with some key/values so returning false"
-                return 1
-            fi
-        else
-            local -r try_pass_by_val="$__ref__" 2>/dev/null
-            if [ -z "$try_pass_by_val" ] || [[ "$try_pass_by_val" == "" ]]; then
-                debug "is_empty" "was empty, returning 0/true"
-                return 0
-            else
-                debug "is_empty" "was NOT empty, returning 1/false"
-                return 1
-            fi
-        fi
-
-    else 
-        if [ -z "$1" ] || [[ "$1" == "" ]]; then
-            debug "is_empty(${1})" "was empty, returning 0/true"
-            return 0
-        else
-            debug "is_empty(${1}))" "was NOT empty, returning 1/false"
-            return 1
-        fi
+    if [ -z "$1" ] || [[ "$1" == "" ]]; then
+        debug "is_empty(${1})" "was empty, returning 0/true"
+        return 0
+    else
+        debug "is_empty(${1}))" "was NOT empty, returning 1/false"
+        return 1
     fi
-    
 }
 
 
@@ -415,4 +423,12 @@ function npm_install_devdep() {
         fi
     fi
 
+}
+
+function net() {
+    if [[ "$(os)" == "macos" ]]; then
+        ifconfig | grep "inet "
+    elif [[ "$(os)" == "linux" ]]; then 
+        ip addr show | grep "inet "
+    fi
 }
