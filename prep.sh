@@ -1,7 +1,82 @@
 #!/usr/bin/env bash
 
-# shellcheck source="./shared.sh"
-source "${HOME}/.config/sh/shared.sh"
+# shellcheck source="./utils.sh"
+source "${HOME}/.config/sh/utils.sh"
+
+install_uv() {
+  if has_command "curl"; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh | sed "s/^/${BG_BRIGHT_RED}${BRIGHT_BLACK} Install ${RESET}/"
+  elif has_command "wget"; then
+    wget -qO- https://astral.sh/uv/install.sh | sh | sed "s/^/${BG_BRIGHT_RED}${BRIGHT_BLACK} Install ${RESET}/"
+  else 
+    echo "${BG_BRIGHT_RED}${BOLD}${BRIGHT_BLACK} Install ${RESET} - sorry but you must have either ${BLUE}curl${RESET} or ${BLUE}curl${RESET} installed first."
+    exit 1;
+  fi
+}
+
+uv_sync() {
+    # uv is installed but not synced
+    cd "./server" &>/dev/null || exit
+    echo "${BG_BRIGHT_RED}${BOLD}${BRIGHT_BLACK} Install ${RESET} - installing Python dependencies with UV"
+    uv sync | sed "s/^/${BG_BRIGHT_RED}${BRIGHT_BLACK} Install ${RESET}/"
+    cd - &>/dev/null || exit
+}
+
+# install_just()
+#
+# installs the Just runner whereever possible
+# https://github.com/casey/just
+function install_just() {
+    if has_command "just"; then
+        echo "just runner already installed";
+    else
+        if has_command "homebrew"; then
+            brew install just
+        elif has_command "asdf"; then
+            asdf plugin add just
+            asdf install just
+        elif has_command "npm"; then 
+            npm install -g rust-just
+        elif has_command "apk"; then 
+            apk add just
+        elif has_command "nix-env"; then
+            nix-env -iA nixpkgs.just
+        elif has_command "cargo"; then 
+            cargo install just 
+        elif has_command "conda"; then 
+            conda install -c conda-forge just
+        elif has_command "snap"; then
+            snap install --edge --classic just
+        elif is_distro "debian"; then
+            if is_distro_version "13"; then
+                apt install just
+            else
+                apt install cargo
+                cargo install just 
+            fi
+        elif is_distro "fedora"; then
+            dnf install just
+        elif is_distro "ubuntu"; then
+            apt install just
+        elif has_command "pacman"; then
+            pacman -S just
+        else 
+            echo "- unsure how to install the just runner in your environment"
+            echo "- checkout https://github.com/casey/just for more info"
+        fi
+    fi
+}
+
+function prep_debian() {
+    apt update
+    apt upgrade -y
+
+    apt install curl wget neofetch htop lsof gh exa bat ripgrep shellcheck lsb-release delta fzf cmake git xclip -y
+
+    install_just
+}
+
+
 
 # mdlint()
 # 
@@ -45,38 +120,6 @@ function has_command() {
     fi
 }
 
-# install_just()
-#
-# installs the Just runner whereever possible
-# https://github.com/casey/just
-function install_just() {
-    if has_command "just"; then
-        echo "just runner already installed";
-    else
-        if has_command "homebrew"; then
-            brew install just
-        elif has_command "asdf"; then
-            asdf plugin add just
-            asdf install just
-        elif has_command "npm"; then 
-            npm install -g rust-just
-        elif has_command "apk"; then 
-            apk add just
-        elif has_command "nix-env"; then
-            nix-env -iA nixpkgs.just
-        elif has_command "cargo"; then 
-            cargo install just 
-        elif has_command "conda"; then 
-            conda install -c conda-forge just
-        elif has_command "snap"; then
-            snap install --edge --classic just
-        else 
-            echo "- unsure how to install the just runner in your environment"
-            echo "- checkout https://github.com/casey/just for more info"
-        fi
-    fi
-}
-
 
 # justfile()
 # 
@@ -90,7 +133,10 @@ repo := `pwd`
 
 BOLD := '\033[1m'
 RESET := '\033[0m'
-YELLOW2 := '\033[38;5;3m'
+DIM := '\033[2m'
+ITALIC := '\033[3m'
+STRIKE := '\033[9m'
+
 BLACK := '\033[30m'
 RED := '\033[31m'
 GREEN := '\033[32m'
@@ -248,7 +294,9 @@ function ts_prep() {
 }
 
 function rust_prep() {
-    echo ""
+    if ! has_command "rustup"; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    fi
 }
 
 function py_prep() {
