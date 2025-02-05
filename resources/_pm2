@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+if type complete &>/dev/null; then
+  _pm2_completion () {
+    local si="$IFS"
+    # shellcheck disable=SC2207
+    IFS=$'\n' COMPREPLY=($(COMP_CWORD="$COMP_CWORD" \
+                           COMP_LINE="$COMP_LINE" \
+                           COMP_POINT="$COMP_POINT" \
+                           pm2 completion -- "${COMP_WORDS[@]}" \
+                           2>/dev/null)) || return $?
+    IFS="$si"
+  }
+  complete -o default -F _pm2_completion pm2
+elif type compctl &>/dev/null; then
+  _pm2_completion () {
+    local cword line point words si
+    read -Acr words
+    read -cnr cword
+    (( cword-=1 ))
+    read -rl line
+    read -rln point
+    si="$IFS"
+    # shellcheck disable=SC2207
+    IFS=$'\n' reply=($(COMP_CWORD="$cword" \
+                       COMP_LINE="$line" \
+                       COMP_POINT="$point" \
+                       pm2 completion -- "${words[@]}" \
+                       2>/dev/null)) || return $?
+    IFS="$si"
+  }
+  compctl -K _pm2_completion + -f + pm2
+fi

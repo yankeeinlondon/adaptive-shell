@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# shellcheck source="./shared.sh"
-source "./shared.sh"
+# shellcheck source="./utils.sh"
+source "${HOME}/.config/sh/utils.sh"
 
 function default_validator () {
     return 0;
@@ -16,44 +16,6 @@ function exit_ask() {
     echo "${msg}"
     
     exit 0
-}
-
-function text_confirm() {
-    local -r question="${1:?text_confirm() did not get the question passed to it}"
-    local -r default="${2:-y}"
-    local response
-
-    if [[ $(lc "${default}") == "y" ]]; then
-        read -rp "${question} (Y/n)" response >/dev/null
-    else
-        read -rp "${question} (y/N)" response >/dev/null
-    fi
-
-    if [[ $(lc "$default") == "y" ]];then
-        # local outcome=
-        local -i resp
-        if [[ $(lc "$response") == "n" ]] || [[ $(lc "$response") == "no" ]]; then
-            resp=1
-        else
-            resp=0
-        fi        
-
-        debug "text_confirm" "question '${question}'='${response}', with ${ITALIC}default${RESET} of 'yes' -> '$(yes_no "$resp")'"
-
-        return $resp
-
-    else
-        local -i resp
-        if [[ $(lc "$response" == "y") ]] || [[ $(lc "$response") == "yes" ]]; then
-            resp=0
-        else
-            resp=1
-        fi
-
-        debug "text_confirm" "question '${question}'='${response}', with ${ITALIC}default${RESET} of 'no' -> '$(yes_no "$resp")'"
-
-        return $resp
-    fi
 }
 
 # ask
