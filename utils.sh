@@ -1,11 +1,33 @@
 #!/usr/bin/env bash
 
+# catch_errors()
+#
+# Catches all errors found in a script -- including pipeline errors -- and
+# sends them to an error handler to report the error.
+function catch_errors() {
+    set -Eeuo pipefail
+    trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+}
+
+# allow_errors()
+#
+# Allows for non-zero return-codes to avoid being sent to the error_handler
+# and is typically used to temporarily check on an external state from the shell
+# where an error might be encountered but which will be handled locally
+function allow_errors() {
+    set +Eeuo pipefail
+    trap - ERR
+}
+
 
 if [[ "$(whoami)" == "root" ]]; then
     export SUDO=""
 else
     export SUDO="sudo"
 fi
+
+# shellcheck source="./typeof.sh"
+source "${HOME}/.config/sh/typeof.sh"
 
 # log
 #
@@ -14,13 +36,28 @@ function log() {
     printf "%b\\n" "${*}" >&2
 }
 
+function panic() {
+    local -r msg="${1:?no message passed to error()!}"
+    local -ri code=$(( "${2:-1}" ))
+    local -r fn="${3:-${FUNCNAME[1]}}" || echo "unknown"
+
+    log "\n  [${RED}x${RESET}] ${BOLD}ERROR ${DIM}${RED}$code${RESET}${BOLD} →${RESET} ${msg}" 
+    log ""
+    for i in "${!BASH_SOURCE[@]}"; do
+        if ! contains "errors.sh" "${BASH_SOURCE[$i]}"; then
+            log "    - ${FUNCNAME[$i]}() ${ITALIC}${DIM}at line${RESET} ${BASH_LINENO[$i-1]} ${ITALIC}${DIM}in${RESET} $(error_path "${BASH_SOURCE[$i]}")"
+        fi
+    done
+    log ""
+    exit $code
+}
+
 # indent(indent_txt, main_content)
 function indent() {
     local -r indent_txt="${1:?No indentation text passed to indent()!}"
     local -r main_content="${2:?No main content passed to indent()!}"
 
-    # Convert literal \n to newlines and split lines properly
-    printf "%s" "$main_content" | while IFS= read -r line; do
+    printf "%s\n" "$main_content" | while IFS= read -r line; do
         printf "%s%s\n" "${indent_txt}" "${line}"
     done
 }
@@ -36,26 +73,23 @@ function indent() {
 #     - the RegExp `/foo(bar)/` is valid as it defines a section to replace
 # - if the "find" variable is a string then it's just a simple 
 # find-and-replace-all operation.
-function find_replace() {
+find_replace() {
   local find="$1"
   local replace="$2"
   local content="$3"
 
-  # If the "find" looks like /pattern/modifiers, treat it as a regex:
-  if [[ $find =~ ^/(.*)/([a-zA-Z]*)$ ]]; then
-    local pattern="${BASH_REMATCH[1]}"
-    local modifiers="${BASH_REMATCH[2]}"
+  # Test whether the "find" argument is in the regex form: /pattern/modifiers
+  if printf "%s" "$find" | grep -qE '^/.*/[a-zA-Z]*$'; then
+    local pattern modifiers
+    pattern=$(printf "%s" "$find" | sed -E 's|^/(.*)/([a-zA-Z]*)$|\1|')
+    modifiers=$(printf "%s" "$find" | sed -E 's|^/(.*)/([a-zA-Z]*)$|\2|')
 
-    # Run Perl so that it does the regex substitution:
-    #   - 's/'"$pattern"'/'"$replace"'/'"$modifiers"
-    #
-    # By using single quotes around s/ and / plus double-quoted expansions
-    # for $pattern, $replace, and $modifiers, we ensure Bash doesn't
-    # interpret $1, etc. Those make it literally into Perl's regex engine.
-    perl -pe 's/'"$pattern"'/'"$replace"'/'"$modifiers" <<< "$content"
-
+    # Pass the replacement string in the REPL environment variable.
+    # This prevents any shell-quoting issues from stripping or mangling ANSI codes.
+    REPL="$replace" \
+      printf "%s" "$content" | perl -pe 's/'"$pattern"'/$ENV{REPL}/'"$modifiers"
   else
-    # Otherwise, do a simple string replacement (no capture groups).
+    # For literal string replacement, use Bash's built-in substitution.
     printf "%s" "${content//$find/$replace}"
   fi
 }
@@ -116,6 +150,20 @@ function is_empty() {
     fi
 }
 
+# is_pve_host
+#
+# Returns an exit code which indicates whether the given machine is
+# a PVE host or not.
+function is_pve_host() {
+    if has_command "pveversion"; then
+        debug "is_pve_host" "is a pve node"
+        return 0
+    else
+        debug "is_pve_host" "is NOT a pve node"
+        return 1
+    fi
+}
+
 # confirm(question, [default])
 #
 # Asks the user to confirm yes or no and returns TRUE when they answer yes
@@ -140,6 +188,25 @@ function confirm() {
     else
         [[ $(lc "$response") =~ ^y(es)?$ ]] && return 0 || return 1
     fi
+}
+
+# ensure_starting <ensure> <content>
+#
+# ensures that the "content" will start with the <ensure>
+function ensure_starting() {
+    local -r ensured="${1:?No ensured string provided to ensure_starting}"
+    local -r content="${2:?-}"
+
+    if starts_with "${ensured}" "$content"; then
+        debug "ensure_starting" "the ensured text '${ensured}' was already in place"
+        echo "${content}"
+    else
+        debug "ensure_starting" "the ensured text '${ensured}' was added in front of '${content}'"
+
+        echo "${ensured}${content}"
+    fi
+
+    return 0
 }
 
 # lc() <str>
@@ -374,7 +441,7 @@ function get_storage() {
         df --output="source" --output="fstype" --output="avail" --output="pcent" --exclude-type="tmpfs" -h --exclude-type="devtmpfs"
 
     elif is_mac; then
-        df -P -H -a | grep -vE 'TimeMachine|backupdb|^(devfs|autofs|map|localhost:) ' | \
+        df -P -h -a | grep -vE 'TimeMachine|backupdb|^(devfs|autofs|map|localhost:) ' | \
         awk 'BEGIN {print "Filesystem\tType\tUse%\tAvail\tMounted on"} 
             NR>1 {
                 # Reconstruct mount point
@@ -430,6 +497,7 @@ function get_storage() {
         return 1
     fi
 }
+
 # has_command <cmd>
 #
 # checks whether a particular program passed in via $1 is installed 
@@ -847,6 +915,160 @@ function get_arch() {
     esac
 }
 
+# Function to get the number of CPUs/threads
+get_cpu_count() {
+    local os
+    os="$(uname)"
+    case "$os" in
+        Linux)
+            if command -v nproc &>/dev/null; then
+                nproc
+            else
+                # Fallback if nproc is not available.
+                grep -c ^processor /proc/cpuinfo
+            fi
+            ;;
+        Darwin)
+            # macOS
+            sysctl -n hw.ncpu
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            # Windows (in Git Bash, MSYS, or Cygwin)
+            # WMIC output typically contains a header line, so we filter it.
+            if command -v WMIC &>/dev/null; then
+                WMIC CPU Get NumberOfLogicalProcessors | grep -Eo '[0-9]+' | head -n1
+            else
+                echo "WMIC command not found. Are you sure you're running in a Windows environment with WMIC available?" >&2
+                return 1
+            fi
+            ;;
+        *)
+            echo "Unsupported OS: $os" >&2
+            return 1
+            ;;
+    esac
+}
+
+get_systemd_units() {
+    local filters=("$@")
+
+    if has_command "systemctl"; then
+        # Retrieve the list of running service units (removing the .service suffix)
+        # shellcheck disable=SC2207
+        service_units=( $(systemctl list-units --type=service --state=running --no-legend \
+                        | awk '{print $1}' \
+                        | sed 's/\.service$//') )
+
+        # If filters were provided, filter out any unit that contains any of them.
+        if (( ${#filters[@]} > 0 )); then
+            filtered_units=()
+            for unit in "${service_units[@]}"; do
+                exclude=false
+                for filter in "${filters[@]}"; do
+                    if [[ $unit == *"$filter"* ]]; then
+                        exclude=true
+                        break
+                    fi
+                done
+                if ! $exclude; then
+                    filtered_units+=("$unit")
+                fi
+            done
+            service_units=( "${filtered_units[@]}" )
+        fi
+    else
+        echo ""
+    fi
+    echo "${service_units[@]}"
+}
+
+get_launchd_units() {
+    # Capture all provided filter conditions
+    local filters=("$@")
+
+    # shellcheck disable=SC2207
+    units=( $(launchctl list | tail -n +2 | awk '{print $3}' | sed 's/^com\.apple\.//') )
+
+    # If filters were provided, filter out any unit that contains any of them.
+    if (( ${#filters[@]} > 0 )); then
+        filtered_units=()
+        for unit in "${units[@]}"; do
+            exclude=false
+            for filter in "${filters[@]}"; do
+                if [[ $unit == *"$filter"* ]]; then
+                    exclude=true
+                    break
+                fi
+            done
+            if ! $exclude; then
+                filtered_units+=("$unit")
+            fi
+        done
+        units=( "${filtered_units[@]}" )
+    fi
+
+    echo "${units[@]}"
+}
+
+get_alpine_services() {
+    # Capture all provided filter conditions.
+    local filters=("$@")
+
+    # Get the list of running services:
+    # - rc-status prints runlevel info and service statuses.
+    # shellcheck disable=SC2207
+    services=( $(rc-status | grep "\[.*started" | awk '{print $1}') )
+
+    # If filters were provided, exclude any service whose name contains any of them.
+    if (( ${#filters[@]} > 0 )); then
+        filtered_services=()
+        for service in "${services[@]}"; do
+            exclude=false
+            for filter in "${filters[@]}"; do
+                if [[ $service == *"$filter"* ]]; then
+                    exclude=true
+                    break
+                fi
+            done
+            if ! $exclude; then
+                filtered_services+=( "$service" )
+            fi
+        done
+        services=( "${filtered_services[@]}" )
+    fi
+
+    echo "${services[@]}"
+}
+
+# Function to get the CPU family/model name
+get_cpu_family() {
+    local os
+    os="$(uname)"
+    case "$os" in
+        Linux)
+            # Extract the model name from the first processor entry in /proc/cpuinfo
+            grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^[ \t]*//'
+            ;;
+        Darwin)
+            # macOS: use sysctl to get the brand string
+            sysctl -n machdep.cpu.brand_string
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            # Windows: use WMIC to get the CPU name (family)
+            if command -v WMIC &>/dev/null; then
+                WMIC CPU Get Name | sed '1d' | head -n1 | sed 's/^[ \t]*//'
+            else
+                echo "WMIC command not found. Are you sure you're running in a Windows environment with WMIC available?" >&2
+                return 1
+            fi
+            ;;
+        *)
+            echo "Unsupported OS: $os" >&2
+            return 1
+            ;;
+    esac
+}
+
 # get_firmware()
 #
 # Gets the system firmware version
@@ -914,6 +1136,20 @@ function is_debian() {
             return 0
         else 
             debug "is_debian" "is NOT Debian OS [${LC_DISTRO}]"
+            return 1
+        fi 
+    fi
+}
+
+function is_alpine() {
+    if is_linux; then
+        DISTRO="$(distro)"
+        LC_DISTRO="$(lc "${DISTRO}")"
+        if contains "alpine" "${LC_DISTRO}"; then
+            debug "is_alpine" "is Alpine OS [${LC_DISTRO}]"
+            return 0
+        else 
+            debug "is_alpine" "is NOT Alpine OS [${LC_DISTRO}]"
             return 1
         fi 
     fi
@@ -1074,3 +1310,121 @@ function get_tui() {
     fi
 }
 
+# is_docker()
+#
+# Check for Docker container
+is_docker() {
+    # Check common Docker indicators
+    if [ -f /.dockerenv ] || 
+       { [ -f /proc/1/cgroup ] && grep -qi "docker\|kubepods" /proc/1/cgroup; }; then
+        return 0
+    fi
+    return 1
+}
+
+# Check for LXC container
+is_lxc() {
+    # Check common LXC indicators
+    if grep -q 'container=lxc' /proc/1/environ 2>/dev/null || 
+       [ -f /run/.containerenv ] || 
+       ( [ -f /proc/1/cgroup ] && grep -qi 'lxc' /proc/1/cgroup ); then
+        return 0
+    fi
+    return 1
+}
+
+# Check for VM
+is_vm() {
+    # Check common VM indicators
+    if grep -q 'hypervisor' /proc/cpuinfo 2>/dev/null || 
+       ( [ -f /sys/class/dmi/id/product_name ] && 
+         grep -qi -e 'qemu' -e 'kvm' /sys/class/dmi/id/product_name ); then
+        return 0
+    fi
+    return 1
+}
+
+
+function get_ssh_connection() {
+    if [[ -n "${SSH_CONNECTION}" ]]; then
+
+        # shellcheck disable=SC2206
+        local arr=(${SSH_CONNECTION})
+        
+        # Verify that we have exactly four parts.
+        if [[ ${#arr[@]} -eq 4 ]]; then
+            local client_ip="${arr[0]}"
+            # local client_port="${arr[1]}"
+            local server_ip="${arr[2]}"
+            local server_port="${arr[3]}"
+            
+            echo "${client_ip} → ${server_ip} (port ${server_port})"
+            return 0
+        else
+            echo "Error: SSH_CONNECTION does not contain exactly four parts." >&2
+            return 1
+        fi
+    fi
+
+    return 1
+}
+
+# replace_line_in_file() <filepath> <find> <new-line>
+#
+# loads a file <filepath> and searches for a line which has <find>; if found
+# it will return 0 otherwise it will raise an error.
+function replace_line_in_file() {
+    local -r filepath="${1:?no filepath was passed to replace_line_in_file()}"
+    local -r find="${2:?no find string passed to replace_line_in_file()}"
+    local -r new_line="${3:?no new_line string passed to replace_line_in_file()}"
+
+    local file_changed="false"
+    local -a new_content=()
+
+    if file_exists "$filepath"; then
+        local -ra content=$(get_file "${filepath}")
+        for line in "${content[@]}"; do
+            if not_empty "${line}" && contains "${find}" "${line}" && [[ "$file_changed" == "false" ]]; then
+                new_content+=("$new_line")
+                file_changed="true"
+            else
+                new_content+=("$line")
+            fi
+        done
+
+        if [[ "$file_changed" == "true" ]]; then
+            printf "%s\n" "${new_content[@]}"
+            return 0
+        else
+            debug "replace_line_in_file()" "the string '${find}' was not found in the file '${filepath}'"
+            return 1
+        fi
+    fi
+}
+
+# using_bash_3
+#
+# tests whether the host OS has bash version 3 installed
+function using_bash_3() {
+    local -r version=$(bash_version)
+
+    if starts_with "3" "${version}"; then
+        debug "using_bash_3" "IS version 3 variant!"
+        return 0
+    else
+        debug "using_bash_3" "is not version 3 variant"
+        return 1
+    fi
+}
+
+# bash_version()
+#
+# returns the version number of bash for the host OS
+function bash_version() {
+    local version
+    version=$(bash --version)
+    version=$(strip_after "(" "$version")
+    version=$(strip_before "version " "$version")
+
+    echo "$version"
+}
