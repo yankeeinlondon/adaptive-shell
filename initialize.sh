@@ -27,12 +27,16 @@ function get_nala() {
     sudo apt-get install nala -y
 }
 
+# use_allowed_hosts_alias()
+#
+# creates a symbol link to `authorized_keys` in the .config directory
+# if it exists
 function use_allowed_hosts_alias() {
     if file_exists "${HOME}/.config/authorized_keys"; then
         if file_exists "${HOME}/.ssh/authorized_keys"; then
             mv "${HOME}/.ssh/authorized_keys" "${HOME}/.ssh/authorized_keys.old"
         fi
-        ln -s "${HOME}/.config/authorized_keys" "${HOME}/.ssh/authorized_keys" 
+        cp "${HOME}/.config/authorized_keys" "${HOME}/.ssh/authorized_keys" 
     fi
 }
 
@@ -53,11 +57,28 @@ function debian() {
 
     nala update
     if [[ "$(os_version)" -ge 13 ]]; then
-        EZA="exa"
+        EZA="eza"
     else
         EZA="exa"
     fi
-    nala install curl wget neofetch htop btop iperf3 jq lsof gh bat ripgrep shellcheck lsb-release npm bat exa htop btop fzf ninja-build gettext cmake unzip delta qemu-guest-agent gpg git "${EZA}" -y
+    nala install curl wget neofetch htop btop iperf3 jq lsof gh bat ripgrep shellcheck lsb-release npm bat exa htop btop fzf ninja-build gettext cmake unzip delta qemu-guest-agent yamllint gpg git xclip "${EZA}" -y
+
+    if has_command "node"; then
+        if ! has_command "n"; then
+            log "- install the 'n' library from ${BOLD}npm${RESET}"
+            log ""
+            if npm i -g n; then 
+                log "- switching node to version 22"
+
+                n 22
+            fi
+        fi
+
+        if ! has_command "eslint_d"; then
+            log "- installing the ${BLUE}${BOLD}eslint_d${RESET} linter"
+            npm i -g eslint_d 
+        fi
+    fi
 
     log ""
     log "- Nala installation complete"
@@ -97,9 +118,22 @@ function debian() {
 
     log ""
 
+    # stylua
+    if has_command "stylua"; then
+        log "- ${BOLD}${BLUE}stylua${RESET} already installed, ${ITALIC}skipping${RESET}"
+    else
+        if wget https://github.com/JohnnyMorganz/StyLua/releases/download/v2.0.2/stylua-linux-x86_64.zip; then
+            unzip stylua-linux-x86.zip
+            if mv "stylua-linux-x86.zip" "/usr/local/bin"; then
+                log "- installed ${BLUE}${BOLD}stylua${RESET} linter into /usr/local/bin"
+                rm stylua-linux-x86_64.zip &>/dev/null
+            fi
+        fi
+    fi
+
     # Create a private/public key (when not already existing)
     if [[ -f "${HOME}/.ssh/id_rsa" ]]; then
-        log "- the private/public ${BOLD}SSH keypair${RESET} ( .ssh/id_rsa, .ssh/id_rsa.pub ) already exists on this machine"
+        log "- a ${BOLD}${BLUE}SSH keypair${RESET} ( .ssh/id_rsa, .ssh/id_rsa.pub ) already exists on this machine"
     else
         echo ""
         log "- Provision a private/public ${BOLD}SSH keypair${RESET} for this machine"
@@ -128,7 +162,7 @@ function debian() {
 
     # gpg
     if has_command "gpg"; then 
-        log "- the ${BOLD}gpg${RESET} utility is installed and you have the following private keys:"
+        log "- the ${BOLD}${BLUE}gpg${RESET} utility is installed and you have the following private keys:"
         log ""
         gpg --list-secret-keys --keyid-format=long
         log ""
