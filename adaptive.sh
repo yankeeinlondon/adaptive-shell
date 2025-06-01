@@ -1,15 +1,30 @@
 #!/usr/bin/env bash
 
+# Get the directory of the current script
+SCRIPT_DIR="${HOME}/.config/sh"
+COMPLETIONS="${HOME}/.completions"
+
 # shellcheck source="./color.sh"
-source "${HOME}/.config/sh/color.sh"
+export AD_COLOR="${SCRIPT_DIR}/color.sh"
+# shellcheck source="./utils.sh"
+export AD_UTILS="${SCRIPT_DIR}/utils.sh"
+
+# shellcheck source="./sys.sh"
+export AD_SYS="${SCRIPT_DIR}/sys.sh"
+
+# shellcheck source="./sys.sh"
+export AD_TRACK="${SCRIPT_DIR}/track.sh"
+
+# shellcheck source="./color.sh"
+source "${SCRIPT_DIR}/color.sh"
 
 setup_colors
 
 # shellcheck source="./utils.sh"
-source "${HOME}/.config/sh/utils.sh"
+source "${SCRIPT_DIR}/utils.sh"
 
 # shellcheck source="./prep.sh"
-source "${HOME}/.config/sh/prep.sh"
+source "${SCRIPT_DIR}/prep.sh"
 
 if is_zsh; then
     emulate zsh -R
@@ -33,8 +48,38 @@ if type uv &>/dev/null; then
     fi
 fi
 
+if has_command "pyenv"; then 
+    add_to_rc "PYENV_ROOT=${HOME}/.pyenv"
+    if dir_exists "${HOME}/.pyenv/bin"; then
+        add_to_path "${HOME}/.pyenv/bin"
+    fi
+    if ! file_exists "${COMPLETIONS}/_pyenv"; then
+        echo "- adding $(get_shell) completions for pyenv to ${BLUE}${COMPLETIONS}${RESET} directory"
+        echo ""
+        pyenv init - "$(get_shell)" >> "${COMPLETIONS}/_pyenv"
+    fi
+    # if file_exists "${COMPLETIONS}/_pyenv.zsh"; then
+    #     if if_zsh; then
+    #         source "${COMPLETIONS}/_pyenv.zsh"
+    #     fi
+    # else 
+    #     echo "- ${BOLD}warning:${RESET} expected a completions file at: ${BLUE}${COMPLETIONS}/_pyenv${RESET}"
+    #     echo "  but not found!"
+    # fi
+fi
+
 if type pm2 &>/dev/null; then
-    source "${HOME}/.config/sh/resources/_pm2"
+    # shellcheck source="./resources/_pm2"
+    source "${SCRIPT_DIR}/resources/_pm2"
+fi
+
+if is_mac; then
+    function flush() {
+        if confirm "Flush DNS Cache?"; then
+            sudo dscacheutil -flushcache
+            sudo killall -HUP mDNSResponder
+        fi
+    }
 fi
 
 if type brew &>/dev/null; then
@@ -43,6 +88,7 @@ if type brew &>/dev/null; then
         fpath+=( "$HOMEBREW_PREFIX/share/zsh/site-functions" )
     elif is_bash; then
         if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]; then
+                # shellcheck disable=SC1091
                 source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
         else
             for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*; do
@@ -54,15 +100,19 @@ fi
 
 if is_zsh; then
     if file_exists "/opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh"; then
+        # shellcheck disable=SC1091
         source "/opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
     fi
     if file_exists "${HOME}/zsh-autosuggestions/zsh-autosuggestions.zsh"; then
+        # shellcheck disable=SC1091
         source "${HOME}/zsh-autosuggestions/zsh-autosuggestions.zsh"
     fi
     if file_exists "/usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh"; then
+        # shellcheck disable=SC1091
         source "/usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
     fi
     if file_exists "${HOME}/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh"; then
+        # shellcheck disable=SC1091
         source "${HOME}/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh"
     fi
     unsetopt beep
@@ -73,7 +123,7 @@ if is_zsh; then
 fi
 
 if is_pve_host; then
-    source "${HOME}/.config/sh/proxmox.sh"
+    source "${SCRIPT_DIR}/proxmox.sh"
 fi
 
 
@@ -104,7 +154,7 @@ if ! file_exists "${HOME}/.adaptive-initialized"; then
         log "Installing"
         touch "${HOME}/.adaptive-initialized"
 
-        bash "${HOME}/.config/initialize.sh"
+        bash "${HOME}/.config/sh/initialize.sh"
     else 
         log "Ok bye."
         log "${DIM}- run ${BOLD}${BLUE}initialize${RESET}${DIM} at any time to "
@@ -183,7 +233,7 @@ if dir_exists "${HOME}/.bun"; then
 fi
 
 if dir_exists "${HOME}/.local/bin"; then
-    export PATH="${PATH}:${HOME}/.local/bin/"
+    export PATH="${PATH}:${HOME}/.local/bin"
 fi
 
 if dir_exists "${HOME}/bin"; then
@@ -224,23 +274,23 @@ else
         }
 fi
 
-if has_command "fzf"; then
-    export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
-    export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --lin-range :500 {}"
-fi
+# if has_command "fzf"; then
+#     export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
+#     export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --lin-range :500 {}"
+# fi
 
 if has_command "eza"; then 
-    alias ls='eza -a --icons=always'
-    alias ll='eza -lhga --git '
-    alias ld='eza -lDga --git'
-    alias lt='eza -lTL 3 --icons=always'
-    export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"
+    alias ls='eza -a --icons=always --hyperlink'
+    alias ll='eza -lhga --git  --hyperlink'
+    alias ld='eza -lDga --git  --hyperlink'
+    alias lt='eza -lTL 3 --icons=always  --hyperlink'
+    # export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"
 elif has_command "exa"; then
     alias ls='exa -a '
     alias ll='exa -lhga --git '
-    alias ld='exa -lDga --git'
+    alias ld='exa -lDga --git '
     alias lt='exa -lTL 3 '
-    export FZF_ALT_C_OPTS="--preview 'exa --tree -color=always {} | head -200'"
+    # export FZF_ALT_C_OPTS="--preview 'exa --tree -color=always {} | head -200'"
 fi
 
 
@@ -369,195 +419,8 @@ EOF
   fi
 }
 
-function net() {
-    setup_colors
-    if [[ "$(os)" == "macos" ]]; then
-        ifconfig | grep "inet "
-    elif [[ "$(os)" == "linux" ]]; then 
-        ip addr show | grep "inet "
-    fi
-    remove_colors
-}
-
-function sys() {
-    setup_colors
-
-    if is_linux; then
-        OS="${BOLD}${YELLOW}$(os) ${RESET}${BOLD}$(distro)${RESET}"
-    else
-        OS="${BOLD}${YELLOW}$(os) ${RESET}${BOLD}$(os_version)${RESET}"
-    fi
-
-    MEM="$(get_memory)"
-    MEM="$(find_replace ".00" "" "${MEM}")"
-    ARCH="$(get_arch)"
 
 
-    EDITORS=()
-    if has_command "nvim"; then
-        EDITORS+=("nvim")
-    fi
-    if has_command "vim"; then
-        EDITORS+=("vim")
-    fi
-    if has_command "code"; then
-        EDITORS+=("code")
-    fi
-    if has_command "zed"; then
-        EDITORS+=("zed")
-    fi
-    if has_command "emacs"; then
-        EDITORS+=("emacs")
-    fi
-    if has_command "brackets"; then
-        EDITORS+=("brackets")
-    fi
-    if has_command "subl"; then
-        EDITORS+=("subl")
-    fi
-    if has_command "atom"; then
-        EDITORS+=("atom")
-    fi
-    if has_command "micro"; then
-        EDITORS+=("micro")
-    fi
-    if has_command "nano"; then
-        EDITORS+=("nano")
-    fi
-    if has_command "mate"; then
-        EDITORS+=("mate")
-    fi
-    if has_command "idea"; then
-        EDITORS+=("idea")
-    fi
-    if has_command "webstorm"; then
-        EDITORS+=("webstorm")
-    fi
-    if has_command "rubymine"; then
-        EDITORS+=("rubymine")
-    fi
-    if has_command "pycharm"; then
-        EDITORS+=("pycharm")
-    fi
-    if has_command "goland"; then
-        EDITORS+=("goland")
-    fi
-    if has_command "phpstorm"; then
-        EDITORS+=("phpstorm")
-    fi
-    if has_command "rider"; then
-        EDITORS+=("rider")
-    fi
-
-    PROG=()
-    if has_command "node" || has_command "nodejs"; then
-        PROG+=("node")
-    fi
-    if has_command "bun"; then
-        PROG+=("${ITALIC}${DIM}bun${RESET}")
-    fi
-    if has_command "pnpm"; then
-        PROG+=("${ITALIC}${DIM}pnpm${RESET}")
-    fi
-
-    if has_command "python" || has_command "python3"; then
-        PROG+=("python")
-    fi
-
-    if has_command "conda"; then
-        PROG+=("${ITALIC}${DIM}conda${RESET}")
-    fi
-
-    if has_command "uv"; then
-        PROG+=("${ITALIC}${DIM}uv${RESET}")
-    fi
-
-    if has_command "perl"; then
-        PROG+=("perl")
-    fi
-    if has_command "rustup"; then
-        PROG+=("rust")
-    fi
-    if has_command "php"; then
-        PROG+=("php")
-    fi
-    if has_command "go"; then
-        PROG+=("go")
-    fi
-    if has_command "lua"; then
-        PROG+=("lua")
-    fi
-
-    FIRM="$(get_firmware)"
-
-    log ""
-    log "${BOLD}${BLUE}$(hostname)${RESET}"
-    log "${OS}"
-    log "${DIM}---------------------------${RESET}"
-    log "${BOLD}Memory:${RESET}    ${MEM} ${DIM}${ITALIC}gb${RESET}"
-    log "${BOLD}Arch:${RESET}      ${ARCH}"
-    log "${BOLD}Kernel:${RESET}    $(get_kernel_version)"
-    if get_cpu_count &>/dev/null; then
-        CPU_COUNT="$(get_cpu_count)"
-        log "${BOLD}CPU count:${RESET} ${CPU_COUNT}"
-    fi
-
-    if get_cpu_family &>/dev/null; then
-        CPU="$(get_cpu_family)"
-        log "${BOLD}CPU type:${RESET}  ${CPU}"
-    fi
-    if not_empty "$FIRM"; then
-        log "${BOLD}Firmware:${RESET}  ${FIRM}"
-    fi
-    if is_lxc; then
-        log "${BOLD}Container:${RESET} LXC"
-    fi
-    if is_vm; then
-        log "${BOLD}Container:${RESET} VM"
-    fi
-    if is_docker; then
-        log "${BOLD}Container:${RESET} ${BLUE}Docker${RESET}"
-    fi
-    if get_ssh_connection &>/dev/null; then
-        log "${BOLD}SSH:${RESET}       $(get_ssh_connection)"
-    fi
-
-    log "${BOLD}Editors:${RESET}   ${EDITORS[*]}"
-    log "${BOLD}Lang:${RESET}      ${PROG[*]}"
-
-
-    if has_command "systemctl"; then
-        SYSD=( "$(get_systemd_units "getty" "cron" "postfix" "systemd" "user" "dbus" "pve-container@")" )
-        # shellcheck disable=SC2178
-        SYSD="$(find_replace "ssh" "${DIM}${ITALIC}ssh${RESET}" "${SYSD[*]}")"
-        log "${BOLD}Services:${RESET}  ${SYSD[*]}"
-    fi
-    if has_command "rc-status"; then
-        # Alpine
-        SYSD=( "$(get_alpine_services "getty" "cron" "postfix" "user" "dbus")" )
-        # shellcheck disable=SC2178
-        SYSD="$(find_replace "ssh" "${DIM}${ITALIC}ssh${RESET}" "${SYSD[*]}")"
-        log "${BOLD}Services:${RESET}  ${SYSD[*]}"
-    fi
-
-    log "${BOLD}Network:${RESET}"
-    net 
-
-    STORAGE="$(get_storage)"
-    STORAGE="$(find_replace "dev" "${DIM}dev${RESET}" "${STORAGE}")"
-    STORAGE="$(find_replace "zfs" "${GREEN}${BOLD}zfs${RESET}" "${STORAGE}")"
-    STORAGE="$(find_replace "smb" "${BLUE}${BOLD}smb${RESET}" "${STORAGE}")"
-    STORAGE="$(find_replace "cifs" "${BLUE}${BOLD}cifs${RESET}" "${STORAGE}")"
-    STORAGE="$(find_replace "nfs" "${BRIGHT_BLUE}${BOLD}nfs${RESET}" "${STORAGE}")"
-    STORAGE="$(find_replace "apfs" "${YELLOW}${BOLD}apfs${RESET}" "${STORAGE}")"
-    STORAGE="$(find_replace "unknown" "${RED}${BOLD}unknown${RESET}" "${STORAGE}")"
-    STORAGE="$(find_replace "Applications" "${DIM}Applications${RESET}" "${STORAGE}")"
-
-    log "${BOLD}Storage:${RESET}"
-    log "$(indent "    " "${STORAGE}")"
-    
-    remove_colors
-}
 
 if type "starship" &>/dev/null; then 
     if is_zsh; then
@@ -578,3 +441,18 @@ if type "direnv" &>/dev/null; then
 fi
 
 remove_colors
+
+function net() {
+    bash "${AD_SYS}" "net"
+}
+
+
+function sys() {
+    bash "${AD_SYS}" "sys"
+}
+
+function track() {
+    local -ra params=( "$@" )
+
+    bash "${AD_TRACK}" "${params[@]}"
+}

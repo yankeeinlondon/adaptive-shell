@@ -240,6 +240,13 @@ function ts_prep() {
         log "- added ${BLUE}.markdownlint.jsonc${RESET} to repo"
     fi
 
+    if file_exists "./.gitignore"; then
+        log "- the ${BLUE}.gitignore${RESET} file already exists, ${ITALIC}skipping${RESET}"
+    else
+        cat "${HOME}/.config/sh/resources/.gitignore" > .gitignore 
+        log "- added ${BLUE}.gitignore${RESET} to repo"
+    fi
+
     if ! dir_exists "./src"; then
         mkdir "src"
     fi

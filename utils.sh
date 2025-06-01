@@ -516,7 +516,7 @@ function has_command() {
 #
 # tests whether a given filepath exists in the filesystem
 function file_exists() {
-    local filepath="${1:?filepath is missing}"
+    local filepath="${1:?filepath is missing in call to file_exists!}"
 
     if [ -f "${filepath}" ]; then
         return 0;
@@ -535,6 +535,16 @@ function dir_exists() {
         return 0;
     else
         return 1;
+    fi
+}
+
+function ensure_directory() {
+    local dirpath="${1:?no directory path passed to ensure_directory!}"
+
+    if [ -d "${dirpath}" ]; then
+        return 0;
+    else
+        mkdir "${dirpath}" || echo "Failed to make directory '${dirpath}'!" && exit 1
     fi
 }
 
@@ -664,16 +674,16 @@ function get_shell() {
     echo "$shell"
 }
 
-# add_to_rc(shell, text, [skip_if])
+# add_to_rc(text, [skip_if])
 #
 # Adds text to the console's `rc` file if it doesn't already
 # exist. Optionally the user may provide a "skip_if" value and
 # if they do then the addition of text will also _not_ happen
 # if that text is found.
 function add_to_rc() {
-    local -r shell="${1:?No shell passed to add_to_shell() function!}"
-    local -r text="${2:?No text content passed to add_to_shell() function!}"
-    local -r skip_if="${3:-}"
+    local -r shell="$(get_shell)"
+    local -r text="${1:?No text content passed to add_to_shell() function!}"
+    local -r skip_if="${2:-}"
 
     # Determine the appropriate rc file
     local rc_file
@@ -708,6 +718,18 @@ function add_to_rc() {
     }
 
     return 0
+}
+
+# set_env(var, value)
+# 
+# sets an ENV variables value but ONLY if it was previously not set
+function set_env() {
+    local -r VAR="${1:?no variable name passed to set_env!}"
+    local -r VAL="${2:?no value passed to set_env!}"
+    
+    if is_empty "${VAR}"; then
+        export "${VAR}"="${VAL}"
+    fi
 }
 
 
