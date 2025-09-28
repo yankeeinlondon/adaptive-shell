@@ -549,7 +549,7 @@ function ensure_directory() {
 }
 
 function has_file() {
-    local -r filepath="${1:?no filepath passsed to filepath()!}"
+    local -r filepath="${1:?no filepath passed to filepath()!}"
 
     if [ -f "${filepath}" ]; then
         return 0;

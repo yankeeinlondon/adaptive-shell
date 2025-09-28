@@ -92,7 +92,8 @@ if type brew &>/dev/null; then
                 source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
         else
             for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*; do
-                [[ -r "$COMPLETION" ]] && source "$COMPLETION"
+                # shellcheck disable=SC1090
+                [[ -r "$COMPLETION" ]] && source "${COMPLETION}"
             done
         fi
     fi
@@ -130,6 +131,7 @@ fi
 
 if type aws_completer &>/dev/null; then
     if ! is_zsh; then
+        # shellcheck disable=SC1090
         source <"$(aws_completer "$(get_shell)")"
     fi
 fi
@@ -207,6 +209,7 @@ fi
 # if it exists.
 if file_exists "${HOME}/.env"; then
     set -a
+    # shellcheck disable=SC1091
     source "${HOME}/.env"
     set +a
 fi
@@ -228,6 +231,7 @@ if has_command "htop"; then
 fi
 
 if dir_exists "${HOME}/.bun"; then
+    # shellcheck disable=SC1091
     [ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun"
     export PATH="${PATH}:${HOME}/.bun"
 fi
@@ -280,8 +284,9 @@ fi
 # fi
 
 if has_command "eza"; then 
-    alias ls='eza -a --icons=always --hyperlink'
-    alias ll='eza -lhga --git  --hyperlink'
+    alias ls='eza --icons=always --hyperlink'
+    alias la='eza -a --icons=always --hyperlink'
+    alias ll='eza -lhga --git  --hyperlink --group'
     alias ld='eza -lDga --git  --hyperlink'
     alias lt='eza -lTL 3 --icons=always  --hyperlink'
     # export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"

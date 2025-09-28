@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 
-
 # shellcheck source="./color.sh"
 source "${HOME}/.config/sh/color.sh"
-
-
 # shellcheck source="./utils.sh"
 source "${HOME}/.config/sh/utils.sh"
 
@@ -38,6 +35,10 @@ function use_allowed_hosts_alias() {
         fi
         cp "${HOME}/.config/authorized_keys" "${HOME}/.ssh/authorized_keys" 
     fi
+}
+
+function source_adaptive() {
+    add_to_rc "source ${HOME}/.config/sh"
 }
 
 function debian() {
@@ -168,6 +169,8 @@ function debian() {
         log ""
     fi
 
+    source_adaptive 
+
     log ""
     log "${BOLD}Note:${RESET} you may need to ${ITALIC}source${RESET} your ${BOLD}rc${RESET} file to be fully configured."
     log ""
@@ -175,37 +178,43 @@ function debian() {
     remove_colors
 }
 
-OS="$(os)"
 
-log "Initializing packages for ${BOLD}${YELLOW}${OS}${RESET}"
-log ""
+function main() {
+    OS="$(os)"
 
-setup_colors
+    log "Initializing packages for ${BOLD}${YELLOW}${OS}${RESET}"
+    log ""
 
-case "${OS}" in
+    setup_colors
 
-    linux)
-        if is_debian; then
-            debian
-        else
-            log "- no initialization yet for the ${BOLD}$(distro)${RESET} distro."
-        fi
-        ;;
-    macos)
+    case "${OS}" in
 
-        log "- no initialization yet for ${BOLD}macOS${RESET}."
-        ;;
-    
-    windows)
+        linux)
+            if is_debian; then
+                debian
+            else
+                log "- no initialization yet for the ${BOLD}$(distro)${RESET} distro."
+            fi
+            ;;
+        macos)
 
-        log "- no initialization yet for ${BOLD}Windows${RESET}."
-        ;;
+            log "- no initialization yet for ${BOLD}macOS${RESET}."
+            ;;
+        
+        windows)
 
-    *)
-        log "- unknown OS ${RED}${BOLD}${OS}${RESET}"
-        exit 1
-        ;;
-esac 
+            log "- no initialization yet for ${BOLD}Windows${RESET}."
+            ;;
+
+        *)
+            log "- unknown OS ${RED}${BOLD}${OS}${RESET}"
+            exit 1
+            ;;
+    esac 
 
 
-remove_colors
+    remove_colors
+}
+
+
+main
