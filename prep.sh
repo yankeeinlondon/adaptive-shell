@@ -24,7 +24,7 @@ uv_sync() {
 
 # install_just()
 #
-# installs the Just runner whereever possible
+# installs the Just runner where ever possible
 # https://github.com/casey/just
 function install_just() {
     if has_command "just"; then
