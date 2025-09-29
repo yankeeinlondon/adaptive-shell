@@ -21,8 +21,6 @@ export AD_TRACK="${CONFIG_LOCATION}/track.sh"
 source "${CONFIG_LOCATION}/aliases.sh"
 setup_colors
 
-# shellcheck source="./errors.sh"
-source "${HOME}/.config/sh/errors.sh"
 # shellcheck source="./utils.sh"
 source "${CONFIG_LOCATION}/utils.sh"
 
