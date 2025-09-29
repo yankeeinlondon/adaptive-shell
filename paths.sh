@@ -15,14 +15,14 @@ function has_path() {
     local -r find="${1:?no path passed into has_path()!}"
 
     if contains "${find}" "${PATH:- }"; then
+        echo "true"
         return 0
     else
+        echo "false"
         return 1
     fi
 }
 
-true="0"
-false="1"
 
 # paths_for_env()
 #
@@ -46,7 +46,7 @@ function paths_for_env() {
         # shellcheck disable=SC1091
         [ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun" >/dev/null 2>&1
 
-        paths+=("Bun" "$(has_path "${HOME}/bin")" "${HOME}/.bun/bin")
+        paths+=("Bun" "$(has_path "${HOME}/.bun/bin")" "${HOME}/.bun/bin")
     fi
 
     if dir_exists "${HOME}/.local/bin"; then
@@ -75,14 +75,22 @@ function paths_for_env() {
 # initialization of the user's shell.
 function report_paths() {
     setup_colors
-
     local -a paths=( $(paths_for_env) )
+
+    if [[ ${#paths[@]} -eq 0 ]]; then
+        log "none"
+        return 0
+    fi
 
     for ((i = 0; i < ${#paths[@]}; i += 3)); do
         local name="${paths[i]}"
         local dup="${paths[i+1]}"
-        local short="${paths[i+2]}"
-        log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
+        local path="${paths[i+2]}"
+        if [[ "${dup}" == "true" ]]; then
+            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}already in PATH${RESET} ${BLUE}${path}${RESET}"
+        else
+            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}would be added${RESET} ${BLUE}${path}${RESET}"
+        fi
     done
 }
 
