@@ -22,10 +22,14 @@ function has_path() {
 }
 
 
-# path_for_env()
+# paths_for_env()
 #
 # Gather's the file paths which should be added to the PATH variable
 # during the initialization of the user's shell.
+#
+# - each path will have a "name", "duplicate", and "path" property
+# - the "duplicate" property is a boolean flag indicating whether
+#   the 
 function paths_for_env() {
     local -a paths=()
 
@@ -102,6 +106,7 @@ function report_paths() {
         local short="${short_part}"
 
         [[ -z "${name}" || -z "${short}" ]] && continue
+
 
         log "- ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
     done <<< "${formatted}"

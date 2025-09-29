@@ -87,11 +87,13 @@ function aliases_for_env() {
 #
 # Reports to screen the aliases which have been setup for the
 # the system based on detected features.
-function report_aliases() {
+# This modern version requires Bash 4.0+ for cleaner array handling
+function report_aliases_modern() {
     setup_colors
-    
-    # Consume the flattened numeric array produced by aliases_for_env()
-    local -r raw_output="$(aliases_for_env)"
+
+    # Get the array directly from aliases_for_env using eval
+    local raw_output
+    raw_output="$(aliases_for_env)"
 
     if [[ -z "${raw_output}" ]]; then
         log "none"
@@ -99,30 +101,81 @@ function report_aliases() {
         return 0
     fi
 
-    # Break entries onto their own lines to parse each alias grouping safely
-    local formatted
-    formatted="$(printf '%s\n' "${raw_output}" | sed -e 's/ \[name\]:/\n[name]:/g')"
+    # Convert string to proper array using eval (bash 4.0+ feature)
+    local -a alias_array
+    eval "alias_array=( ${raw_output} )"
 
-    while IFS= read -r line; do
-        [[ -z "${line}" ]] && continue
+    # Iterate through array in steps of 4 (name_key, name_val, short_key, short_val)
+    local i
+    for ((i=0; i < ${#alias_array[@]}; i+=4)); do
+        # Ensure we have all 4 elements
+        if [[ $((i+3)) -lt ${#alias_array[@]} ]]; then
+            # local name_key="${alias_array[i]}"
+            local name_val="${alias_array[i+1]}"
+            # local short_key="${alias_array[i+2]}"
+            local short_val="${alias_array[i+3]}"
 
-        local name_part="${line%% \[short\]: *}"
-        local short_part="${line#*\[short\]: }"
-
-        # Skip malformed rows that do not contain both pieces
-        if [[ "${short_part}" == "${line}" ]]; then
-            continue
+            log "- the alias ${BOLD}${GREEN}${short_val}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name_val}${RESET}"
         fi
-
-        local name="${name_part#\[name\]: }"
-        local short="${short_part}"
-
-        [[ -z "${name}" || -z "${short}" ]] && continue
-
-        log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
-    done <<< "${formatted}"
-            
-    # remove_colors
+    done
 }
 
-# report_aliases
+
+function report_aliases_fallback() {
+    setup_colors
+
+    # Get the output from aliases_for_env
+    local raw_output
+    raw_output="$(aliases_for_env)"
+
+    if [[ -z "${raw_output}" ]]; then
+        log "none"
+        return 0
+    fi
+
+    # Parse using simpler string operations (compatible with bash 3.x)
+    local remaining="${raw_output}"
+
+    while [[ "${remaining}" == *"[name]:"* ]]; do
+        # Find start of [name]: block
+        local after_name="${remaining#*[name]: }"
+
+        # Extract name (everything before next [short]:)
+        local name="${after_name%%[short]:*}"
+        name="${name% }"  # trim trailing space
+
+        # Move to [short]: section
+        local after_short="${after_name#*[short]: }"
+
+        # Extract short value (everything before next [name]: or end)
+        local short
+        if [[ "${after_short}" == *"[name]:"* ]]; then
+            short="${after_short%%[name]:*}"
+            remaining="[name]:${after_short#*[name]:}"
+        else
+            short="${after_short}"
+            remaining=""
+        fi
+
+        # Clean up short value
+        short="${short% }"  # trim trailing space
+
+        # Output if we have both values
+        [[ -n "${name}" && -n "${short}" ]] && \
+            log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
+    done
+}
+
+# report_aliases_fallback
+#
+# Fallback version for older Bash versions (< 4.0)
+# Uses more basic string operations and manual array building
+function report_aliases() {
+    local bash_major_version="${BASH_VERSION%%.*}"
+
+    if [[ "${bash_major_version}" -ge 4 ]]; then
+        report_aliases
+    else
+        report_aliases_fallback
+    fi
+}
