@@ -281,11 +281,6 @@ else
         }
 fi
 
-log " ${BOLD}Aliases${RESET}${ITALIC}${DIM} based on the system's environment${RESET}"
-log "---------------------------------------------"
-report_aliases
-log ""
-
 # if has_command "fzf"; then
 #     export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
 #     export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --lin-range :500 {}"

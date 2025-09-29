@@ -7,7 +7,6 @@ source "${SCRIPT_DIR}/utils.sh"
 function aliases_for_env() {
     local -a aliases=()
 
-
     if has_command "kubectl"; then
         aliases+=(
             [name]: "kubectl"
@@ -92,11 +91,10 @@ function report_aliases() {
     setup_colors
     
     # Consume the flattened numeric array produced by aliases_for_env()
-    local raw_output
-    raw_output="$(aliases_for_env)"
+    local -r raw_output="$(aliases_for_env)"
 
     if [[ -z "${raw_output}" ]]; then
-        log "No aliases discovered for this environment."
+        log "none"
         remove_colors
         return 0
     fi
@@ -121,10 +119,10 @@ function report_aliases() {
 
         [[ -z "${name}" || -z "${short}" ]] && continue
 
-        log "The alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
+        log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
     done <<< "${formatted}"
             
-    remove_colors
+    # remove_colors
 }
 
-report_aliases
+# report_aliases
