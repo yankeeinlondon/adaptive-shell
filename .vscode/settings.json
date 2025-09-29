@@ -1,10 +1,17 @@
 {
     "cSpell.words": [
+        "atuin",
         "batcat",
+        "degit",
+        "direnv",
         "distclean",
         "distro",
+        "dotenv",
         "dscacheutil",
+        "eslintcache",
         "flushcache",
+        "jscoverage",
+        "jspm",
         "killall",
         "lazygit",
         "lhga",
@@ -14,9 +21,12 @@
         "luajit",
         "MAKESHLIBS",
         "nala",
+        "presite",
         "pyenv",
         "RUSTUP",
+        "webext",
         "WEZTERM",
+        "wscript",
         "yazi"
     ]
 }

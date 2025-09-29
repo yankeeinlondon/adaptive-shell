@@ -289,13 +289,11 @@ if has_command "eza"; then
     alias ll='eza -lhga --git  --hyperlink --group'
     alias ld='eza -lDga --git  --hyperlink'
     alias lt='eza -lTL 3 --icons=always  --hyperlink'
-    # export FZF_ALT_C_OPTS="--preview 'eza --tree -color=always {} | head -200'"
 elif has_command "exa"; then
     alias ls='exa -a '
     alias ll='exa -lhga --git '
     alias ld='exa -lDga --git '
     alias lt='exa -lTL 3 '
-    # export FZF_ALT_C_OPTS="--preview 'exa --tree -color=always {} | head -200'"
 fi
 
 
@@ -423,8 +421,6 @@ EOF
     log "- the ${BLUE}.gitignore${RESET} file already exists, ${ITALIC}skipping${RESET}"
   fi
 }
-
-
 
 
 if type "starship" &>/dev/null; then 
