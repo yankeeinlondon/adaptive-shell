@@ -45,9 +45,9 @@ function aliases_for_env() {
     if has_command "eza"; then
         aliases+=(
             "eza --icons=always --hyperlink" "ls"
-            "eza -lhga --git  --hyperlink --group" "ll"
-            "eza -lDga --git  --hyperlink" "ld"
-            "eza -lTL 3 --icons=always  --hyperlink" "lt"
+            "eza -lhga --git --hyperlink --group" "ll"
+            "eza -lDga --git --hyperlink" "ld"
+            "eza -lTL 3 --icons=always --hyperlink" "lt"
         )
     elif has_command "exa"; then
         aliases+=(
@@ -58,7 +58,8 @@ function aliases_for_env() {
         )
     fi
 
-    echo "${aliases[@]}"
+    local IFS=$'\n'
+    echo "${aliases[*]}"
 }
 
 # report_aliases
@@ -68,13 +69,18 @@ function aliases_for_env() {
 function report_aliases() {
     setup_colors
 
-    local -ra aliases=( $(aliases_for_env) )
+    local aliases_output
+    aliases_output=$(aliases_for_env)
 
-    if [[ ${#aliases[@]} -eq 0 ]]; then
+    if [[ -z "${aliases_output}" ]]; then
         log "none"
         remove_colors
         return 0
     fi
+
+    # Convert newline-separated output to array using bash 3.x compatible method
+    local IFS=$'\n'
+    local -a aliases=( ${aliases_output} )
 
     # Process pairs: name, short
     for ((i = 0; i < ${#aliases[@]}; i += 2)); do
