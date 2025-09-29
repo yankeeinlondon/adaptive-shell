@@ -21,6 +21,8 @@ function has_path() {
     fi
 }
 
+true="0"
+false="1"
 
 # paths_for_env()
 #
@@ -33,43 +35,39 @@ function has_path() {
 function paths_for_env() {
     local -a paths=()
 
+    # Each path entry is defined as: name duplicate_flag path
+    # This pattern is clean, readable, and compatible with bash 3.x+
+
     if dir_exists "${HOME}/bin"; then
-        paths+=(
-            [name]: "User Binaries"
-            [duplicate]: "$(has_path "${HOME}/.local/bin")"
-            [path]: "${HOME}/bin"
-        )
-            
+        paths+=("User Binaries" "$(has_path "${HOME}/bin")" "${HOME}/bin")
     fi
 
     if dir_exists "${HOME}/.bun"; then
         # shellcheck disable=SC1091
-        [ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun"
-        
-        paths+=(
-            [name]: "Bun"
-            [duplicate]: "$(has_path "${HOME}/.bun/_bun")"
-            [path]: "${HOME}/.bin"
-        )
+        [ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun" >/dev/null 2>&1
+
+        paths+=("Bun" "$(has_path "${HOME}/bin")" "${HOME}/.bun/bin")
     fi
 
     if dir_exists "${HOME}/.local/bin"; then
-        paths+=(
-            [name]: ".local binaries"
-            [duplicate]: "$(has_path "${HOME}/.local/bin")"
-            [path]: "${HOME}/.local/bin")
+        if has_path "${HOME}/.local/bin"; then
+            paths+=(".local binaries" "true" "${HOME}/.local/bin")
+        else
+            paths+=(".local binaries" "false" "${HOME}/.local/bin")
+        fi
     fi
 
-    if has_command "opencode" || has_dir "${HOME}/.opencode/bin"; then
-        paths+=(
-            [name]: "Opencode AI"
-            [duplicate]: "$(has_path "${HOME}/.opencode/bin")"
-            [path]: "${HOME}/.opencode/bin"
-        )        
+    if has_command "opencode" || dir_exists "${HOME}/.opencode/bin"; then
+        if has_path "${HOME}/.opencode/bin"; then
+            paths+=("Opencode AI" "true" "${HOME}/.opencode/bin")
+        else
+            paths+=("Opencode AI" "false" "${HOME}/.opencode/bin")
+        fi
     fi
 
     echo "${paths[@]}"
 }
+
 
 # report_paths()
 #
@@ -77,37 +75,18 @@ function paths_for_env() {
 # initialization of the user's shell.
 function report_paths() {
     setup_colors
-    
-    # Consume the flattened numeric array produced by aliases_for_env()
-    local -r raw_output="$(paths_for_env)"
 
-    if [[ -z "${raw_output}" ]]; then
-        log "none"
-        remove_colors
-        return 0
-    fi
+    local -a paths=( $(paths_for_env) )
 
-    # Break entries onto their own lines to parse each alias grouping safely
-    local formatted
-    formatted="$(printf '%s\n' "${raw_output}" | sed -e 's/ \[name\]:/\n[name]:/g')"
-
-    while IFS= read -r line; do
-        [[ -z "${line}" ]] && continue
-
-        local name_part="${line%% \[short\]: *}"
-        local short_part="${line#*\[short\]: }"
-
-        # Skip malformed rows that do not contain both pieces
-        if [[ "${short_part}" == "${line}" ]]; then
-            continue
-        fi
-
-        local name="${name_part#\[name\]: }"
-        local short="${short_part}"
-
-        [[ -z "${name}" || -z "${short}" ]] && continue
-
-
-        log "- ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
-    done <<< "${formatted}"
+    for ((i = 0; i < ${#paths[@]}; i += 3)); do
+        local name="${paths[i]}"
+        local dup="${paths[i+1]}"
+        local short="${paths[i+2]}"
+        log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
+    done
 }
+
+# Call the main function when script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    report_paths
+fi
