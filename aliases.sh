@@ -30,6 +30,25 @@ function aliases_for_env() {
         )
     fi
 
+    if has_command "batcat"; then
+        aliases+=(
+            "batcat" "cat"
+        )
+    fi
+
+    if type "bat" &>/dev/null; then
+        aliases+=(
+            "bat" "cat"
+        )
+    fi
+
+    if type "nala" &>/dev/null; then
+        aliases+=(
+            "nala" "apt"
+        )
+    fi
+
+
     if has_command "htop"; then
         aliases+=(
             "htop" "top"
@@ -58,7 +77,7 @@ function aliases_for_env() {
         )
     fi
 
-    local IFS=$'\n'
+    local IFS='|'
     echo "${aliases[*]}"
 }
 
@@ -69,17 +88,17 @@ function aliases_for_env() {
 function report_aliases() {
     setup_colors
 
-    local aliases_output
+    local -a aliases_output
     aliases_output=$(aliases_for_env)
 
     if [[ -z "${aliases_output}" ]]; then
         log "none"
-        remove_colors
         return 0
     fi
 
-    # Convert newline-separated output to array using bash 3.x compatible method
-    local IFS=$'\n'
+    # Convert pipe-separated output to array using bash 3.x compatible method
+    local IFS='|'
+    # shellcheck disable=SC2206
     local -a aliases=( ${aliases_output} )
 
     # Process pairs: name, short
@@ -90,4 +109,10 @@ function report_aliases() {
     done
 
 }
+
+# Call the main function when script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    report_aliases
+    remove_colors
+fi
 

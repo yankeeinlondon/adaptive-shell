@@ -1,6 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# Repo Overview
 
 ## Repository Overview
 
@@ -63,5 +61,8 @@ source ~/.config/sh/adaptive.sh
 ### Shell Compatibility
 
 - Scripts target bash but include compatibility checks for zsh/fish
+- Only use bash syntax for Bash 3.x
+- You should not assume the availability of tools outside of bash (e.g., ripgrep, etc.)
+  - If you want to use these tools always create a function which abstracts the functionality and make sure that this function has a fallback or at least a graceful error message
 - Use `get_shell()` to detect current shell
 - Shell-specific operations wrapped in conditionals (`is_bash()`, `is_zsh()`, `is_fish()`)

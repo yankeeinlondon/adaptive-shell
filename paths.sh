@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 
+# Only enable strict mode when script is executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Ensure DEBUG is set to avoid unbound variable errors
+    DEBUG="${DEBUG:-}"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source="./color.sh"
 source "${SCRIPT_DIR}/color.sh"
 # shellcheck source="./utils.sh"
 source "${SCRIPT_DIR}/utils.sh"
+
+
 
 
 # has_path()
@@ -34,38 +42,42 @@ function has_path() {
 #   the 
 function paths_for_env() {
     local -a paths=()
-
-    # Each path entry is defined as: name duplicate_flag path
-    # This pattern is clean, readable, and compatible with bash 3.x+
-
+    
+    # Add real paths
     if dir_exists "${HOME}/bin"; then
-        paths+=("User Binaries" "$(has_path "${HOME}/bin")" "${HOME}/bin")
-    fi
-
-    if dir_exists "${HOME}/.bun"; then
-        # shellcheck disable=SC1091
-        [ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun" >/dev/null 2>&1
-
-        paths+=("Bun" "$(has_path "${HOME}/.bun/bin")" "${HOME}/.bun/bin")
-    fi
-
-    if dir_exists "${HOME}/.local/bin"; then
-        if has_path "${HOME}/.local/bin"; then
-            paths+=(".local binaries" "true" "${HOME}/.local/bin")
+        if has_path "${HOME}/bin" >/dev/null; then
+            paths+=("User Binaries" "true" "${HOME}/bin")
         else
-            paths+=(".local binaries" "false" "${HOME}/.local/bin")
+            paths+=("User Binaries" "false" "${HOME}/bin")
         fi
     fi
 
-    if has_command "opencode" || dir_exists "${HOME}/.opencode/bin"; then
-        if has_path "${HOME}/.opencode/bin"; then
+    if dir_exists "${HOME}/.bun"; then
+        if has_path "${HOME}/.bun/bin" >/dev/null; then
+            paths+=("Bun" "true" "${HOME}/.bun/bin")
+        else
+            paths+=("Bun" "false" "${HOME}/.bun/bin")
+        fi
+    fi
+
+    if dir_exists "${HOME}/.local/bin"; then
+        if has_path "${HOME}/.local/bin" >/dev/null; then
+            paths+=("Local Binaries" "true" "${HOME}/.local/bin")
+        else
+            paths+=("Local Binaries" "false" "${HOME}/.local/bin")
+        fi
+    fi
+
+    if dir_exists "${HOME}/.opencode"; then
+        if has_path "${HOME}/.opencode/bin" >/dev/null; then
             paths+=("Opencode AI" "true" "${HOME}/.opencode/bin")
         else
             paths+=("Opencode AI" "false" "${HOME}/.opencode/bin")
         fi
     fi
-
-    echo "${paths[@]}"
+    
+    local IFS='|'
+    echo "${paths[*]}"
 }
 
 
@@ -75,12 +87,20 @@ function paths_for_env() {
 # initialization of the user's shell.
 function report_paths() {
     setup_colors
-    local -a paths=( $(paths_for_env) )
+    
+    local paths_output
+    paths_output=$(paths_for_env 2>/dev/null || true)
 
-    if [[ ${#paths[@]} -eq 0 ]]; then
+    if [[ -z "${paths_output}" ]]; then
         log "none"
         return 0
     fi
+
+    # Convert pipe-separated output to array using bash 3.x compatible method
+    local IFS='|'
+    # shellcheck disable=SC2206
+    local -a paths=( ${paths_output} )
+
 
     for ((i = 0; i < ${#paths[@]}; i += 3)); do
         local name="${paths[i]}"
@@ -97,4 +117,5 @@ function report_paths() {
 # Call the main function when script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     report_paths
+    remove_colors
 fi

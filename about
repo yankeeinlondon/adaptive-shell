@@ -1,5 +1,31 @@
 #!/usr/bin/env bash
 
+# error_handler()
+#
+# Handles error when they are caught
+function error_handler() {
+    local -r exit_code="$?"
+    local -r _line_number="$1"
+    local -r command="$2"
+
+    # shellcheck disable=SC2016
+    if is_bound command && [[ "$command" != 'return $code' ]]; then
+        log "  [${RED}x${RESET}] ${BOLD}ERROR ${DIM}${RED}$exit_code${RESET}${BOLD} → ${command}${RESET} "
+    fi
+    log ""
+
+    for i in "${!BASH_SOURCE[@]}"; do
+        if ! contains "errors.sh" "${BASH_SOURCE[$i]:-unknown}"; then
+            log "    - ${FUNCNAME[$i]:-unknown}() ${ITALIC}${DIM}at line${RESET} ${BASH_LINENO[$i-1]:-unknown} ${ITALIC}${DIM}in${RESET} $(error_path "${BASH_SOURCE[$i]:-unknown}")"
+        fi
+    done
+    log ""
+}
+
+set -Eeuo pipefail
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source="./color.sh"
 source "${SCRIPT_DIR}/color.sh"
@@ -8,7 +34,7 @@ source "${SCRIPT_DIR}/aliases.sh"
 # shellcheck source="./paths.sh"
 source "${SCRIPT_DIR}/paths.sh"
 
-TITLE="${TITLE:-${DIM}${ITALIC}your System}"
+TITLE="${TITLE:-${DIM:-}${ITALIC:-}your System}"
 
 setup_colors
 log ""
