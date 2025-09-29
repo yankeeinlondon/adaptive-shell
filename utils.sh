@@ -99,7 +99,7 @@ find_replace() {
 # Logs to STDERR when the DEBUG env variable is set
 # and not equal to "false".
 function debug() {
-    if [ -z "${DEBUG}" ] || [[ "${DEBUG}" == "" ]]; then
+    if [ -z "${DEBUG:-}" ] || [[ "${DEBUG:-}" == "" ]]; then
         return 0
     else
         if (( $# > 1 )); then
@@ -227,7 +227,7 @@ function contains() {
     local -r content="${2}"
 
     if is_empty "$find"; then
-        error "contains("", ${content}) function did not recieve a FIND string! This is an invalid call!" 1
+        error "contains("", ${content}) function did not receive a FIND string! This is an invalid call!" 1
     fi
 
     if is_empty "$content"; then
@@ -307,7 +307,7 @@ function has_characters() {
 
 function is_bound() {
     local -n __test_by_ref=$1 2>/dev/null || { debug "is_bound" "unbounded ref";  return 1; }
-    local -r by_val="${1}:-"
+    # local -r by_val="${1}:-"
     local name="${!__test_by_ref}" 2
     local -r arithmetic='→+-=><%'
     if has_characters "${arithmetic}" "$1"; then
@@ -327,6 +327,17 @@ function is_bound() {
     fi
 }
 
+# append_to_path <path>
+# 
+# Appends the path passed in to the PATH env variable
+function append_to_path() {
+    local -r new="${1:?No path passed into append_to_path()!}"
+    local -r current="${PATH:-}"
+    local -r newPath="${current};${new}"
+
+    export PATH="${newPath}"
+    echo "${newPath}"
+}
 
 # starts_with <look-for> <content>
 function starts_with() {
@@ -349,7 +360,7 @@ function starts_with() {
 
 # find_in_file <filepath> <key>
 #
-# Finds the first occurance of <key> in the given file
+# Finds the first occurrence of <key> in the given file
 # and if that line is the form "<key>=<value>" then 
 # it returns the <value>, otherwise it will return 
 # the line.
