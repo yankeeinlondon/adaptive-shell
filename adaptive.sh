@@ -16,9 +16,12 @@ export AD_SYS="${SCRIPT_DIR}/sys.sh"
 export AD_TRACK="${SCRIPT_DIR}/track.sh"
 
 # shellcheck source="./color.sh"
-source "${SCRIPT_DIR}/color.sh"
-
+source "${SCRIPT_DIR}/aliases.sh"
 setup_colors
+
+# shellcheck source="./aliases.sh"
+# source "${SCRIPT_DIR}/aliases.sh"
+
 
 # shellcheck source="./utils.sh"
 source "${SCRIPT_DIR}/utils.sh"
@@ -277,6 +280,11 @@ else
         log ""
         }
 fi
+
+log " ${BOLD}Aliases${RESET}${ITALIC}${DIM} based on the system's environment${RESET}"
+log "---------------------------------------------"
+report_aliases
+log ""
 
 # if has_command "fzf"; then
 #     export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
