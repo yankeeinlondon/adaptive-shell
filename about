@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source="./color.sh"
+source "${SCRIPT_DIR}/color.sh"
+# shellcheck source="./aliases.sh"
+source "${SCRIPT_DIR}/aliases.sh"
+# shellcheck source="./paths.sh"
+source "${SCRIPT_DIR}/paths.sh"
+
+TITLE="${TITLE:-${DIM}${ITALIC}your System}"
+
+setup_colors
+log ""
+log "${BOLD}${YELLOW}About${RESET} ${TITLE}${RESET}"
+log "---------------------------------------------"
+log "${DIM}This system uses the ${ITALIC}adaptive shell${RESET}${DIM} bootstrap which provides${RESET}"
+log "${DIM}functions, aliases, and installers based on the detected environment.${RESET}"
+log ""
+
+log "${BOLD}Aliases:${RESET}"
+log "---------------------------------------------"
+report_aliases
+
+log ""
+log "${BOLD}Executable ${RESET}${DIM}paths detected${RESET}${BOLD}:${RESET}"
+log "---------------------------------------------"
+report_paths
+
+log ""
+log "${BOLD}Functions:${RESET}"
+log "- ${BLUE}${BOLD}sys${RESET}: provides up-to-date information about storage, networks,"
+log "  editors, and more"
+log "- ${BLUE}${BOLD}add${RESET}: function to install common programs setup a directory based on "
+log "- ${BLUE}${BOLD}prep${RESET}: a ${ITALIC}context-aware${RESET} function which will detected programming"
+log "  language(s) and install appropriate packages where appropriate"
+
+remove_colors

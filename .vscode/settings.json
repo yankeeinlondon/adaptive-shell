@@ -1,7 +1,9 @@
 {
     "cSpell.words": [
+        "apfs",
         "atuin",
         "batcat",
+        "cifs",
         "degit",
         "direnv",
         "distclean",
@@ -21,10 +23,16 @@
         "luajit",
         "MAKESHLIBS",
         "nala",
+        "opencode",
+        "phpstorm",
         "presite",
         "pyenv",
+        "rubymine",
         "RUSTUP",
+        "subl",
+        "SYSD",
         "webext",
+        "webstorm",
         "WEZTERM",
         "wscript",
         "yazi"
