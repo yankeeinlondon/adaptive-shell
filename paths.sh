@@ -107,9 +107,9 @@ function report_paths() {
         local dup="${paths[i+1]}"
         local path="${paths[i+2]}"
         if [[ "${dup}" == "true" ]]; then
-            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}already in PATH${RESET} ${BLUE}${path}${RESET}"
+            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}"
         else
-            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}would be added${RESET} ${BLUE}${path}${RESET}"
+            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}"
         fi
     done
 }

@@ -1,52 +1,57 @@
 #!/usr/bin/env bash
 
 # Get the directory of the current script
-SCRIPT_DIR="${HOME}/.config/sh"
+CONFIG_LOCATION="${HOME}/.config/sh"
+# SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 COMPLETIONS="${HOME}/.completions"
 
 # shellcheck source="./color.sh"
-export AD_COLOR="${SCRIPT_DIR}/color.sh"
+export AD_COLOR="${CONFIG_LOCATION}/color.sh"
 # shellcheck source="./utils.sh"
-export AD_UTILS="${SCRIPT_DIR}/utils.sh"
+export AD_UTILS="${CONFIG_LOCATION}/utils.sh"
 
 # shellcheck source="./sys.sh"
-export AD_SYS="${SCRIPT_DIR}/sys.sh"
+export AD_SYS="${CONFIG_LOCATION}/sys.sh"
 
 # shellcheck source="./sys.sh"
-export AD_TRACK="${SCRIPT_DIR}/track.sh"
+export AD_TRACK="${CONFIG_LOCATION}/track.sh"
 
 # shellcheck source="./color.sh"
-source "${SCRIPT_DIR}/aliases.sh"
+source "${CONFIG_LOCATION}/aliases.sh"
 setup_colors
 
-# shellcheck source="./aliases.sh"
-# source "${SCRIPT_DIR}/aliases.sh"
-
-
+# shellcheck source="./errors.sh"
+source "${HOME}/.config/sh/errors.sh"
 # shellcheck source="./utils.sh"
-source "${SCRIPT_DIR}/utils.sh"
+source "${CONFIG_LOCATION}/utils.sh"
 
-# shellcheck source="./prep.sh"
-source "${SCRIPT_DIR}/prep.sh"
 
 if is_zsh; then
     emulate zsh -R
 fi
 
-if type rustup &>/dev/null; then
+if has_command "rustup"; then
     RUSTUP=$(add_completion "rustup" "$(rustup completions "$(get_shell)" rustup)")
     CARGO=$(add_completion "cargo" "$(rustup completions "$(get_shell)" cargo)")
     if ! is_zsh; then
-        source "${RUSTUP}"
-        source "${CARGO}"
+        if not_empty "${RUSTUP}"; then
+            # shellcheck disable=SC1090
+            source "${RUSTUP}"
+        fi
+        if not_empty "${CARGO}"; then
+            # shellcheck disable=SC1090
+            source "${CARGO}"
+        fi
     fi
 fi
 
 if type uv &>/dev/null; then
     if is_fish; then
-        uv generate-shell-completion fish | source
+        uv generate-shell-completion fish
     else 
         UV=$(add_completion "uv" "$(rustup completions "$(get_shell)" rustup)")
+        # shellcheck disable=SC1090
         source "$UV"
     fi
 fi
@@ -73,7 +78,7 @@ fi
 
 if type pm2 &>/dev/null; then
     # shellcheck source="./resources/_pm2"
-    source "${SCRIPT_DIR}/resources/_pm2"
+    source "${CONFIG_LOCATION}/resources/_pm2"
 fi
 
 if is_mac; then
@@ -127,7 +132,7 @@ if is_zsh; then
 fi
 
 if is_pve_host; then
-    source "${SCRIPT_DIR}/proxmox.sh"
+    source "${CONFIG_LOCATION}/proxmox.sh"
 fi
 
 
@@ -444,12 +449,15 @@ if type "direnv" &>/dev/null; then
     eval "$(direnv hook "${SHELL}")"
 fi
 
+
+log "- use the ${BOLD:-}${GREEN:-}sys${RESET:-} function for system, storage, and network info"
+log "- use the ${BOLD:-}${GREEN:-}about${RESET:-} function for aliases, functions, and binary paths"
+
 remove_colors
 
 function net() {
     bash "${AD_SYS}" "net"
 }
-
 
 function sys() {
     bash "${AD_SYS}" "sys"
@@ -459,4 +467,8 @@ function track() {
     local -ra params=( "$@" )
 
     bash "${AD_TRACK}" "${params[@]}"
+}
+
+function about() {
+    source "${CONFIG_LOCATION}/about"
 }

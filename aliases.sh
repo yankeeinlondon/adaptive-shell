@@ -9,71 +9,73 @@ source "${SCRIPT_DIR}/utils.sh"
 function aliases_for_env() {
     local -a aliases=()
 
-    # Each alias is defined as: name_command short_alias
+    # Each alias is defined as: short_alias command_to_map_to
     # This pattern is clean, readable, and compatible with bash 3.x+
 
     if has_command "kubectl"; then
         aliases+=(
-            "kubectl" "k"
+            "k" "kubectl"
         )
     fi
 
     if has_command "nvim"; then
         aliases+=(
-            "nvim" "v"
+            "v" "nvim"
         )
     fi
 
     if has_command "lazygit"; then
         aliases+=(
-            "lazygit" "lg"
+            "lg" "lazygit"
         )
     fi
 
     if has_command "batcat"; then
         aliases+=(
-            "batcat" "cat"
+            "cat" "batcat"
         )
     fi
 
     if type "bat" &>/dev/null; then
         aliases+=(
-            "bat" "cat"
+            "cat" "bat"
         )
     fi
 
     if type "nala" &>/dev/null; then
         aliases+=(
-            "nala" "apt"
+            "apt" "nala"
         )
     fi
 
 
     if has_command "htop"; then
         aliases+=(
-            "htop" "top"
+            "top" "htop"
         )
     fi
 
     if has_command "python3"; then
         aliases+=(
-            "python3" "python"
+            "python" "python3"
         )
     fi
 
     if has_command "eza"; then
         aliases+=(
-            "eza --icons=always --hyperlink" "ls"
-            "eza -lhga --git --hyperlink --group" "ll"
-            "eza -lDga --git --hyperlink" "ld"
-            "eza -lTL 3 --icons=always --hyperlink" "lt"
+            "ls" "eza --icons=always --hyperlink"
+            "la" "eza -a --icons=always --hyperlink"
+            "ll" "eza -lhga --git --hyperlink --group"
+            "ld" "eza -lDga --git --hyperlink"
+            "lt" "eza -lTL 3 --icons=always --hyperlink"
         )
     elif has_command "exa"; then
         aliases+=(
-            "exa -a " "ls"
-            "exa -lhga --git " "ll"
-            "exa -lDga --git " "ld"
-            "exa -lTL 3 " "lt"
+            "ls" "exa --icons"
+            "la" "exa --icons -a"
+            "ll" "exa -lhga --git"
+            "ld" "exa -lDga --git"
+            "lt" "exa -lTL 3"
         )
     fi
 
@@ -101,10 +103,10 @@ function report_aliases() {
     # shellcheck disable=SC2206
     local -a aliases=( ${aliases_output} )
 
-    # Process pairs: name, short
+    # Process pairs: short_alias, command_to_map_to
     for ((i = 0; i < ${#aliases[@]}; i += 2)); do
-        local name="${aliases[i]}"
-        local short="${aliases[i+1]}"
+        local short="${aliases[i]}"
+        local name="${aliases[i+1]}"
         log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
     done
 
