@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
         ROOT="${UTILS%"/utils"}"
@@ -21,7 +21,6 @@ source "${UTILS}/errors.sh"
 allow_errors
 
 function aliases_for_env() {
-    catch_errors
     local -a aliases=()
 
     if has_command "kubectl"; then
@@ -94,8 +93,6 @@ function aliases_for_env() {
     local IFS='|'
     local output="${aliases[*]}"
 
-    allow_errors
-
     echo "${output}"
 }
 
@@ -104,34 +101,35 @@ function aliases_for_env() {
 # Applies aliases determined by the environment so they're available in the
 # current shell session.
 function set_aliases() {
-    catch_errors
-
     local aliases_output
     aliases_output="$(aliases_for_env)"
+
     if [[ -z "${aliases_output}" ]]; then
-        allow_errors
         return 0
     fi
 
+    # Enable word splitting for zsh
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        setopt local_options sh_word_split
+    fi
+
+    # Convert pipe-separated string to items
+    local short target
+    local toggle=0
     local IFS='|'
-    # shellcheck disable=SC2206
-    local -a aliases=( ${aliases_output} )
 
-    local short
-    local target
-
-    for ((i = 0; i < ${#aliases[@]}; i += 2)); do
-        short="${aliases[i]:-}"
-        target="${aliases[i+1]:-}"
-
-        if [[ -z "${short}" || -z "${target}" ]]; then
-            continue
+    for item in ${aliases_output}; do
+        if [[ $toggle -eq 0 ]]; then
+            short="$item"
+            toggle=1
+        else
+            target="$item"
+            toggle=0
+            if [[ -n "${short}" && -n "${target}" ]]; then
+                builtin alias "${short}=${target}"
+            fi
         fi
-
-        builtin alias "${short}=${target}"
     done
-
-    allow_errors
 }
 
 # report_aliases
@@ -139,31 +137,36 @@ function set_aliases() {
 # Reports to screen the aliases which have been setup for the
 # the system based on detected features.
 function report_aliases() {
-    catch_errors
     setup_colors
 
-    local -a aliases_output
+    local aliases_output
     aliases_output=$(aliases_for_env)
 
     if [[ -z "${aliases_output}" ]]; then
         log "none"
-        allow_errors
         return 0
     fi
 
-    # Convert pipe-separated output to array using bash 3.x compatible method
+    # Enable word splitting for zsh
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        setopt local_options sh_word_split
+    fi
+
+    # Process pipe-separated pairs
+    local short name
+    local toggle=0
     local IFS='|'
-    # shellcheck disable=SC2206
-    local -a aliases=( ${aliases_output} )
 
-    # Process pairs: short_alias, command_to_map_to
-    for ((i = 0; i < ${#aliases[@]}; i += 2)); do
-        local short="${aliases[i]:-unknown}"
-        local name="${aliases[i+1]:-unknown}"
-        log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
+    for item in ${aliases_output}; do
+        if [[ $toggle -eq 0 ]]; then
+            short="$item"
+            toggle=1
+        else
+            name="$item"
+            toggle=0
+            log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
+        fi
     done
-
-    allow_errors
 }
 
 # Call the main function when script is executed directly

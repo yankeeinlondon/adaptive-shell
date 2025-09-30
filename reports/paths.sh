@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
         ROOT="${UTILS%"/utils"}"
@@ -59,29 +59,17 @@ function paths_for_env() {
     fi
 
 
-    if dir_exists "${HOME}/.bun"; then
-        if has_path "${HOME}/.bun/bin" >/dev/null; then
-            paths+=("Bun" "true" "${HOME}/.bun/bin")
-        else
-            paths+=("Bun" "false" "${HOME}/.bun/bin")
-        fi
-    fi
-
-
     if dir_exists "${HOME}/.local/bin"; then
-        if has_path "${HOME}/.local/bin" >/dev/null; then
-            paths+=("Local Binaries" "true" "${HOME}/.local/bin")
-        else
-            paths+=("Local Binaries" "false" "${HOME}/.local/bin")
-        fi
+        paths+=(".local" "$(has_path "${HOME}/.local/bin")" "${HOME}/.local/bin")
     fi
 
-    if dir_exists "${HOME}/.opencode"; then
-        if has_path "${HOME}/.opencode/bin" >/dev/null; then
-            paths+=("Opencode AI" "true" "${HOME}/.opencode/bin")
-        else
-            paths+=("Opencode AI" "false" "${HOME}/.opencode/bin")
-        fi
+
+    if dir_exists "${HOME}/.bun/bin"; then
+        paths+=("Bun" "$(has_path "${HOME}/.bun/bin")" "${HOME}/.bun/bin")
+    fi
+
+    if dir_exists "${HOME}/.opencode/bin"; then
+        paths+=("Opencode" "$(has_path "${HOME}/.opencode/bin")" "${HOME}/.opencode/bin")
     fi
     
     local IFS='|'
@@ -95,7 +83,7 @@ function paths_for_env() {
 # initialization of the user's shell.
 function report_paths() {
     setup_colors
-    
+
     local paths_output
     paths_output=$(paths_for_env 2>/dev/null || true)
 
@@ -104,23 +92,79 @@ function report_paths() {
         return 0
     fi
 
-    # Convert pipe-separated output to array using bash 3.x compatible method
+    # Enable word splitting for zsh
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        setopt local_options sh_word_split
+    fi
+
+    # Process pipe-separated triplets
+    local name dup path
+    local count=0
     local IFS='|'
-    # shellcheck disable=SC2206
-    local -a paths=( ${paths_output} )
 
-    
-
-    for ((i = 0; i < ${#paths[@]}; i += 3)); do
-        local name="${paths[i]:-unknown}"
-        local dup="${paths[i+1]:-unknown}"
-        local path="${paths[i+2]:-unknown}"
-        if [[ "${dup}" == "true" ]]; then
-            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}"
-        else
-            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}${YELLOW}*${RESET}"
-        fi
+    for item in ${paths_output}; do
+        case $count in
+            0) name="$item"; count=1 ;;
+            1) dup="$item"; count=2 ;;
+            2)
+                path="$item"
+                count=0
+                if [[ "${dup}" == "true" ]]; then
+                    log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}"
+                else
+                    log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}${YELLOW}*${RESET}"
+                fi
+                ;;
+        esac
     done
+}
+
+# append_to_path()
+#
+# Appends detected paths to the PATH environment variable.
+# Only adds paths that don't already exist in PATH (based on the duplicate flag).
+# Preserves existing PATH entries and appends new paths at the end.
+function append_to_path() {
+    local paths_output
+    paths_output=$(paths_for_env 2>/dev/null || true)
+
+    if [[ -z "${paths_output}" ]]; then
+        return 0
+    fi
+
+    # Enable word splitting for zsh (save and restore option state)
+    local zsh_opts_set=0
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        if [[ ! -o sh_word_split ]]; then
+            setopt sh_word_split
+            zsh_opts_set=1
+        fi
+    fi
+
+    # Process pipe-separated triplets: name, is_duplicate, path
+    local name dup path
+    local count=0
+    local IFS='|'
+
+    for item in ${paths_output}; do
+        case $count in
+            0) name="$item"; count=1 ;;
+            1) dup="$item"; count=2 ;;
+            2)
+                path="$item"
+                count=0
+                # Only append if not already in PATH (dup != "true")
+                if [[ "${dup}" !=  "true" ]] && [[ -n "${path}" ]]; then
+                    export PATH="${PATH}:${path}"
+                fi
+                ;;
+        esac
+    done
+
+    # Restore zsh option state
+    if [[ $zsh_opts_set -eq 1 ]]; then
+        unsetopt sh_word_split
+    fi
 }
 
 # Call the main function when script is executed directly

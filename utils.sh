@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
         ROOT="${UTILS%"/utils"}"
@@ -95,19 +95,21 @@ function is_string() {
 function is_bound() {
     local -n __test_by_ref=$1 2>/dev/null || { debug "is_bound" "unbounded ref";  return 1; }
     # local -r by_val="${1}:-"
-    local name="${!__test_by_ref}"
+    local name="${!__test_by_ref:-}"
     local -r arithmetic='→+-=><%'
     if has_characters "${arithmetic}" "$1"; then
         debug "is_bound" "${name} is NOT bound"
         return 1
     else
-        local idx=${!1} 2>/dev/null 
-        local a="${__test_by_ref@a}" 
+        local idx
+        eval "idx=\${$1:-}" 2>/dev/null || idx=""
+        local a
+        eval "a=\${__test_by_ref@a}" 2>/dev/null || a=""
 
         if [[ -z "${idx}${a}" ]]; then
             debug "is_bound" "${name} is NOT bound: ${idx}, ${a}"
             return 1
-        else 
+        else
             debug "is_bound" "${name} IS bound: ${idx}, ${a}"
             return 0
         fi

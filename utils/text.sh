@@ -356,3 +356,49 @@ function newline_on_word_boundary() {
     echo "$result"
     return 0
 }
+
+trim_val() {
+  # Usage: trim "   some text   "
+  local input="$*"
+  # Remove leading and trailing whitespace using parameter expansion
+  # (requires Bash 4+)
+  input="${input#"${input%%[![:space:]]*}"}"   # remove leading
+  input="${input%"${input##*[![:space:]]}"}"   # remove trailing
+  echo "$input"
+}
+
+trim_ref() {
+  # Usage: trim_ref var_name
+  local var_name="$1"
+  local value="${!var_name}"
+
+  # Remove leading whitespace
+  value="${value#"${value%%[![:space:]]*}"}"
+  # Remove trailing whitespace
+  value="${value%"${value##*[![:space:]]}"}"
+
+  # Reassign the trimmed value to the original variable
+  printf -v "$var_name" '%s' "$value"
+}
+
+trim() {
+  # Usage:
+  #   trim "  some text  "     → echoes trimmed text
+  #   trim var_name             → trims var in-place
+
+  local arg="$1"
+
+  if [[ $# -eq 1 && ${!arg+_} ]]; then
+    # 🧭 Case 1: variable name (in-place)
+    local value="${!arg}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf -v "$arg" '%s' "$value"
+  else
+    # 🧭 Case 2: direct string (echo result)
+    local value="$*"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    echo "$value"
+  fi
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     REPORTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${REPORTS}" == *"/utils" ]];then
         ROOT="${REPORTS%"/utils"}"
@@ -79,7 +79,8 @@ function report_about() {
     log "------------------------------------------------------------"
     source "${REPORTS}/sys.sh"
     editors
-    setup_colors
+    setup_colors # this must be re-established as editors() call will have removed it
+    
     VERSIONING=()
     if has_command "git"; then
         INFO="$(git_identity)"
