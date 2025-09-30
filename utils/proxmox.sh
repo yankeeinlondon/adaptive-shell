@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 
-# shellcheck source="./color.sh"
-source "${HOME}/.config/sh/color.sh"
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${UTILS}" == *"/utils" ]];then
+        ROOT="${UTILS%"/utils"}"
+    else
+        ROOT="$UTILS"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    UTILS="${ROOT}/utils"
+fi
 
-# shellcheck source="./utils.sh"
-source "${HOME}/.config/sh/utils.sh"
-
+# shellcheck source="../color.sh"
+source "${ROOT}/color.sh"
+# shellcheck source="../utils.sh"
+source "${ROOT}/utils.sh"
 
 
 function call_api() {
@@ -50,10 +60,10 @@ function get_pve_url() {
 function validate_api_key() {
     local -r key="${1:?no URL was passed to fetch_get()}"
 
-    local -rA req=(
-        [url]="$(get_pve "/version")"
-        [auth]="${key}"
-    )
+    # local -rA req=(
+    #     [url]="$(get_pve "/version")"
+    #     [auth]="${key}"
+    # )
 
     local -r code=$(validate_api_key "${key}")
 

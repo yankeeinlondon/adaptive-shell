@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 
-# shellcheck source="./utils.sh"
-source "${HOME}/.config/sh/utils.sh"
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${UTILS}" == *"/utils" ]];then
+        ROOT="${UTILS%"/utils"}"
+    else
+        ROOT="$UTILS"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    UTILS="${ROOT}/utils"
+fi
+
+# shellcheck source="../utils.sh"
+source "${ROOT}/utils.sh"
 
 # Wezterm Aliases
 function name() {

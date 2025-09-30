@@ -8,7 +8,7 @@
 #
 # Handles error when they are caught
 function error_handler() {
-    local -r exit_code="${?:-1}"
+    local -r exit_code=$?
     local -r _line_number="${1:-}"
     local -r command="${2:-}"
 
@@ -18,11 +18,14 @@ function error_handler() {
     fi
     log ""
 
-    for i in "${!BASH_SOURCE[@]}"; do
-        if ! contains "errors.sh" "${BASH_SOURCE[$i]:-unknown}"; then
-            log "    - ${FUNCNAME[$i]:-unknown}() ${ITALIC}${DIM}at line${RESET} ${BASH_LINENO[$i-1]:-unknown} ${ITALIC}${DIM}in${RESET} $(error_path "${BASH_SOURCE[$i]:-unknown}")"
-        fi
-    done
+    if [[ -n ${BASH_SOURCE+_} ]]; then
+        local i
+        for ((i = 0; i < ${#BASH_SOURCE[@]}; i++)); do
+            if ! contains "errors.sh" "${BASH_SOURCE[$i]:-unknown}"; then
+                log "    - ${FUNCNAME[$i]:-unknown}() ${ITALIC}${DIM}at line${RESET} ${BASH_LINENO[$((i-1))]:-unknown} ${ITALIC}${DIM}in${RESET} $(error_path "${BASH_SOURCE[$i]:-unknown}")"
+            fi
+        done
+    fi
     log ""
 }
 

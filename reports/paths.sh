@@ -47,12 +47,17 @@ function paths_for_env() {
     
     # Add real paths
     if dir_exists "${HOME}/bin"; then
-        if has_path "${HOME}/bin" >/dev/null; then
-            paths+=("User Binaries" "true" "${HOME}/bin")
-        else
-            paths+=("User Binaries" "false" "${HOME}/bin")
-        fi
+        paths+=("User Binaries" "$(has_path "${HOME}/bin")" "${HOME}/bin")
     fi
+
+    if dir_exists "${HOME}/.cargo/bin"; then
+        paths+=("Cargo" "$(has_path "${HOME}/.cargo/bin")" "${HOME}/.cargo/bin")
+    fi
+
+    if dir_exists "${HOME}/.atuin/bin"; then
+        paths+=("Atuin" "$(has_path "${HOME}/.atuin/bin")" "${HOME}/.atuin/bin")
+    fi
+
 
     if dir_exists "${HOME}/.bun"; then
         if has_path "${HOME}/.bun/bin" >/dev/null; then
@@ -61,6 +66,7 @@ function paths_for_env() {
             paths+=("Bun" "false" "${HOME}/.bun/bin")
         fi
     fi
+
 
     if dir_exists "${HOME}/.local/bin"; then
         if has_path "${HOME}/.local/bin" >/dev/null; then
@@ -112,102 +118,9 @@ function report_paths() {
         if [[ "${dup}" == "true" ]]; then
             log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}"
         else
-            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}"
+            log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}${YELLOW}*${RESET}"
         fi
     done
-}
-
-# set_aliases()
-#
-# Sets up command aliases and PATH variables based on detected tools
-# and directories. This function centralizes path-related logic that
-# was previously inline in adaptive.sh.
-function set_aliases() {
-    # Set up PATH variables for common directories
-    if dir_exists "${HOME}/.bun"; then
-        # shellcheck disable=SC1091
-        [ -s "${HOME}/.bun/_bun" ] && (is_zsh && source "${HOME}/.bun/_bun" || true)
-        export PATH="${PATH}:${HOME}/.bun/bin"
-    fi
-
-    if dir_exists "${HOME}/.local/bin"; then
-        export PATH="${PATH}:${HOME}/.local/bin"
-    fi
-
-    if dir_exists "${HOME}/bin"; then
-        export PATH="${PATH}:${HOME}/bin"
-    fi
-
-    # Set up command aliases based on available tools
-    if has_command "kubectl"; then
-        alias k='kubectl'
-    fi
-
-    if has_command "nvim"; then
-        alias v='nvim'
-    fi
-
-    if has_command "lazygit"; then
-        alias lg='lazygit'
-    fi
-
-    if has_command "htop"; then
-        alias top='htop'
-    fi
-
-    if has_command "python3"; then
-        alias python='python3'
-        alias pip='pip3'
-    fi
-
-    # Set up file listing aliases (eza preferred over exa)
-    if has_command "eza"; then 
-        alias ls='eza --icons=always --hyperlink'
-        alias la='eza -a --icons=always --hyperlink'
-        alias ll='eza -lhga --git  --hyperlink --group'
-        alias ld='eza -lDga --git  --hyperlink'
-        alias lt='eza -lTL 3 --icons=always  --hyperlink'
-    elif has_command "exa"; then
-        alias ls='exa -a '
-        alias ll='exa -lhga --git '
-        alias ld='exa -lDga --git '
-        alias lt='exa -lTL 3 '
-    fi
-
-    # Set up cat replacement (batcat preferred over bat)
-    if has_command "batcat"; then
-        alias cat="batcat"
-    elif has_command "bat"; then
-        alias cat="bat"
-    fi
-
-    # Set up apt replacement if nala is available
-    if has_command "nala"; then
-        alias apt="nala"
-    fi
-
-    # Set up Android SDK environment
-    if dir_exists "${HOME}/Library/Android/sdk"; then
-        export ANDROID_HOME="${HOME}/Library/Android/sdk"
-        # shellcheck disable=SC2155
-        export NDK_HOME="${ANDROID_HOME}/nd/$(ls -1 "${ANDROID_HOME}/ndk")"
-    fi
-
-    # Handle neovim build logic for older Debian versions
-    if is_linux && is_debian && [[ "$(os_version)" != "13" ]]; then
-        if ! has_command "nvim"; then
-            log "${BOLD}${YELLOW}nvim${RESET} is not installed and this version of Debian OS is"
-            log "way behind on neovim versions!"
-            log ""
-            log "Would you like to build from source?"
-            if confirm "build from source"; then
-                "${HOME}/.config/sh/build.sh" "neovim"
-            else
-                log "Ok. Version 13 onward of Debian should be fine"
-                log ""
-            fi
-        fi
-    fi
 }
 
 # Call the main function when script is executed directly

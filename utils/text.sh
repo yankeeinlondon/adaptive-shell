@@ -53,6 +53,89 @@ function contains() {
     return 1
 }
 
+# starts_with <look-for> <content>
+function starts_with() {
+    local -r look_for="${1:?No look-for string provided to starts_with}"
+    local -r content="${2:?No content passed to starts_with() fn!}"
+
+    if is_empty "${content}"; then
+        debug "starts_with" "starts_with(${look_for}, "") was passed empty content so will always return false"
+        return 1;
+    fi
+
+    if [[ "${content}" == "${content#"$look_for"}" ]]; then
+        debug "starts_with" "false (\"${DIM}${look_for}${RESET}\")"
+        return 1; # was not present
+    else
+        debug "starts_with" "true (\"${DIM}${look_for}${RESET}\")"
+        return 0; #: found "look_for"
+    fi
+}
+
+# strip_before <find> <content>
+#
+# Retains all the characters after the first instance of <find> is
+# found.
+#
+# Ex: strip_after ":" "hello:world:of:tomorrow" → "world:of:tomorrow"
+function strip_before() {
+    local -r find="${1:?strip_before() requires that a find parameter be passed!}"
+    local -r content="${2:-}"
+
+    echo "${content#*"${find}"}"
+}
+
+
+# strip_before_last <find> <content>
+#
+# Retains all the characters after the last instance of <find> is
+# found.
+#
+# Ex: strip_after ":" "hello:world:of:tomorrow" → "tomorrow"
+function strip_before_last() {
+    local -r find="${1:?strip_before_last() requires that a find parameter be passed!}"
+    local -r content="${2:-}"
+
+    echo "${content##*"${find}"}"
+    
+}
+
+
+# strip_after <find> <content>
+#
+# Strips all characters after finding <find> in content inclusive
+# of the <find> text.
+#
+# Ex: strip_after ":" "hello:world:of:tomorrow" → "hello"
+function strip_after() {
+    local -r find="${1:?strip_after() requires that a find parameter be passed!}"
+    local -r content="${2:-}"
+
+    if not_empty "content"; then
+        echo "${content%%"${find}"*}"
+    else 
+        echo ""
+    fi
+}
+
+# strip_after_last <find> <content>
+#
+# Strips all characters after finding the FINAL <find> substring 
+# in the content. 
+#
+# Ex: strip_after_last ":" "hello:world:of:tomorrow" → "hello:world:of"
+function strip_after_last() {
+    local -r find="${1:?strip_after_last() requires that a find parameter be passed!}"
+    local -r content="${2:-}"
+
+    if not_empty "content"; then
+        echo "${content%"${find}"*}"
+    else 
+        echo ""
+    fi
+}
+
+
 
 # ensure_starting <ensure> <content>
 #
@@ -135,3 +218,141 @@ function indent() {
     done
 }
 
+
+# newline_on_word_boundary <content> <length>
+#
+# Splits the content onto a new line when the character length
+# reaches <length> but doesn't split until a word boundary is found.
+# Preserves escape codes like ${DIM}, ${ITALIC}, ${RESET}, etc.
+function newline_on_word_boundary() {
+    local -r content="${1:?-}"
+    local -r len="${2:?no length was passed to newline_on_word_boundary()!}"
+
+    # Validate length parameter
+    if ! [[ "$len" =~ ^[0-9]+$ ]] || [[ "$len" -le 0 ]]; then
+        error "newline_on_word_boundary()" "length must be a positive number, received: $len" 2
+        return 2
+    fi
+
+    # Handle empty content
+    if is_empty "$content"; then
+        debug "newline_on_word_boundary()" "received empty content"
+        echo ""
+        return 0
+    fi
+
+    # Function to strip escape codes for length calculation
+    strip_escape_codes() {
+        local text="$1"
+        # Remove ANSI escape sequences
+        echo "$text" | sed 's/\x1b\[[0-9;]*m//g'
+    }
+
+    # Get clean version (without escape codes) for length calculation
+    local clean_content
+    clean_content="$(strip_escape_codes "$content")"
+
+    # First, split the clean content into lines of max length
+    local clean_lines=""
+    local current_clean_line=""
+    local -i current_length=0
+
+    # Split clean content into words
+    local -a clean_words
+    read -ra clean_words <<< "$clean_content"
+
+    for clean_word in "${clean_words[@]}"; do
+        local -i word_length=${#clean_word}
+        
+        # Calculate potential length
+        local -i potential_length=$current_length
+        if [[ $current_length -gt 0 ]]; then
+            potential_length=$((current_length + word_length + 1))
+        else
+            potential_length=$word_length
+        fi
+        
+        # Check if word fits
+        if [[ $potential_length -gt $len && $current_length -gt 0 ]]; then
+            # Word doesn't fit, start new line
+            clean_lines="${clean_lines}${current_clean_line}"$'\n'
+            current_clean_line="$clean_word"
+            current_length=$word_length
+        else
+            # Word fits, add to current line
+            if [[ $current_length -gt 0 ]]; then
+                current_clean_line="${current_clean_line} ${clean_word}"
+                current_length=$((current_length + word_length + 1))
+            else
+                current_clean_line="$clean_word"
+                current_length=$word_length
+            fi
+        fi
+    done
+
+    # Add the last line
+    if [[ $current_length -gt 0 ]]; then
+        clean_lines="${clean_lines}${current_clean_line}"
+    fi
+
+    # Now, map the clean lines back to the original content with escape codes
+    local result=""
+    local original_pos=0
+
+    # Process each clean line
+    while IFS= read -r clean_line; do
+        local -i clean_line_length=${#clean_line}
+        local original_line=""
+        local -i chars_to_copy=$clean_line_length
+        
+        # Copy characters from original content, preserving escape codes
+        while [[ $chars_to_copy -gt 0 && $original_pos -lt ${#content} ]]; do
+            local char="${content:$original_pos:1}"
+            
+            # Check if this is the start of an ANSI escape sequence
+            if [[ "$char" == $'\x1b' && $((original_pos+1)) -lt ${#content} && "${content:$((original_pos+1)):1}" == '[' ]]; then
+                # Find the end of the ANSI escape sequence
+                local escape_end_pos=$((original_pos+2))
+                while [[ $escape_end_pos -lt ${#content} && "${content:$escape_end_pos:1}" != 'm' ]]; do
+                    escape_end_pos=$((escape_end_pos + 1))
+                done
+                if [[ $escape_end_pos -lt ${#content} && "${content:$escape_end_pos:1}" == 'm' ]]; then
+                    escape_end_pos=$((escape_end_pos + 1)) # Include the 'm'
+                fi
+                
+                # Add the complete escape sequence to the line
+                original_line="${original_line}${content:$original_pos:$((escape_end_pos - original_pos))}"
+                original_pos=$escape_end_pos
+            else
+                # Regular character - check if it matches the expected clean character
+                local expected_char="${clean_line:$((clean_line_length - chars_to_copy)):1}"
+                
+                if [[ "$char" == "$expected_char" ]]; then
+                    # Character matches, add it and move both positions
+                    original_line="${original_line}${char}"
+                    original_pos=$((original_pos + 1))
+                    chars_to_copy=$((chars_to_copy - 1))
+                else
+                    # Character doesn't match (likely due to escape codes in original)
+                    # Skip this character in original and try the next one
+                    original_pos=$((original_pos + 1))
+                fi
+            fi
+        done
+        
+        # Add the line to result
+        if [[ -n "$result" ]]; then
+            result="${result}"$'\n'
+        fi
+        result="${result}${original_line}"
+        
+        # Skip space in original content if there is one
+        if [[ $original_pos -lt ${#content} && "${content:$original_pos:1}" == ' ' ]]; then
+            original_pos=$((original_pos + 1))
+        fi
+    done <<< "$clean_lines"
+
+    debug "newline_on_word_boundary()" "split content to max length $len"
+    echo "$result"
+    return 0
+}

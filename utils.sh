@@ -32,20 +32,14 @@ source "${UTILS}/text.sh"
 source "${UTILS}/filesystem.sh"
 # shellcheck source="./utils/os.sh"
 source "${UTILS}/os.sh"
+# shellcheck source="./utils/functions.sh"
+source "${UTILS}/functions.sh"
+# shellcheck source="./utils/lists.sh"
+source "${UTILS}/lists.sh"
+# shellcheck source="./utils/detection.sh"
+source "${UTILS}/detection.sh"
 
-# is_pve_host
-#
-# Returns an exit code which indicates whether the given machine is
-# a PVE host or not.
-function is_pve_host() {
-    if has_command "pveversion"; then
-        debug "is_pve_host" "is a pve node"
-        return 0
-    else
-        debug "is_pve_host" "is NOT a pve node"
-        return 1
-    fi
-}
+
 
 # confirm(question, [default])
 #
@@ -101,7 +95,7 @@ function is_string() {
 function is_bound() {
     local -n __test_by_ref=$1 2>/dev/null || { debug "is_bound" "unbounded ref";  return 1; }
     # local -r by_val="${1}:-"
-    local name="${!__test_by_ref}" 2
+    local name="${!__test_by_ref}"
     local -r arithmetic='→+-=><%'
     if has_characters "${arithmetic}" "$1"; then
         debug "is_bound" "${name} is NOT bound"
@@ -132,25 +126,6 @@ function append_to_path() {
     echo "${newPath}"
 }
 
-# starts_with <look-for> <content>
-function starts_with() {
-    local -r look_for="${1:?No look-for string provided to starts_with}"
-    local -r content="${2:?No content passed to starts_with() fn!}"
-
-    if is_empty "${content}"; then
-        debug "starts_with" "starts_with(${look_for}, "") was passed empty content so will always return false"
-        return 1;
-    fi
-
-    if [[ "${content}" == "${content#"$look_for"}" ]]; then
-        debug "starts_with" "false (\"${DIM}${look_for}${RESET}\")"
-        return 1; # was not present
-    else
-        debug "starts_with" "true (\"${DIM}${look_for}${RESET}\")"
-        return 0; #: found "look_for"
-    fi
-}
-
 # has_command <cmd>
 #
 # checks whether a particular program passed in via $1 is installed 
@@ -178,9 +153,6 @@ function is_keyword() {
         return 1
     fi
 }
-
-
-
 
 # tests whether a given string exists in the package.json file
 # located in the current directory.
@@ -393,44 +365,6 @@ function get_ssh_client() {
     return 1
 }
 
-# is_zsh()
-#
-# returns true/false based on whether the current shell is zsh.
-function is_zsh() {
-    local -r shell="$(get_shell)";
-
-    if [[ "${shell}" == "zsh" ]]; then
-        return 0;
-    else
-        return 1;
-    fi
-}
-
-# is_bash()
-#
-# returns true/false based on whether the current shell is zsh.
-function is_bash() {
-    local -r shell="$(get_shell)";
-
-    if [[ "${shell}" == "bash" ]]; then
-        return 0;
-    else
-        return 1;
-    fi
-}
-
-# is_fish()
-#
-# returns true/false based on whether the current shell is zsh.
-function is_fish() {
-    local -r shell="$(get_shell)";
-
-    if [[ "${shell}" == "fish" ]]; then
-        return 0;
-    else
-        return 1;
-    fi
-}
 
 function add_completion() {
     local -r name="${1:?No name was provided to add_completion}"
@@ -452,7 +386,6 @@ function add_completion() {
     fi
 
     echo "${completion_text}" > "$filename"
-
 }
 
 
@@ -489,40 +422,6 @@ function get_tui() {
     fi
 }
 
-# is_docker()
-#
-# Check for Docker container
-is_docker() {
-    # Check common Docker indicators
-    if [ -f /.dockerenv ] || 
-       { [ -f /proc/1/cgroup ] && grep -qi "docker\|kubepods" /proc/1/cgroup; }; then
-        return 0
-    fi
-    return 1
-}
-
-# Check for LXC container
-is_lxc() {
-    # Check common LXC indicators
-    if grep -q 'container=lxc' /proc/1/environ 2>/dev/null || 
-       [ -f /run/.containerenv ] || 
-       ( [ -f /proc/1/cgroup ] && grep -qi 'lxc' /proc/1/cgroup ); then
-        return 0
-    fi
-    return 1
-}
-
-# Check for VM
-is_vm() {
-    # Check common VM indicators
-    if grep -q 'hypervisor' /proc/cpuinfo 2>/dev/null || 
-       ( [ -f /sys/class/dmi/id/product_name ] && 
-         grep -qi -e 'qemu' -e 'kvm' /sys/class/dmi/id/product_name ); then
-        return 0
-    fi
-    return 1
-}
-
 
 function get_ssh_connection() {
     if [[ -n "${SSH_CONNECTION}" ]]; then
@@ -548,62 +447,5 @@ function get_ssh_connection() {
     return 1
 }
 
-# replace_line_in_file() <filepath> <find> <new-line>
-#
-# loads a file <filepath> and searches for a line which has <find>; if found
-# it will return 0 otherwise it will raise an error.
-function replace_line_in_file() {
-    local -r filepath="${1:?no filepath was passed to replace_line_in_file()}"
-    local -r find="${2:?no find string passed to replace_line_in_file()}"
-    local -r new_line="${3:?no new_line string passed to replace_line_in_file()}"
 
-    local file_changed="false"
-    local -a new_content=()
 
-    if file_exists "$filepath"; then
-        local -ra content=$(get_file "${filepath}")
-        for line in "${content[@]}"; do
-            if not_empty "${line}" && contains "${find}" "${line}" && [[ "$file_changed" == "false" ]]; then
-                new_content+=("$new_line")
-                file_changed="true"
-            else
-                new_content+=("$line")
-            fi
-        done
-
-        if [[ "$file_changed" == "true" ]]; then
-            printf "%s\n" "${new_content[@]}"
-            return 0
-        else
-            debug "replace_line_in_file()" "the string '${find}' was not found in the file '${filepath}'"
-            return 1
-        fi
-    fi
-}
-
-# using_bash_3
-#
-# tests whether the host OS has bash version 3 installed
-function using_bash_3() {
-    local -r version=$(bash_version)
-
-    if starts_with "3" "${version}"; then
-        debug "using_bash_3" "IS version 3 variant!"
-        return 0
-    else
-        debug "using_bash_3" "is not version 3 variant"
-        return 1
-    fi
-}
-
-# bash_version()
-#
-# returns the version number of bash for the host OS
-function bash_version() {
-    local version
-    version=$(bash --version)
-    version=$(strip_after "(" "$version")
-    version=$(strip_before "version " "$version")
-
-    echo "$version"
-}

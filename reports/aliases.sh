@@ -92,7 +92,46 @@ function aliases_for_env() {
     fi
 
     local IFS='|'
-    echo "${aliases[*]}"
+    local output="${aliases[*]}"
+
+    allow_errors
+
+    echo "${output}"
+}
+
+# set_aliases
+#
+# Applies aliases determined by the environment so they're available in the
+# current shell session.
+function set_aliases() {
+    catch_errors
+
+    local aliases_output
+    aliases_output="$(aliases_for_env)"
+    if [[ -z "${aliases_output}" ]]; then
+        allow_errors
+        return 0
+    fi
+
+    local IFS='|'
+    # shellcheck disable=SC2206
+    local -a aliases=( ${aliases_output} )
+
+    local short
+    local target
+
+    for ((i = 0; i < ${#aliases[@]}; i += 2)); do
+        short="${aliases[i]:-}"
+        target="${aliases[i+1]:-}"
+
+        if [[ -z "${short}" || -z "${target}" ]]; then
+            continue
+        fi
+
+        builtin alias "${short}=${target}"
+    done
+
+    allow_errors
 }
 
 # report_aliases
@@ -108,6 +147,7 @@ function report_aliases() {
 
     if [[ -z "${aliases_output}" ]]; then
         log "none"
+        allow_errors
         return 0
     fi
 
@@ -122,6 +162,8 @@ function report_aliases() {
         local name="${aliases[i+1]:-unknown}"
         log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
     done
+
+    allow_errors
 }
 
 # Call the main function when script is executed directly
@@ -129,4 +171,3 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     report_aliases
     remove_colors
 fi
-

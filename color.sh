@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${UTILS}" == *"/utils" ]];then
+        ROOT="${UTILS%"/utils"}"
+    else
+        ROOT="$UTILS"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    UTILS="${ROOT}/utils"
+fi
+
 setup_colors() {
     export BLACK=$'\033[30m'
     export RED=$'\033[31m'
@@ -52,8 +64,10 @@ setup_colors() {
 }
 
 remove_colors() {
-    echo "${RESET}"
-    
+    if [ -n "${RESET:-}" ]; then
+        printf "%b" "${RESET}"
+    fi
+
     unset RED BLACK GREEN YELLOW BLUE MAGENTA CYAN WHITE
     unset BRIGHT_BLACK BRIGHT_RED BRIGHT_GREEN BRIGHT_YELLOW BRIGHT_BLUE BRIGHT_MAGENTA BRIGHT_CYAN BRIGHT_WHITE
     unset BOLD NO_BOLD DIM NO_DIM ITALIC NO_ITALIC STRIKE NO_STRIKE REVERSE NO_REVERSE
@@ -61,3 +75,59 @@ remove_colors() {
     unset BG_BRIGHT_BLACK BG_BRIGHT_RED BG_BRIGHT_GREEN BG_BRIGHT_YELLOW BG_BRIGHT_BLUE BG_BRIGHT_MAGENTA BG_BRIGHT_CYAN BG_BRIGHT_WHITE
     unset RESET
 }
+
+# colorize <content>
+#
+# Looks for tags which represent formatting instructions -- `{{RED}}`, `{{RESET}}`, 
+# etc. -- and converts them using a variable of the same name.
+colorize() {
+    local -r content="${1:-}"
+    local rest="$content"
+    local result=""
+    local tag
+
+    while [[ "$rest" == *"{{"* ]]; do
+        result+="${rest%%\{\{*}"
+        rest="${rest#*\{\{}"
+
+        if [[ "$rest" != *"}}"* ]]; then
+            result+="{{${rest}"
+            rest=""
+            break
+        fi
+
+        tag="${rest%%\}\}*}"
+        rest="${rest#*\}\}}"
+
+        if [[ ${!tag+x} ]]; then
+            result+="${!tag}"
+        else
+            result+="{{${tag}}}"
+        fi
+    done
+
+    result+="$rest"
+
+    printf '%s' "$result"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # shellcheck source="./utils/logging.sh"
+    source "${UTILS}/logging.sh"
+
+    text='There I {{BLUE}}was{{RESET}}, there I {{GREEN}}was{{RESET}}, ... in the {{BOLD}}{{RED}}jungle{{RESET}}!'
+
+    setup_colors
+    log ""
+    log "${BOLD}colorize()${RESET} function"
+    log "---------------------------"
+    log ""
+    log "Plain text like this:\n\n\t${text}"
+    log ""
+    log "Can be converted to color with the ${GREEN}${BOLD}colorize${RESET} function"
+    log ""
+    log "$(colorize "${text}")"
+    remove_colors
+
+    colorize ""
+fi
