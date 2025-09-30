@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
         ROOT="${UTILS%"/utils"}"
@@ -41,6 +41,10 @@ setup_colors() {
     export NO_STRIKE=$'\033[29m'
     export REVERSE=$'\033[7m'
     export NO_REVERSE=$'\033[27m'
+    export UNDERLINE=$'\033[4m'
+    export NO_UNDERLINE=$'\033[24m'
+    export BLINK=$'\033[5m'
+    export NO_BLINK=$'\033[25m'
 
     export BG_BLACK=$'\033[40m'
     export BG_RED=$'\033[41m'
@@ -61,6 +65,20 @@ setup_colors() {
     export BG_BRIGHT_WHITE=$'\033[107m'
 
     export RESET=$'\033[0m'
+
+    export SAVE_POSITION=$'\033[s'
+    export RESTORE_POSITION=$'\033[u'
+    export CLEAR_SCREEN=$'\033[2J'
+}
+
+screen_title() {
+    local -r title=${1:?no title passed to screen_title()!}
+
+    printf '\033]0;%s\007' "${title}"
+}
+
+clear_screen() {
+    printf '\033[2J'
 }
 
 remove_colors() {
@@ -71,9 +89,44 @@ remove_colors() {
     unset RED BLACK GREEN YELLOW BLUE MAGENTA CYAN WHITE
     unset BRIGHT_BLACK BRIGHT_RED BRIGHT_GREEN BRIGHT_YELLOW BRIGHT_BLUE BRIGHT_MAGENTA BRIGHT_CYAN BRIGHT_WHITE
     unset BOLD NO_BOLD DIM NO_DIM ITALIC NO_ITALIC STRIKE NO_STRIKE REVERSE NO_REVERSE
+    unset UNDERLINE NO_UNDERLINE BLINK NO_BLINK
     unset BG_BLACK BG_RED BG_GREEN BG_YELLOW BG_BLUE BG_MAGENTA BG_CYAN BG_WHITE
     unset BG_BRIGHT_BLACK BG_BRIGHT_RED BG_BRIGHT_GREEN BG_BRIGHT_YELLOW BG_BRIGHT_BLUE BG_BRIGHT_MAGENTA BG_BRIGHT_CYAN BG_BRIGHT_WHITE
     unset RESET
+    unset SAVE_POSITION RESTORE_POSITION
+}
+
+as_rgb_prefix() {
+    local -r fg="$(trim "${1-}")"
+    local -r bg="$(trim "${2-}")"
+    local -r foreground='\033[38;2;]'
+    local -r background='\033[48;2;]'
+
+
+}
+
+# rgb_text <color> <text>
+#
+# A RGB color value is passed in first:
+#    - use a space delimited rgb value (e.g., 255 100 0)
+#    - if you express just a single RGB value than that will be used
+#    as the foreground/text color
+#    - if you want to specify both foreground and background then you
+#     will include two RGB values delimited by a `/` character (e.g., 
+#      `255 100 0 / 30 30 30` )
+#    - if you ONLY want to set the background then just use the `/` character
+#      followed by an RGB value (e.g., `/ 30 30 30`)
+#
+# The second parameter is the text you want to render with this RGB definition.
+rgb_text() {
+    local -r color=${1:?RGB color value must be passed as first parameter to rgb_text()!}
+    local -r text="${2:-}"
+    local -r terminal='\033[0m]'
+
+    local -r fg_color="$(strip_after "/" "${color}")"
+    local -r bg_color="$(strip_before "/" "${color}")"
+
+    printf '%s%s%s' "$(as_rgb_prefix "${fg_color}" "${bg_color}")" "${text}" "${terminal}"
 }
 
 # colorize <content>
