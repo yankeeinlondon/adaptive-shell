@@ -235,7 +235,7 @@ function newline_on_word_boundary() {
     fi
 
     # Handle empty content
-    if is_empty "$content"; then
+    if [[ -z "$content" ]]; then
         debug "newline_on_word_boundary()" "received empty content"
         echo ""
         return 0
@@ -388,7 +388,7 @@ trim() {
 
   local arg="$1"
 
-  if [[ $# -eq 1 && ${!arg+_} ]]; then
+  if [[ $# -eq 1 && $arg =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ && ${!arg+_} ]]; then
     # 🧭 Case 1: variable name (in-place)
     local value="${!arg}"
     value="${value#"${value%%[![:space:]]*}"}"

@@ -38,6 +38,8 @@ source "${UTILS}/functions.sh"
 source "${UTILS}/lists.sh"
 # shellcheck source="./utils/detection.sh"
 source "${UTILS}/detection.sh"
+# shellcheck source="./utils/link.sh"
+source "${UTILS}/link.sh"
 
 
 
@@ -391,17 +393,6 @@ function add_completion() {
 }
 
 
-# link(text, uri)
-#
-# embeds a hyperlink into the console when using Wezterm
-# and some other terminals (I think support is limited)
-function link() {
-    local -r text="${1:?no text passed to link() function}"
-    local -r uri="${2:?no uri passed to link() function}"
-
-    # shellcheck disable=SC2028
-    echo "\e]8;;${uri}\e\\${text}\e]8;;\e\\"
-}
 
 
 # get_tui() → [whiptail|dialog|ERROR]

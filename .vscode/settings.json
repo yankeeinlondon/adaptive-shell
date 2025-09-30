@@ -6,6 +6,7 @@
         "autofs",
         "backupdb",
         "batcat",
+        "btop",
         "cifs",
         "containerenv",
         "degit",

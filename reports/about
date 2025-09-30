@@ -80,7 +80,7 @@ function report_about() {
     source "${REPORTS}/sys.sh"
     editors
     setup_colors # this must be re-established as editors() call will have removed it
-    
+
     VERSIONING=()
     if has_command "git"; then
         INFO="$(git_identity)"
