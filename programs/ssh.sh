@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+
 get_ssh_hosts() {
   local ssh_config="${HOME}/.ssh/config"
   local hosts=()

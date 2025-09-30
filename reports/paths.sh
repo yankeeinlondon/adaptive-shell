@@ -50,6 +50,10 @@ function paths_for_env() {
         paths+=("User Binaries" "$(has_path "${HOME}/bin")" "${HOME}/bin")
     fi
 
+    if dir_exists "/usr/local/bin"; then
+        paths+=("/usr/local" "$(has_path "/usr/local/bin")" "/usr/local/bin")
+    fi
+
     if dir_exists "${HOME}/.cargo/bin"; then
         paths+=("Cargo" "$(has_path "${HOME}/.cargo/bin")" "${HOME}/.cargo/bin")
     fi

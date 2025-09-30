@@ -59,8 +59,11 @@ function aliases_for_env() {
         )
     fi
 
-
-    if has_command "htop"; then
+    if has_command "btop"; then
+        aliases+=(
+            "top" "btop"
+        )
+    elif has_command "htop"; then
         aliases+=(
             "top" "htop"
         )
