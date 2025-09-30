@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    REPORTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${REPORTS}" == *"/utils" ]];then
+        ROOT="${REPORTS%"/utils"}"
+        UTILS="${ROOT}/utils"
+    else
+        ROOT="${REPORTS}"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    REPORTS="${ROOT}/reports"
+    UTILS="${ROOT}/utils"
+fi
+
+# shellcheck source="../utils/errors.sh"
+source "${UTILS}/errors.sh"
+allow_errors
+
+function report_about() {
+    catch_errors
+
+    # shellcheck source="../color.sh"
+    source "${ROOT}/color.sh"
+    # shellcheck source="../utils/logging.sh"
+    source "${UTILS}/logging.sh"
+
+    # shellcheck source="./aliases.sh"
+    source "${REPORTS}/aliases.sh"
+    # shellcheck source="./paths.sh"
+    source "${REPORTS}/paths.sh"
+
+    TITLE="${TITLE:-${DIM:-}${ITALIC:-}your System}"
+
+    setup_colors
+    log ""
+    log "${BOLD}${YELLOW}About${RESET} ${TITLE}${RESET}"
+    log "---------------------------------------------"
+    log "${DIM}This system uses the ${ITALIC}adaptive shell${RESET}${DIM} bootstrap which provides${RESET}"
+    log "${DIM}functions, aliases, and installers based on the detected environment.${RESET}"
+    log ""
+
+    log "${BOLD}Aliases:${RESET}"
+    log "---------------------------------------------"
+    report_aliases
+
+    log ""
+    log "${BOLD}Executable ${RESET}${DIM}paths detected${RESET}${BOLD}:${RESET}"
+    log "---------------------------------------------"
+    report_paths
+
+    log ""
+    log "${BOLD}Functions:${RESET}"
+    log "- ${BLUE}${BOLD}sys${RESET}: provides up-to-date information about storage, networks,"
+    log "  editors, and more"
+    log "- ${BLUE}${BOLD}add${RESET}: function to install common programs setup a directory based on "
+    log "- ${BLUE}${BOLD}prep${RESET}: a ${ITALIC}context-aware${RESET} function which will detected programming"
+    log "  language(s) and install appropriate packages where appropriate"
+
+    remove_colors
+}
+
+
+# Call the main function when script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    report_about
+fi
