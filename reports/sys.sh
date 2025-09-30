@@ -14,9 +14,9 @@ fi
 
 # shellcheck source="../color.sh"
 source "${ROOT}/color.sh"
-
 # shellcheck source="../utils.sh"
 source "${ROOT}/utils.sh"
+
 
 function net() {
     setup_colors
@@ -28,20 +28,7 @@ function net() {
     remove_colors
 }
 
-function sys() {
-    setup_colors
-
-    if is_linux; then
-        OS="${BOLD}${YELLOW}$(os) ${RESET}${BOLD}$(distro)${RESET}"
-    else
-        OS="${BOLD}${YELLOW}$(os) ${RESET}${BOLD}$(os_version)${RESET}"
-    fi
-
-    MEM="$(get_memory)"
-    MEM="$(find_replace ".00" "" "${MEM}")"
-    ARCH="$(get_arch)"
-
-
+function editors() {
     EDITORS=()
     if has_command "nvim"; then
         EDITORS+=("nvim")
@@ -101,6 +88,23 @@ function sys() {
     if has_command "rider"; then
         EDITORS+=("rider")
     fi
+
+    log "${BOLD}Editors:${RESET}   ${EDITORS[*]}"
+    remove_colors
+}
+
+function sys() {
+    setup_colors
+
+    if is_linux; then
+        OS="${BOLD}${YELLOW}$(os) ${RESET}${BOLD}$(distro)${RESET}"
+    else
+        OS="${BOLD}${YELLOW}$(os) ${RESET}${BOLD}$(os_version)${RESET}"
+    fi
+
+    MEM="$(get_memory)"
+    MEM="$(find_replace ".00" "" "${MEM}")"
+    ARCH="$(get_arch)"
 
     PROG=()
     if has_command "node" || has_command "nodejs"; then
@@ -175,7 +179,8 @@ function sys() {
         log "${BOLD}SSH:${RESET}       $(get_ssh_connection)"
     fi
 
-    log "${BOLD}Editors:${RESET}   ${EDITORS[*]}"
+    editors 
+    setup_colors
     log "${BOLD}Lang:${RESET}      ${PROG[*]}"
 
 
@@ -212,17 +217,19 @@ function sys() {
     remove_colors
 }
 
-case "${1}" in
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    command="${1:-sys}"
 
-    net)
-        net
-        ;;
-    sys)
-        sys
-        ;;
-
-    *)
-        log "- unknown command ${RED}${BOLD}${1}${RESET} for sys module"
-        exit 1
-        ;;
-esac 
+    case "${command}" in
+        net)
+            net
+            ;;
+        sys)
+            sys
+            ;;
+        *)
+            log "- unknown command ${RED}${BOLD}${command}${RESET} for sys module"
+            exit 1
+            ;;
+    esac
+fi

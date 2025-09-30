@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 
-
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${UTILS}" == *"/utils" ]];then
+        ROOT="${UTILS%"/utils"}"
+    else
+        ROOT="$UTILS"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    UTILS="${ROOT}/utils"
+fi
 
 # file_exists <filepath>
 #
@@ -70,6 +80,9 @@ function find_in_file() {
     local -r filepath="${1:?find_in_file() called but no filepath passed in!}"
     local -r key="${2:?find_in_file() called but key value passed in!}"
 
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/empty.sh"
+
     if file_exists "${filepath}"; then
         debug "find_in_file(${filepath})" "file found"
         local found=""
@@ -107,6 +120,8 @@ function find_in_file() {
 # Gets the content from a file at the given <filepath>
 function get_file() {
     local -r filepath="${1:?get_file() called but no filepath passed in!}"
+
+    source "${UTILS}/logging.sh"
     
     if file_exists "${filepath}"; then
         debug "get_file(${filepath})" "getting data"
