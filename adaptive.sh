@@ -1,45 +1,55 @@
 #!/usr/bin/env bash
 
+# shellcheck disable=SC2155
+export ADAPTIVE_SHELL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+ROOT="${ADAPTIVE_SHELL}"
+UTILS="${ROOT}/utils"
+REPORTS="${ROOT}/reports"
+
 # Get the directory of the current script
 CONFIG_LOCATION="${HOME}/.config/sh"
-# SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 COMPLETIONS="${HOME}/.completions"
 
 # shellcheck source="./color.sh"
-export AD_COLOR="${CONFIG_LOCATION}/color.sh"
+export AD_COLOR="${ROOT}/color.sh"
 # shellcheck source="./utils.sh"
-export AD_UTILS="${CONFIG_LOCATION}/utils.sh"
+export AD_UTILS="${UTILS}/utils.sh"
 
-# shellcheck source="./sys.sh"
-export AD_SYS="${CONFIG_LOCATION}/sys.sh"
-
-# shellcheck source="./sys.sh"
-export AD_TRACK="${CONFIG_LOCATION}/track.sh"
 
 # shellcheck source="./color.sh"
-source "${CONFIG_LOCATION}/aliases.sh"
+source "${ROOT}/color.sh"
 setup_colors
 
 # shellcheck source="./utils.sh"
-source "${CONFIG_LOCATION}/utils.sh"
+source "${ROOT}/utils.sh"
 
+# shellcheck source="./reports/paths.sh"
+source "${REPORTS}/paths.sh"
+# shellcheck source="./reports/aliases.sh"
+source "${REPORTS}/aliases.sh"
+
+# Set up aliases and PATH variables
+set_aliases
 
 if is_zsh; then
     emulate zsh -R
 fi
 
 if has_command "rustup"; then
-    RUSTUP=$(add_completion "rustup" "$(rustup completions "$(get_shell)" rustup)")
-    CARGO=$(add_completion "cargo" "$(rustup completions "$(get_shell)" cargo)")
-    if ! is_zsh; then
-        if not_empty "${RUSTUP}"; then
-            # shellcheck disable=SC1090
-            source "${RUSTUP}"
-        fi
-        if not_empty "${CARGO}"; then
-            # shellcheck disable=SC1090
-            source "${CARGO}"
+    # Skip completion setup in non-interactive shells
+    if [[ "$-" == *i* ]]; then
+        RUSTUP=$(add_completion "rustup" "$(rustup completions "$(get_shell)" rustup 2>/dev/null || echo)" 2>/dev/null || true)
+        CARGO=$(add_completion "cargo" "$(rustup completions "$(get_shell)" cargo 2>/dev/null || echo)" 2>/dev/null || true)
+        if ! is_zsh; then
+            if not_empty "${RUSTUP}" && [ -f "${RUSTUP}" ]; then
+                # shellcheck disable=SC1090
+                source "${RUSTUP}" 2>/dev/null || true
+            fi
+            if not_empty "${CARGO}" && [ -f "${CARGO}" ]; then
+                # shellcheck disable=SC1090
+                source "${CARGO}" 2>/dev/null || true
+            fi
         fi
     fi
 fi
@@ -48,9 +58,12 @@ if type uv &>/dev/null; then
     if is_fish; then
         uv generate-shell-completion fish
     else 
-        UV=$(add_completion "uv" "$(rustup completions "$(get_shell)" rustup)")
-        # shellcheck disable=SC1090
-        source "$UV"
+        # Skip completion setup in non-interactive shells
+        if [[ "$-" == *i* ]]; then
+            UV=$(add_completion "uv" "$(rustup completions "$(get_shell)" rustup 2>/dev/null || echo)" 2>/dev/null || true)
+            # shellcheck disable=SC1090
+            ([ -n "$UV" ] && [ -f "$UV" ] && source "$UV" 2>/dev/null) || true
+        fi
     fi
 fi
 
@@ -130,15 +143,17 @@ if is_zsh; then
 fi
 
 if is_pve_host; then
-    source "${CONFIG_LOCATION}/proxmox.sh"
+    # shellcheck source="./utils/proxmox.sh"
+    source "${UTILS}/proxmox.sh"
 fi
-
-
 
 if type aws_completer &>/dev/null; then
     if ! is_zsh; then
-        # shellcheck disable=SC1090
-        source <"$(aws_completer "$(get_shell)")"
+        # Skip completion setup in non-interactive shells
+        if [[ "$-" == *i* ]]; then
+            # shellcheck disable=SC1090
+            source <"$(aws_completer "$(get_shell)" 2>/dev/null || echo)" 2>/dev/null || true
+        fi
     fi
 fi
 
@@ -178,38 +193,7 @@ if not_empty "${WEZTERM_CONFIG_DIR}"; then
   source "${HOME}/.config/sh/wezterm.sh"
 fi
 
-if type "batcat" &>/dev/null; then
-    alias cat="batcat";
-fi
 
-if type "bat" &>/dev/null; then
-    alias cat="bat";
-fi
-
-if type "nala" &>/dev/null; then
-    alias apt="nala"
-fi
-
-if dir_exists "${HOME}/Library/Android/sdk"; then
-    export ANDROID_HOME="${HOME}/Library/Android/sdk"
-    # shellcheck disable=SC2155
-    export NDK_HOME="${ANDROID_HOME}/nd/$(ls -1 "${ANDROID_HOME}/ndk")"
-fi
-
-if is_linux && is_debian && [[ "$(os_version)" != "13"  ]]; then
-    if ! has_command "nvim"; then
-        log "${BOLD}${YELLOW}nvim${RESET} is not installed and this version of Debian OS is"
-        log "way behind on neovim versions!"
-        log ""
-        log "Would you like to build from source?"
-        if confirm "build from source"; then
-            "${HOME}/.config/sh/build.sh" "neovim"
-        else
-            log "Ok. Version 13 onward of Debian should be fine"
-            log ""
-        fi
-    fi
-fi
 
 # source user's `.env` in home directory
 # if it exists.
@@ -220,40 +204,6 @@ if file_exists "${HOME}/.env"; then
     set +a
 fi
 
-if has_command "kubectl"; then
-    alias k='kubectl'
-fi
-
-if has_command "nvim"; then
-    alias v='nvim'
-fi
-
-if has_command "lazygit"; then
-    alias lg='lazygit'
-fi
-
-if has_command "htop"; then
-  alias top='htop'
-fi
-
-if dir_exists "${HOME}/.bun"; then
-    # shellcheck disable=SC1091
-    [ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun"
-    export PATH="${PATH}:${HOME}/.bun"
-fi
-
-if dir_exists "${HOME}/.local/bin"; then
-    export PATH="${PATH}:${HOME}/.local/bin"
-fi
-
-if dir_exists "${HOME}/bin"; then
-    export PATH="${PATH}:${HOME}/bin"
-fi
-
-if has_command "python3"; then
-    alias python='python3'
-    alias pip='pip3'
-fi
 
 if has_command "gpg"; then
     TTY="$(tty)"
@@ -283,25 +233,6 @@ else
         log ""
         }
 fi
-
-# if has_command "fzf"; then
-#     export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
-#     export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --lin-range :500 {}"
-# fi
-
-if has_command "eza"; then 
-    alias ls='eza --icons=always --hyperlink'
-    alias la='eza -a --icons=always --hyperlink'
-    alias ll='eza -lhga --git  --hyperlink --group'
-    alias ld='eza -lDga --git  --hyperlink'
-    alias lt='eza -lTL 3 --icons=always  --hyperlink'
-elif has_command "exa"; then
-    alias ls='exa -a '
-    alias ll='exa -lhga --git '
-    alias ld='exa -lDga --git '
-    alias lt='exa -lTL 3 '
-fi
-
 
 # use "dust" over base "du" if available
 function du() {
@@ -351,7 +282,7 @@ function vitesse() {
 }
 
 
-function vitesse-ext() {
+function vitesse_ext() {
   if [ -z "$1" ]; then
     log "Syntax: ${BOLD}vitesse-ext${NO_BOLD} ${ITALIC}\${1}${NO_ITALIC}, ${DIM}where ${NO_DIM}${ITALIC}\${1}${NO_ITALIC} ${DIM}indicates the directory to install to  ${NO_DIM}\n"
     return
@@ -454,19 +385,25 @@ log "- use the ${BOLD:-}${GREEN:-}about${RESET:-} function for aliases, function
 remove_colors
 
 function net() {
-    bash "${AD_SYS}" "net"
+    local -r file="${REPORTS}/sys.sh"
+
+    bash "${file}" "net"
 }
 
 function sys() {
-    bash "${AD_SYS}" "sys"
+    local -r file="${REPORTS}/sys.sh"
+
+    bash "${file}" "sys"
 }
 
 function track() {
+    local -r file="${ROOT}/track.sh"
     local -ra params=( "$@" )
 
-    bash "${AD_TRACK}" "${params[@]}"
+    bash "${file}" "${params[@]}"
 }
 
 function about() {
-    source "${CONFIG_LOCATION}/about"
+    local file="${REPORTS}/about"
+    bash "${file}" "report_about"
 }

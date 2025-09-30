@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source="./color.sh"
-source "${SCRIPT_DIR}/color.sh"
-# shellcheck source="./utils.sh"
-source "${SCRIPT_DIR}/utils.sh"
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${UTILS}" == *"/utils" ]];then
+        ROOT="${UTILS%"/utils"}"
+    else
+        ROOT="$UTILS"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    UTILS="${ROOT}/utils"
+fi
+
+# shellcheck source="../color.sh"
+source "${ROOT}/color.sh"
+# shellcheck source="../utils.sh"
+source "${ROOT}/utils.sh"
+# shellcheck source="../utils/errors.sh"
+source "${UTILS}/errors.sh"
+allow_errors
 
 function aliases_for_env() {
+    catch_errors
     local -a aliases=()
-
-    # Each alias is defined as: short_alias command_to_map_to
-    # This pattern is clean, readable, and compatible with bash 3.x+
 
     if has_command "kubectl"; then
         aliases+=(
@@ -88,6 +100,7 @@ function aliases_for_env() {
 # Reports to screen the aliases which have been setup for the
 # the system based on detected features.
 function report_aliases() {
+    catch_errors
     setup_colors
 
     local -a aliases_output
@@ -105,11 +118,10 @@ function report_aliases() {
 
     # Process pairs: short_alias, command_to_map_to
     for ((i = 0; i < ${#aliases[@]}; i += 2)); do
-        local short="${aliases[i]}"
-        local name="${aliases[i+1]}"
+        local short="${aliases[i]:-unknown}"
+        local name="${aliases[i+1]:-unknown}"
         log "- the alias ${BOLD}${GREEN}${short}${RESET} ${ITALIC}maps to${RESET} ${BLUE}${name}${RESET}"
     done
-
 }
 
 # Call the main function when script is executed directly
