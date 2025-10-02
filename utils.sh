@@ -41,8 +41,6 @@ source "${UTILS}/detection.sh"
 # shellcheck source="./utils/link.sh"
 source "${UTILS}/link.sh"
 
-
-
 # confirm(question, [default])
 #
 # Asks the user to confirm yes or no and returns TRUE when they answer yes
