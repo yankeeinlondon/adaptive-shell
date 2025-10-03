@@ -78,22 +78,34 @@ bash_functions_summary() {
     # - Tries to ignore braces inside strings and # comments (best-effort).
     awk_parse_functions='
         # Count braces in a code line, ignoring those in single/double strings and trailing comments.
-        function brace_delta(line,   i, c, in_s, in_d, esc, ch, delta) {
-        # strip trailing comment not inside string
-        # We do a lightweight pass to find first unescaped # not within quotes
-        in_s = in_d = esc = 0
+        function brace_delta(line,   i, c, in_s, in_d, esc, ch, delta, in_var) {
+        # strip trailing comment not inside string or variable expansion
+        # We do a lightweight pass to find first unescaped # not within quotes or ${}
+        in_s = in_d = in_var = esc = 0
         for (i = 1; i <= length(line); i++) {
             ch = substr(line, i, 1)
             if (esc) { esc = 0; continue }
             if (ch == "\\") { esc = 1; continue }
             if (!in_d && ch == "'"'"'") { in_s = !in_s; continue }
             if (!in_s && ch == "\"") { in_d = !in_d; continue }
-            if (!in_s && !in_d && ch == "#") { line = substr(line, 1, i-1); break }
+            # Track ${...} variable expansions
+            if (!in_s && !in_d && ch == "$" && i < length(line) && substr(line, i+1, 1) == "{") {
+                in_var++
+                i++  # skip the {
+                continue
+            }
+            if (in_var && ch == "{") { in_var++; continue }
+            if (in_var && ch == "}") { in_var--; continue }
+            if (!in_s && !in_d && !in_var && ch == "#") { line = substr(line, 1, i-1); break }
         }
 
         # remove contents of strings to avoid counting braces inside them
-        gsub(/'"'"'([^'"'"'\\]|\\.)*'"'"'/, "''", line)
+        gsub(/'"'"'([^'"'"'\\]|\\.)*'"'"'/, "'"'"''"'"'", line)
         gsub(/"([^"\\]|\\.)*"/, "\"\"", line)
+        # remove variable expansions to avoid counting braces inside them
+        gsub(/\$\{[^}]*\}/, "$", line)
+        gsub(/\$\(\([^)]*\)\)/, "$", line)  # $((...)) arithmetic
+        gsub(/\$\([^)]*\)/, "$", line)  # $(...) command substitution
 
         # Now count braces
         delta = 0
@@ -226,8 +238,14 @@ bash_functions_summary() {
             next
         }
 
-        # Check if this is a blank line - preserve comment block
+        # Check if this is a blank line
         if (match(line, /^[[:space:]]*$/)) {
+            # Clear comment block if not in a function (blank line separates comments from functions)
+            if (!in_fn && comment_count > 0) {
+                comment_block = ""
+                comment_start = 0
+                comment_count = 0
+            }
             next
         }
 
