@@ -5,18 +5,33 @@
 # Tests whether <content> matches the glob <pattern>.
 # Returns 0 (true) if match, 1 (false) if no match.
 #
+# If pattern contains no glob wildcards (* ? [ ]), it's treated as an exact match.
+#
 # Examples:
 #   matches_glob "*debug*" "my_debug_func" → returns 0
 #   matches_glob "is_*" "is_empty" → returns 0
 #   matches_glob "link*" "unlink" → returns 1
+#   matches_glob "trim" "trim" → returns 0
+#   matches_glob "trim" "trim_ref" → returns 1
 function matches_glob() {
     local -r pattern="${1:?no pattern provided to matches_glob}"
     local -r content="${2:?no content provided to matches_glob}"
 
-    if [[ "$content" == $pattern ]]; then
-        return 0
+    # Check if pattern contains glob wildcards
+    if [[ "$pattern" == *[\*\?\[]* ]]; then
+        # Has wildcards - use glob matching
+        if [[ "$content" == $pattern ]]; then
+            return 0
+        else
+            return 1
+        fi
     else
-        return 1
+        # No wildcards - use exact string comparison
+        if [[ "$content" == "$pattern" ]]; then
+            return 0
+        else
+            return 1
+        fi
     fi
 }
 
@@ -184,6 +199,7 @@ function report_fns_to_console() {
             done
         done <<< "$duplicates"
     fi
+
 }
 
 

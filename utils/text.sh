@@ -28,7 +28,7 @@ function lc() {
 }
 
 # contains <find> <content>
-# 
+#
 # given the "content" string, all other parameters passed in
 # will be looked for in this content.
 function contains() {
@@ -97,7 +97,7 @@ function strip_before_last() {
     local -r content="${2:-}"
 
     echo "${content##*"${find}"}"
-    
+
 }
 
 
@@ -113,15 +113,15 @@ function strip_after() {
 
     if not_empty "content"; then
         echo "${content%%"${find}"*}"
-    else 
+    else
         echo ""
     fi
 }
 
 # strip_after_last <find> <content>
 #
-# Strips all characters after finding the FINAL <find> substring 
-# in the content. 
+# Strips all characters after finding the FINAL <find> substring
+# in the content.
 #
 # Ex: strip_after_last ":" "hello:world:of:tomorrow" → "hello:world:of"
 function strip_after_last() {
@@ -130,7 +130,7 @@ function strip_after_last() {
 
     if not_empty "content"; then
         echo "${content%"${find}"*}"
-    else 
+    else
         echo ""
     fi
 }
@@ -179,12 +179,12 @@ function has_characters() {
 #
 # receives a string or RegExp as the "find" parameter and then uses that
 # to replace a substring with the "replace" parameter.
-# 
+#
 # - if the "find" variable is a RegExp it must have a "$1" section identified
 # as the text to replace.
 #     - the RegExp `/foobar/` would be invalid and should return an error code
 #     - the RegExp `/foo(bar)/` is valid as it defines a section to replace
-# - if the "find" variable is a string then it's just a simple 
+# - if the "find" variable is a string then it's just a simple
 # find-and-replace-all operation.
 find_replace() {
   local find="$1"
@@ -263,7 +263,7 @@ function newline_on_word_boundary() {
 
     for clean_word in "${clean_words[@]}"; do
         local -i word_length=${#clean_word}
-        
+
         # Calculate potential length
         local -i potential_length=$current_length
         if [[ $current_length -gt 0 ]]; then
@@ -271,7 +271,7 @@ function newline_on_word_boundary() {
         else
             potential_length=$word_length
         fi
-        
+
         # Check if word fits
         if [[ $potential_length -gt $len && $current_length -gt 0 ]]; then
             # Word doesn't fit, start new line
@@ -304,11 +304,11 @@ function newline_on_word_boundary() {
         local -i clean_line_length=${#clean_line}
         local original_line=""
         local -i chars_to_copy=$clean_line_length
-        
+
         # Copy characters from original content, preserving escape codes
         while [[ $chars_to_copy -gt 0 && $original_pos -lt ${#content} ]]; do
             local char="${content:$original_pos:1}"
-            
+
             # Check if this is the start of an ANSI escape sequence
             if [[ "$char" == $'\x1b' && $((original_pos+1)) -lt ${#content} && "${content:$((original_pos+1)):1}" == '[' ]]; then
                 # Find the end of the ANSI escape sequence
@@ -319,14 +319,14 @@ function newline_on_word_boundary() {
                 if [[ $escape_end_pos -lt ${#content} && "${content:$escape_end_pos:1}" == 'm' ]]; then
                     escape_end_pos=$((escape_end_pos + 1)) # Include the 'm'
                 fi
-                
+
                 # Add the complete escape sequence to the line
                 original_line="${original_line}${content:$original_pos:$((escape_end_pos - original_pos))}"
                 original_pos=$escape_end_pos
             else
                 # Regular character - check if it matches the expected clean character
                 local expected_char="${clean_line:$((clean_line_length - chars_to_copy)):1}"
-                
+
                 if [[ "$char" == "$expected_char" ]]; then
                     # Character matches, add it and move both positions
                     original_line="${original_line}${char}"
@@ -339,13 +339,13 @@ function newline_on_word_boundary() {
                 fi
             fi
         done
-        
+
         # Add the line to result
         if [[ -n "$result" ]]; then
             result="${result}"$'\n'
         fi
         result="${result}${original_line}"
-        
+
         # Skip space in original content if there is one
         if [[ $original_pos -lt ${#content} && "${content:$original_pos:1}" == ' ' ]]; then
             original_pos=$((original_pos + 1))
@@ -357,7 +357,11 @@ function newline_on_word_boundary() {
     return 0
 }
 
-trim_val() {
+# trim_val <value>
+#
+# Take the content passed to it and then trims all leading and
+# trailing whitespace. The trimmed value is returned.
+function trim_val() {
   # Usage: trim "   some text   "
   local input="$*"
   # Remove leading and trailing whitespace using parameter expansion
@@ -367,6 +371,10 @@ trim_val() {
   echo "$input"
 }
 
+# trim_ref <ref>
+#
+# Take a reference to a variable and changes the variable to
+# a string with all leading and trailing whitespace removed.
 trim_ref() {
   # Usage: trim_ref var_name
   local var_name="$1"
@@ -381,6 +389,11 @@ trim_ref() {
   printf -v "$var_name" '%s' "$value"
 }
 
+# trim <ref_or_value>
+#
+# Takes either a reference to a variable _or_ textual content as a
+# parameter. It then leverages the `trim_ref()` or `trim_val()` functions
+# based on the type of parameters you pass it.
 trim() {
   # Usage:
   #   trim "  some text  "     → echoes trimmed text
