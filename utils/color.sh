@@ -205,7 +205,7 @@ function orange_backed() {
 }
 
 
-# blue <slate_blue-text> <rest-text>
+# blue <colorized-text> <rest-text>
 #
 # produces blue text for content found in "${1}"
 # and then just plain text (if anything) for what is
@@ -217,7 +217,7 @@ function blue() {
     printf '%s%s\n' "${orange_text}" "${rest}"
 }
 
-# blue_backed <slate_blue-text> <rest-text>
+# blue_backed <colorized-text> <rest-text>
 #
 # produces blue text with a lighter background as backing
 # for content found in "${1}" and then just plain text
@@ -230,7 +230,7 @@ function blue_backed() {
     printf '%s%s\n' "${orange_text}" "${rest}"
 }
 
-# blue <slate_blue-text> <rest-text>
+# blue <colorized-text> <rest-text>
 #
 # produces blue text for content found in "${1}"
 # and then just plain text (if anything) for what is
@@ -242,7 +242,7 @@ function tangerine() {
     printf '%s%s\n' "${text}" "${rest}"
 }
 
-# blue_backed <slate_blue-text> <rest-text>
+# blue_backed <colorized-text> <rest-text>
 #
 # produces blue text with a light background as backing
 # for content found in "${1}" and then just plain text
@@ -255,7 +255,7 @@ function tangerine_backed {
     printf '%s%s\n' "${text}" "${rest}"
 }
 
-# slate_blue <slate_blue-text> <rest-text>
+# slate_blue <colorized-text> <rest-text>
 #
 # produces slate blue text for content found in "${1}"
 # and then just plain text (if anything) for what is
@@ -280,7 +280,7 @@ function slate_blue_backed() {
     printf '%s%s\n' "${orange_text}" "${rest}"
 }
 
-# blue <slate_blue-text> <rest-text>
+# blue <colorized-text> <rest-text>
 #
 # produces blue text for content found in "${1}"
 # and then just plain text (if anything) for what is
@@ -292,7 +292,7 @@ function green() {
     printf '%s%s\n' "${text}" "${rest}"
 }
 
-# blue_backed <slate_blue-text> <rest-text>
+# blue_backed <colorized-text> <rest-text>
 #
 # produces blue text with a lighter background as backing
 # for content found in "${1}" and then just plain text
@@ -305,7 +305,70 @@ function green_backed() {
     printf '%s%s\n' "${text}" "${rest}"
 }
 
-# blue <slate_blue-text> <rest-text>
+# lime <colorized-text> <rest-text>
+#
+# produces blue text for content found in "${1}"
+# and then just plain text (if anything) for what is
+# in "${2}".
+function lime() {
+    local -r text="$(rgb_text "15 250 121" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+# blue_backed <colorized-text> <rest-text>
+#
+# produces blue text with a lighter background as backing
+# for content found in "${1}" and then just plain text
+# (if anything) for what is
+# in "${2}".
+function lime_backed() {
+    local -r text="$(rgb_text "33 33 33/15 250 121" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+# pink <colorized-text> <rest-text>
+#
+# produces blue text for content found in "${1}"
+# and then just plain text (if anything) for what is
+# in "${2}".
+function pink() {
+    local -r text="$(rgb_text "255 138 216" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+# pink_backed <colorized-text> <rest-text>
+#
+# produces text with a pink background as backing
+# for content found in "${1}" and then just plain text
+# (if anything) for what is
+# in "${2}".
+function pink_backed() {
+    local -r text="$(rgb_text "33 33 33/255 138 216" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+# dark_pink_backed <colorized-text> <rest-text>
+#
+# produces text with a pink background as backing
+# for content found in "${1}" and then just plain text
+# (if anything) for what is
+# in "${2}".
+function dark_pink_backed() {
+    local -r text="$(rgb_text "235 235 235/148 23 81" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+# blue <colorized-text> <rest-text>
 #
 # produces blue text for content found in "${1}"
 # and then just plain text (if anything) for what is
@@ -317,7 +380,7 @@ function dark_green() {
     printf '%s%s\n' "${text}" "${rest}"
 }
 
-# blue_backed <slate_blue-text> <rest-text>
+# blue_backed <colorized-text> <rest-text>
 #
 # produces blue text with a lighter background as backing
 # for content found in "${1}" and then just plain text
@@ -398,6 +461,30 @@ function dark_red() {
 # (if anything) for what is in "${2}".
 function dark_red_backed() {
     local -r text="$(rgb_text "214 196 207/148 17 0" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+# light_red <colored-text> <rest-text>
+#
+# produces light_red text for content found in "${1}"
+# and then just plain text (if anything) for what is
+# in "${2}".
+function light_red() {
+    local -r text="$(rgb_text "255 126 121" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+# light_red_backed <colored-text> <rest-text>
+#
+# produces dark light_red text with a lighter background as backing
+# for content found in "${1}" and then just plain text
+# (if anything) for what is in "${2}".
+function light_red_backed() {
+    local -r text="$(rgb_text "33 33 33/255 126 121" "${1:-}")"
     local -r rest="${2:-}"
 
     printf '%s%s\n' "${text}" "${rest}"
@@ -556,6 +643,27 @@ function bg_light_yellow() {
 
 function bg_dark_yellow() {
     local -r text="$(rgb_text "/146 144 0" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+function bg_red() {
+    local -r text="$(rgb_text "/255 38 0" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+function bg_light_red() {
+    local -r text="$(rgb_text "/255 126 121" "${1:-}")"
+    local -r rest="${2:-}"
+
+    printf '%s%s\n' "${text}" "${rest}"
+}
+
+function bg_dark_red() {
+    local -r text="$(rgb_text "/148 17 0" "${1:-}")"
     local -r rest="${2:-}"
 
     printf '%s%s\n' "${text}" "${rest}"

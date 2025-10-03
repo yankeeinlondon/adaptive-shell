@@ -50,9 +50,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     log "including the two above):"
     log ""
     log "  $(orange "orange") $(orange_backed " orange_backed ") $(tangerine "tangerine") $(tangerine_backed " tangerine_backed ") $(yellow "yellow") $(yellow_backed " yellow backed ")"
-    log "  $(red "red") $(red_backed " red_backed ") $(dark_red "dark_red") $(dark_red_backed " dark_red_backed ") "
+    log "  $(red "red") $(red_backed " red_backed ") $(dark_red "dark_red") $(dark_red_backed " dark_red_backed ") $(light_red "light_red") $(light_red_backed " light_red_backed ")"
     log "  $(purple "purple") $(purple_backed " purple_backed ") $(light_purple_backed " light_purple_backed ")"
+    log "  $(pink "pink") $(pink_backed " pink_backed ") $(dark_pink_backed " dark_pink_backed ")"
     log "  $(green "green") $(green_backed " green_backed ") $(dark_green "dark_green") $(dark_green_backed " dark_green_backed ")"
+    log "  $(lime "lime") $(lime_backed " lime_backed ") "
     log "  $(blue "blue") $(blue_backed " blue_backed ") $(slate_blue "slate_blue") $(slate_blue_backed " slate_blue_backed ")"
     log ""
     log "  $(black_backed " black_backed ") $(white_backed " white_backed ") $(light_gray_backed " light_gray_backed ") $(gray_backed " gray_backed ") $(dark_gray_backed " dark_gray_backed ")"
@@ -65,7 +67,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     log "  $(bg_light_gray " bg_light_gray ") $(bg_gray " bg_gray ") $(bg_dark_gray " bg_dark_gray ") "
     log "  $(bg_light_blue " bg_light_blue ") $(bg_blue " bg_blue ") $(bg_dark_blue " bg_dark_blue ") "
     log "  $(bg_light_green " bg_light_green ") $(bg_green " bg_green ") $(bg_dark_green " bg_dark_green ") "
-    log "  $(bg_light_yellow " ${BLACK}bg_light_yellow ") $(bg_yellow " ${BLACK}bg_yellow ") $(bg_dark_yellow " ${BLACK}bg_dark_yellow ") "
+    log "  $(bg_light_yellow " bg_light_yellow ") $(bg_yellow " ${BLACK}bg_yellow ") $(bg_dark_yellow " ${BLACK}bg_dark_yellow ") "
+    log "  $(bg_light_red " bg_light_red ") $(bg_red " bg_red ") $(bg_dark_red " bg_dark_red ") "
 
     remove_colors
 fi
