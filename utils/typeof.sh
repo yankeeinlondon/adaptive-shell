@@ -4,20 +4,20 @@ function is_bound() {
     allow_errors
     local -n __test_by_ref=$1 2>/dev/null || { debug "is_bound" "unbounded ref";  return 1; }
 
-    local name="${!__test_by_ref}" 2
+    local name="${!__test_by_ref}" 2>/dev/null || { debug "is_bound" "unbounded name";  return 1; }
     local -r arithmetic='→+-=><%'
     if has_characters "${arithmetic}" "$1"; then
         debug "is_bound" "${name} is NOT bound"
         return 1
     else
-        local idx=${!1} 2>/dev/null 
-        local a="${__test_by_ref@a}" 
+        local idx=${!1} 2>/dev/null
+        local a="${__test_by_ref@a}"
 
         if [[ -z "${idx}${a}" ]]; then
             debug "is_bound" "${name} is NOT bound: ${idx}, ${a}"
             catch_errors
             return 1
-        else 
+        else
             debug "is_bound" "${name} IS bound: ${idx}, ${a}"
             catch_errors
             return 0
@@ -82,7 +82,7 @@ function is_not_typeof() {
 
     if is_bound _var_reference_; then
         if [[ "$test" != "$(typeof _var_reference_)" ]]; then
-            
+
             return 0
         else
             return 1
@@ -102,7 +102,7 @@ function is_not_typeof() {
         fi
 
     fi
-    
+
 }
 
 
@@ -155,7 +155,7 @@ function is_typeof() {
 function is_assoc_array() {
     local -r var="$1"
     if has_characters '!@#$%^&()_+' "$var"; then
-        return 1; 
+        return 1;
     fi
     allow_errors
     local -n __var__=$1 2>/dev/null
@@ -177,7 +177,7 @@ function has_newline() {
 
     if [[ "$str" ==  *$'\n'* ]]; then
         return 0;
-    else 
+    else
         return 1;
     fi
 }
@@ -199,7 +199,7 @@ function is_keyword() {
 }
 
 # not_empty() <test>
-# 
+#
 # tests whether the <test> value passed in is an empty string (or is unset)
 # and returns 0 when it is NOT empty and 1 when it is.
 function not_empty() {
@@ -246,7 +246,7 @@ function is_array() {
 
 
 # is_empty() <test | ref:test>
-# 
+#
 # tests whether the <test> value passed in is an empty string (or is unset)
 # and returns 0 when it is empty and 1 when it is NOT.
 function is_empty() {
@@ -284,7 +284,7 @@ function is_empty() {
             fi
         fi
 
-    else 
+    else
         if [ -z "$1" ] || [[ "$1" == "" ]]; then
             debug "is_empty(${1})" "was empty, returning 0/true"
             return 0
@@ -293,7 +293,7 @@ function is_empty() {
             return 1
         fi
     fi
-    
+
 }
 
 # is_shell_alias() <candidate>
@@ -319,7 +319,7 @@ function is_shell_alias() {
 }
 
 # is_object() <candidate>
-# 
+#
 # tests whether <candidate> is an object and returns 0/1
 function is_object() {
     allow_errors
