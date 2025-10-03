@@ -112,7 +112,7 @@ as_rgb_prefix() {
 #    - if you express just a single RGB value than that will be used
 #    as the foreground/text color
 #    - if you want to specify both foreground and background then you
-#     will include two RGB values delimited by a `/` character (e.g., 
+#     will include two RGB values delimited by a `/` character (e.g.,
 #      `255 100 0 / 30 30 30` )
 #    - if you ONLY want to set the background then just use the `/` character
 #      followed by an RGB value (e.g., `/ 30 30 30`)
@@ -131,7 +131,7 @@ rgb_text() {
 
 # colorize <content>
 #
-# Looks for tags which represent formatting instructions -- `{{RED}}`, `{{RESET}}`, 
+# Looks for tags which represent formatting instructions -- `{{RED}}`, `{{RESET}}`,
 # etc. -- and converts them using a variable of the same name.
 colorize() {
     local -r content="${1:-}"

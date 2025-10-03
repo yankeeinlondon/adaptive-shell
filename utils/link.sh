@@ -14,7 +14,7 @@ fi
 
 source "${UTILS}/text.sh"
 
-# link(text, uri)
+# link <text> <uri>
 #
 # embeds a hyperlink into the console when using Wezterm
 # and some other terminals (I think support is limited)
@@ -26,6 +26,21 @@ function link() {
     echo "\e]8;;${uri}\e\\${text}\e]8;;\e\\"
 }
 
+
+# link_file <text> <file>
+#
+# embeds a hyperlink into the console when using Wezterm
+# and some other terminals (I think support is limited)
+function link_file() {
+    local -r text="${1:?no text passed to link() function}"
+    local -r file="${2:?no uri passed to link() function}"
+
+    local -r file_uri="$(ensure_starting "file://" "${file}")"
+
+    # shellcheck disable=SC2028
+    echo "\e]8;;${file_uri}\e\\${text}\e]8;;\e\\"
+}
+
 # link_repo <uri>
 #
 # Converts a URI referring to a repo into a clickable link in
@@ -34,7 +49,7 @@ function link() {
 # 2. `git`: a format that looks like `git:github.com:ORG:REPO.git`
 #
 # The textual part of the link will simply proxy through the URI
-# that was passed in but the link address must always be converted 
+# that was passed in but the link address must always be converted
 # to an `https` based URL.
 function link_repo() {
     local -r repo="${1:?no URI representing a Repo was passed to link_repo() function!}"
@@ -88,7 +103,7 @@ function link_repo() {
 }
 
 # link_email <email>
-# 
+#
 # Converts an email address into a clickable link in a modern terminal.
 # The URI format will be: `mailto://EMAIL_ADDRESS``
 function link_email() {
