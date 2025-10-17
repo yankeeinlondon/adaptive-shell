@@ -15,6 +15,29 @@ fi
 # shellcheck source="./logging.sh"
 source "${UTILS}/logging.sh"
 
+# get_shell
+#
+# Return the *name* of the current interactive shell (not a path).
+get_shell() {
+  # Prefer version vars (fast, reliable)
+  if [ -n "${ZSH_VERSION-}" ];  then printf '%s\n' zsh;  return; fi
+  if [ -n "${BASH_VERSION-}" ]; then printf '%s\n' bash; return; fi
+  if [ -n "${FISH_VERSION-}" ]; then printf '%s\n' fish; return; fi
+
+  # Fallback to $SHELL or the process name
+  if [ -n "${SHELL-}" ]; then
+    printf '%s\n' "$(basename -- "$SHELL")"; return
+  fi
+
+  # POSIX-ish fallback
+  if command -v ps >/dev/null 2>&1; then
+    ps -p $$ -o comm= 2>/dev/null | awk -F/ '{print $NF}' | sed 's/^-*//'
+    return
+  fi
+
+  printf '%s\n' sh
+}
+
 # is_pve_host
 #
 # Returns an exit code which indicates whether the given machine is
@@ -34,40 +57,41 @@ function is_pve_host() {
 #
 # returns true/false based on whether the current shell is zsh.
 function is_zsh() {
-    local -r shell="$(get_shell)";
-
-    if [[ "${shell}" == "zsh" ]]; then
-        return 0;
-    else
-        return 1;
-    fi
+    [ -n "${ZSH_VERSION-}" ];
 }
 
 # is_bash()
 #
 # returns true/false based on whether the current shell is zsh.
 function is_bash() {
-    local -r shell="$(get_shell)";
+    # Fast path: check for Bash-specific variable
+    [ -n "${BASH_VERSION-}" ] && return 0
 
-    if [[ "${shell}" == "bash" ]]; then
-        return 0;
-    else
-        return 1;
-    fi
+    # Fallback using normalized get_shell
+    [[ "$(get_shell)" == "bash" ]]
 }
 
 # is_fish()
 #
 # returns true/false based on whether the current shell is zsh.
 function is_fish() {
-    local -r shell="$(get_shell)";
+    # Fast path: check for Fish-specific variable
+    [ -n "${FISH_VERSION-}" ] && return 0
 
-    if [[ "${shell}" == "fish" ]]; then
-        return 0;
-    else
-        return 1;
-    fi
+    # Fallback using normalized get_shell
+    [[ "$(get_shell)" == "fish" ]]
 }
+
+# is_nushell()
+#
+# returns true/false based on whether the current shell is nushell
+is_nushell()   { [[ "$(get_shell)" == "nu" ]]; }
+
+# is_xonsh()
+#
+# returns true/false based on whether the current shell is xonsh ("conch shell" a
+# based shell.)
+is_xonsh(){ [[ "$(get_shell)" == "xonsh" ]]; }
 
 # is_docker()
 #

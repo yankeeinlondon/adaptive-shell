@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 
-# shellcheck source="./utils.sh"
-source "${HOME}/.config/sh/utils.sh"
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${UTILS}" == *"/utils" ]];then
+        ROOT="${UTILS%"/utils"}"
+    else
+        ROOT="$UTILS"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    UTILS="${ROOT}/utils"
+fi
+
+# shellcheck source="../utils.sh"
+source "${ROOT}/utils.sh"
 
 install_uv() {
   if has_command "curl"; then
     curl -LsSf https://astral.sh/uv/install.sh | sh | sed "s/^/${BG_BRIGHT_RED}${BRIGHT_BLACK} Install ${RESET}/"
   elif has_command "wget"; then
     wget -qO- https://astral.sh/uv/install.sh | sh | sed "s/^/${BG_BRIGHT_RED}${BRIGHT_BLACK} Install ${RESET}/"
-  else 
+  else
     echo "${BG_BRIGHT_RED}${BOLD}${BRIGHT_BLACK} Install ${RESET} - sorry but you must have either ${BLUE}curl${RESET} or ${BLUE}curl${RESET} installed first."
     exit 1;
   fi
@@ -35,15 +47,15 @@ function install_just() {
         elif has_command "asdf"; then
             asdf plugin add just
             asdf install just
-        elif has_command "npm"; then 
+        elif has_command "npm"; then
             npm install -g rust-just
-        elif has_command "apk"; then 
+        elif has_command "apk"; then
             apk add just
         elif has_command "nix-env"; then
             nix-env -iA nixpkgs.just
-        elif has_command "cargo"; then 
-            cargo install just 
-        elif has_command "conda"; then 
+        elif has_command "cargo"; then
+            cargo install just
+        elif has_command "conda"; then
             conda install -c conda-forge just
         elif has_command "snap"; then
             snap install --edge --classic just
@@ -52,7 +64,7 @@ function install_just() {
                 apt install just
             else
                 apt install cargo
-                cargo install just 
+                cargo install just
             fi
         elif is_distro "fedora"; then
             dnf install just
@@ -60,7 +72,7 @@ function install_just() {
             apt install just
         elif has_command "pacman"; then
             pacman -S just
-        else 
+        else
             echo "- unsure how to install the just runner in your environment"
             echo "- checkout https://github.com/casey/just for more info"
         fi
@@ -79,7 +91,7 @@ function prep_debian() {
 
 
 # mdlint()
-# 
+#
 # provides a more reasonable set of defaults for Markdown Linting
 # in a .markdownlint.jsonc file.
 function mdlint() {
@@ -89,7 +101,7 @@ function mdlint() {
       cat <<'EOF' > "./.markdownlint.jsonc"
 // [markdown lint file](https://github.com/DavidAnson/markdownlint)
 {
-  "MD041": false, // [don't require first line to be H1](https://github.com/DavidAnson/markdownlint/blob/main/doc/md041.md) 
+  "MD041": false, // [don't require first line to be H1](https://github.com/DavidAnson/markdownlint/blob/main/doc/md041.md)
   "MD013": false, // [allow any line length](https://github.com/DavidAnson/markdownlint/blob/main/doc/md013.md)
   "MD012": false, // [allow multiple consecutive blank lines](https://github.com/DavidAnson/markdownlint/blob/main/doc/md012.md)
   "MD009": false, // [allow trailing spaces](https://github.com/DavidAnson/markdownlint/blob/main/doc/md009.md)
@@ -108,21 +120,21 @@ EOF
 
 # has_command <cmd>
 #
-# checks whether a particular program passed in via $1 is installed 
+# checks whether a particular program passed in via $1 is installed
 # on the OS or not (at least within the $PATH)
 function has_command() {
     local -r cmd="${1:?cmd is missing}"
 
     if command -v "${cmd}" &> /dev/null; then
         return 0
-    else 
+    else
         return 1
     fi
 }
 
 
 # justfile()
-# 
+#
 # adds a `.justfile` for the just runner
 function justfile() {
   if [ ! -f "./.justfile" ]; then
@@ -148,9 +160,9 @@ WHITE := '\033[37m'
 
 default:
   @echo
-  @echo TITLE 
+  @echo TITLE
   @just --list
-  @echo 
+  @echo
 
 # do something cool
 something:
@@ -160,14 +172,14 @@ EOF
     echo ""
     echo "Added a ${BOLD}${BLUE}justfile${RESET} to the currrent directory"
     echo ""
-  else 
+  else
     echo "- there is already a .justfile here!"
     echo ""
   fi
 }
 
 # setEnv()
-# 
+#
 # sets the Python environment into the `.envrc` file so that the `direnv`
 # program will auto-activate it when entering the directory
 function setEnv() {
@@ -236,14 +248,14 @@ function ts_prep() {
     if file_exists "./.markdownlint.jsonc"; then
         log "- the ${BLUE}.markdownlint.jsonc${RESET} file already exists, ${ITALIC}skipping${RESET}"
     else
-        cat "${HOME}/.config/sh/resources/.markdownlint.jsonc" > .markdownlint.jsonc 
+        cat "${HOME}/.config/sh/resources/.markdownlint.jsonc" > .markdownlint.jsonc
         log "- added ${BLUE}.markdownlint.jsonc${RESET} to repo"
     fi
 
     if file_exists "./.gitignore"; then
         log "- the ${BLUE}.gitignore${RESET} file already exists, ${ITALIC}skipping${RESET}"
     else
-        cat "${HOME}/.config/sh/resources/.gitignore" > .gitignore 
+        cat "${HOME}/.config/sh/resources/.gitignore" > .gitignore
         log "- added ${BLUE}.gitignore${RESET} to repo"
     fi
 
@@ -277,7 +289,7 @@ function ts_prep() {
 
     if [ -d "./.github/workflows" ]; then
       log "- ${BOLD}Github Actions${RESET} exists, ${ITALIC}skipping${RESET}"
-    else 
+    else
       mkdir -p "./.github/workflows"
       cat "${HOME}/.config/sh/resources/github.main.yaml" > ./.github/workflows/main.yaml
       cat "${HOME}/.config/sh/resources/github.other.yaml" > ./.github/workflows/other.yaml
@@ -322,3 +334,11 @@ function prep() {
     log "- no ${BLUE}package.json${RESET} found, ${ITALIC}skipping prep activities${RESET}"
   fi
 }
+
+
+# Call the main function when script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    log "Prepping the current directory based on feature detection"
+    log ""
+    prep
+fi

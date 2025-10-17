@@ -61,7 +61,7 @@ function has_file() {
 
 # validates that the current directory has a package.json file
 function has_package_json() {
-    local -r filepath="./package.json"
+    local -r filepath="${PWD}/package.json"
 
     if [ -f "${filepath}" ]; then
         return 0;
@@ -73,8 +73,8 @@ function has_package_json() {
 # find_in_file <filepath> <key>
 #
 # Finds the first occurrence of <key> in the given file
-# and if that line is the form "<key>=<value>" then 
-# it returns the <value>, otherwise it will return 
+# and if that line is the form "<key>=<value>" then
+# it returns the <value>, otherwise it will return
 # the line.
 function find_in_file() {
     local -r filepath="${1:?find_in_file() called but no filepath passed in!}"
@@ -122,7 +122,7 @@ function get_file() {
     local -r filepath="${1:?get_file() called but no filepath passed in!}"
 
     source "${UTILS}/logging.sh"
-    
+
     if file_exists "${filepath}"; then
         debug "get_file(${filepath})" "getting data"
         local content

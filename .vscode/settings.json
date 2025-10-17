@@ -70,6 +70,7 @@
         "WEZTERM",
         "windowsnt",
         "wscript",
+        "xonsh",
         "yazi"
     ]
 }

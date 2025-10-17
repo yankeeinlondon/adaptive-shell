@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# Safe defaults for GUI-launched shells (WezTerm via BTT/Dock)
+: "${HOME:?HOME not set}"
+: "${XDG_CONFIG_HOME:=$HOME/.config}"
+: "${ZDOTDIR:=$HOME}"
+
 # shellcheck disable=SC2155
 __adaptive_resolve_root() {
     if [[ -n ${BASH_SOURCE[0]:-} ]]; then
