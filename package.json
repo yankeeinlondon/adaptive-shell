@@ -1,0 +1,26 @@
+{
+  "name": "@yankeeinlondon/adaptive-shell",
+  "version": "0.1.0",
+  "description": "Adaptive shell configuration utilities for bash",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "bash",
+    "shell",
+    "utilities",
+    "configuration"
+  ],
+  "author": "Ken Snyder",
+  "license": "MIT",
+  "devDependencies": {
+    "@vitest/coverage-v8": "^2.1.8",
+    "@vitest/ui": "^2.1.8",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

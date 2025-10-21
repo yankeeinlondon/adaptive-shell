@@ -9,44 +9,82 @@ description: Provides expertise on how to plan for work in this repo
 This skill provides comprehensive guidance on how to plan a new feature in this repo.
 
 - We always use a Test-Driven Development (TDD) approach
-- We emphasize not only runtime tests but also "type tests"
+- We use **Vitest** (TypeScript) to test **bash** source code
+- We maintain both **automated tests** and **visual demos**
 - We track our progress through the phased based work with a LOG file
 
 ---
 
 ## Types of Testing
 
-### 1. Runtime Tests
+### 1. Automated Tests (Vitest)
 
-Runtime tests verify the **actual behavior** of code during execution.
+Automated tests verify the **actual behavior** of bash functions during execution using TypeScript/Vitest.
 
 **When to use:**
 
-- Testing function outputs with various inputs
+- Testing bash function outputs with various inputs
 - Verifying error handling and edge cases
-- Checking side effects (file I/O, API calls, state mutations)
-- Validating business logic and algorithms
-- Testing class instance behavior and methods
+- Checking exit codes and command behavior
+- Validating logic and algorithms in bash scripts
+- Any test that can produce a boolean pass/fail result
 
 **Tools:**
 
-- Commands:
-  - `./test` - runs all tests
-  - `./tests/{{SCRIPT}}` - run a specific test
+- Test runner: Vitest (`pnpm test`)
+- Test files: `*.test.ts` in TypeScript
+- Bash helper: `tests/helpers/bash.ts` for executing bash from TypeScript
 
-**Example structure:**
+**Example:**
 
-#TODO
+```typescript
+import { describe, it, expect } from 'vitest'
+import { sourcedBash } from './helpers/bash'
 
+describe('list utilities', () => {
+  it('should retain items with matching prefixes', () => {
+    const result = sourcedBash('./utils/lists.sh', `
+      items=("apple" "banana" "cherry")
+      retain_prefixes_ref items "a"
+    `)
+    expect(result).toContain('apple')
+    expect(result).not.toContain('cherry')
+  })
+})
+```
 
+### 2. Visual Demos (Bash)
+
+Visual demonstration scripts provide interactive examples that require human inspection.
+
+**When to use:**
+
+- Color output testing (visual verification needed)
+- Interactive demonstrations of features
+- Showcasing functionality to users
+- Manual testing during development
+
+**Tools:**
+
+- Demo scripts: `*-demo.sh` or `showcase-*.sh` in `tests/demos/`
+- Run directly: `./tests/demos/color-demo.sh`
 
 ---
 
 ## Decision Framework: Which Tests to Write?
 
-#TODO
+**Use Automated Tests** (`*.test.ts`) when:
+- Boolean pass/fail verification is possible
+- Testing function behavior and logic
+- CI/CD integration needed
+- Regression testing required
 
-**Rule of thumb:** When in doubt, write tests. It's better to have coverage than to skip it.
+**Use Demo Scripts** (`*.sh` in `tests/demos/`) when:
+- Visual inspection is required (e.g., color output)
+- Interactive demonstration of features
+- Showcasing functionality to users
+
+**Rule of thumb:** When in doubt, write automated tests. Only use demos when automation isn't feasible.
 
 ---
 
@@ -54,29 +92,30 @@ Runtime tests verify the **actual behavior** of code during execution.
 
 ### File Structure
 
-Tests are organized by feature/command area:
+Tests use a hybrid approach: TypeScript for automation, bash for visual demos.
 
 ```text
 tests/
-├── unit/
-│   ├── test-command/       # Tests for the 'test' CLI command
-│   ├── symbol-command/     # Tests for the 'symbols' CLI command
-│   ├── source-command/     # Tests for the 'source' CLI command
-│   ├── utils/              # Tests for utility functions
-│   └── WIP/                # Temporary location for in-progress phase tests
-├── integration/
-│   ├── fast/               # Fast integration tests (<2s each)
-│   └── *.test.ts           # Full integration tests
-└── fixtures/               # Test fixtures and sample projects
+├── demos/                  # Visual demonstration scripts (bash)
+│   ├── color-demo.sh      # Interactive color showcase
+│   └── showcase.sh        # General feature demonstrations
+├── helpers/               # TypeScript test utilities
+│   ├── bash.ts           # Bash execution helpers
+│   ├── bash.test.ts      # Tests for bash helper itself
+│   └── example.test.ts   # Example/documentation
+├── WIP/                   # Work in progress (during TDD phases)
+│   └── *.test.ts         # In-progress tests
+├── *.test.ts             # Automated Vitest tests
+└── README.md             # Testing documentation
 ```
 
 ### Naming Conventions
 
-- **Test files:** `*.test.ts`
-- **Fast integration tests:** `*.fast.test.ts`
+- **Automated tests:** `*.test.ts` (TypeScript files testing bash functions)
+- **Demo scripts:** `*-demo.sh` or `showcase-*.sh` (bash files for visual inspection)
 - **Test descriptions:**
   - Use "should" statements: `it("should return true when...)`
-  - Be specific about the scenario: `it("should handle empty arrays")`
+  - Be specific about the scenario: `it("should handle empty strings")`
   - Describe the behavior, not the implementation
 
 ### Test Structure Principles
@@ -120,7 +159,7 @@ When implementing a new feature, ALWAYS follow this comprehensive TDD workflow:
 When a user provides you with a new feature or plan idea, the first step is always to take that as an input into making a more structured and formalized plan:
 
 1. The initial request for a plan/feature/etc. should be analyzed and a reasonable name for the plan should be made.
-    -  A good name is between a 2-3 words up to a full sentence but never more.
+    - A good name is between a few words up to a full sentence but never more. Less is more but make sure it's descriptive.
 2. Unless the plan is VERY simple the plan should be broken up into multiple phases
     - Each phase of the plan should follow a TDD workflow unless there is an explicit reason not to
 3. Your improved plan should be written as a Markdown file with a filename of:
@@ -141,20 +180,14 @@ Capture the current state of all tests before making any changes.
 
 **Actions:**
 
-1. Run all runtime tests:
+1. Run all tests:
 
    ```bash
    pnpm test
    ```
 
-2. Run all type tests:
-
-   ```bash
-   pnpm test:types
-   ```
-
-3. Create a simple XML representation of test results distinguishing between runtime and type test runs
-4. Document any existing failures (these are your baseline - don't fix yet)
+2. Create a simple XML or text representation of test results
+3. Document any existing failures (these are your baseline - don't fix yet)
 
 **Purpose:** Establish a clear baseline so you can detect regressions and measure progress.
 
@@ -182,7 +215,7 @@ Create a log file to track this phase of work.
 4. Run the start-position script to capture git state:
 
    ```bash
-   bun run .claude/skills/scripts/start-position.ts planName phaseNumber
+   bun run .claude/skills/planning/scripts/start-position.ts planName phaseNumber
    ```
 
    This returns markdown content showing:
@@ -209,17 +242,17 @@ Write tests FIRST before any implementation. This is true Test-Driven Developmen
    - Determine where your tests should eventually live
 
 2. **Create tests in WIP directory:**
-   - All new test files for this phase go in `tests/unit/WIP/`
+   - All new test files for this phase go in `tests/WIP/`
    - This isolation allows:
      - Easy GLOB pattern targeting: `pnpm test WIP`
-     - Regression testing by exclusion: `pnpm test --exclude WIP`
+     - Regression testing by exclusion: `pnpm test --grep -v WIP`
      - Clear separation of work-in-progress from stable tests
 
 3. **Write comprehensive test coverage:**
    - Start with happy path (expected successful behavior)
-   - Add edge cases (empty, null, undefined, boundaries)
-   - Add error conditions
-   - Include both runtime and type tests if applicable
+   - Add edge cases (empty strings, null, undefined, boundaries)
+   - Add error conditions (invalid input, missing files, etc.)
+   - Test exit codes for bash functions
 
 4. **Verify tests FAIL initially:**
    - Run your new tests: `pnpm test WIP`
@@ -229,10 +262,10 @@ Write tests FIRST before any implementation. This is true Test-Driven Developmen
 **Example WIP structure:**
 
 ```text
-tests/unit/WIP/
-├── phase1-cli-options.test.ts
-├── phase1-filter-logic.test.ts
-└── phase1-integration.test.ts
+tests/WIP/
+├── phase1-text-utils.test.ts
+├── phase1-list-utils.test.ts
+└── phase1-filesystem.test.ts
 ```
 
 **Purpose:** Tests define the contract and expected behavior before any code is written.
@@ -252,12 +285,12 @@ Use the tests to guide your implementation.
 
 2. **Iterate rapidly:**
    - Run tests frequently: `pnpm test WIP`
-   - For type tests: `pnpm test:types WIP`
+   - Use watch mode: `pnpm test:watch WIP`
    - Fix failures immediately
    - Keep the feedback loop tight
 
 3. **Continue until all phase tests pass:**
-   - All tests in `tests/unit/WIP/` should be green
+   - All tests in `tests/WIP/` should be green
    - No shortcuts - every test must pass
 
 4. **Refactor with confidence:**
@@ -278,8 +311,7 @@ Verify completeness, check for regressions, and finalize the phase.
 1. **Run full test suite:**
 
    ```bash
-   pnpm test        # All runtime tests
-   pnpm test:types  # All type tests
+   pnpm test        # All tests (excluding WIP)
    ```
 
 2. **Handle any regressions:**
@@ -288,7 +320,7 @@ Verify completeness, check for regressions, and finalize the phase.
    - **STOP and think deeply** - understand WHY the test is failing, not just the error message
    - Document the regression in the log file under `## Regressions Found`
    - Determine root cause:
-     - Is your implementation incorrect?
+     - Is your bash implementation incorrect?
      - Does the existing test need updating (only if requirements changed)?
      - Is there a side effect you didn't anticipate?
    - Fix the root cause, not just the symptom
@@ -297,9 +329,9 @@ Verify completeness, check for regressions, and finalize the phase.
 3. **If no regressions, migrate tests to permanent locations:**
 
    - **Think carefully** about the right permanent location for each test
-   - Consider if a new subdirectory is needed in the test structure
-   - Move tests from `tests/unit/WIP/` to their permanent homes
-   - Delete the `tests/unit/WIP/` directory
+   - Tests usually go directly in `tests/` directory (e.g., `tests/lists.test.ts`)
+   - Move tests from `tests/WIP/` to their permanent homes
+   - Delete the `tests/WIP/` directory
    - **Rerun tests** to ensure nothing broke during migration
 
 4. **Update the log file:**
@@ -353,66 +385,91 @@ Verify completeness, check for regressions, and finalize the phase.
 
 - **Use focused test runs during development**: Don't run the entire suite on every change. Use glob patterns to run just what you're working on.
 
-### Type Testing Specifics
+### Bash Testing Specifics
 
-- **Always test the positive case**: Verify that valid types are accepted and produce the expected result type.
+- **Test exit codes**: Bash functions use exit codes (0 for success, non-zero for failure). Test these explicitly using `bashExitCode()` helper.
 
-- **Test the negative case when relevant**: Use `@ts-expect-error` to verify that invalid types are properly rejected.
+- **Test stdout and stderr separately**: Use the bash helper to capture output. Consider testing stderr for error messages.
 
-- **Test edge cases in type logic**: Empty objects, `never`, `unknown`, union types, etc.
+- **Handle environment variables**: Set up required environment variables (like `ROOT`, `ADAPTIVE_SHELL`) in test setup.
 
-- **Keep type tests close to runtime tests**: When testing a function with both runtime and type tests, keep them in the same file within the same `describe` block for cohesion.
+- **Test with realistic data**: Use actual file paths, realistic strings, and representative arrays when testing bash functions.
+
+- **Clean up temporary files**: Use `beforeEach`/`afterEach` to create and clean up any temporary files or directories needed for tests.
 
 ---
 
 ## Common Patterns and Examples
 
-### Testing Error Cases
+### Testing Bash Function Output
 
 ```typescript
-it("should throw error for invalid input", () => {
-    expect(() => parseConfig("invalid")).toThrow("Invalid config format");
-});
+import { describe, it, expect } from 'vitest'
+import { sourcedBash } from './helpers/bash'
 
-it("should return error result for invalid type", () => {
-    const result = safeParseConfig("invalid");
-    expect(result.success).toBe(false);
-    if (!result.success) {
-        expect(result.error).toContain("Invalid config");
-    }
-});
+it("should trim whitespace from string", () => {
+  const result = sourcedBash('./utils/text.sh', `trim "  hello  "`)
+  expect(result).toBe('hello')
+})
+
+it("should handle empty strings", () => {
+  const result = sourcedBash('./utils/empty.sh', `is_empty ""`)
+  expect(result).toBe('')  // Success (exit 0)
+})
 ```
 
-### Testing Async Functions
+### Testing Bash Exit Codes
 
 ```typescript
-it("should resolve with data on success", async () => {
-    const result = await fetchUser(123);
-    expect(result.id).toBe(123);
-    expect(result.name).toBeDefined();
-});
+import { bashExitCode } from './helpers/bash'
 
-it("should reject with error on failure", async () => {
-    await expect(fetchUser(-1)).rejects.toThrow("User not found");
-});
+it("should return 0 for successful operation", () => {
+  const exitCode = bashExitCode(`
+    source ./utils/lists.sh
+    items=("apple" "banana")
+    list_contains_ref items "apple"
+  `)
+  expect(exitCode).toBe(0)
+})
+
+it("should return 1 when item not found", () => {
+  const exitCode = bashExitCode(`
+    source ./utils/lists.sh
+    items=("apple" "banana")
+    list_contains_ref items "cherry"
+  `)
+  expect(exitCode).toBe(1)
+})
 ```
 
-### Testing Type Narrowing
+### Testing with Temporary Files
 
 ```typescript
-it("should narrow type based on discriminant", () => {
-    type Result = { success: true; data: string } | { success: false; error: string };
+import { beforeEach, afterEach, it, expect } from 'vitest'
+import { mkdtempSync, rmSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { sourcedBash } from './helpers/bash'
 
-    const handleResult = (result: Result) => {
-        if (result.success) {
-            type Test = Expect<Equal<typeof result, { success: true; data: string }>>;
-            return result.data;
-        } else {
-            type Test = Expect<Equal<typeof result, { success: false; error: string }>>;
-            return result.error;
-        }
-    };
-});
+let tempDir: string
+
+beforeEach(() => {
+  tempDir = mkdtempSync(join(tmpdir(), 'test-'))
+})
+
+afterEach(() => {
+  rmSync(tempDir, { recursive: true, force: true })
+})
+
+it("should detect file exists", () => {
+  const testFile = join(tempDir, 'test.txt')
+  writeFileSync(testFile, 'content')
+
+  const result = sourcedBash('./utils/filesystem.sh', `
+    file_exists "${testFile}"
+  `)
+  expect(result).toBe('')  // Success (exit 0)
+})
 ```
 
 ---
@@ -422,38 +479,37 @@ it("should narrow type based on discriminant", () => {
 ### Commands
 
 ```bash
-# Runtime tests
-pnpm test                    # Run all runtime tests
-pnpm test path/to/test       # Run specific test file
+# Test execution
+pnpm test                    # Run all tests
+pnpm test lists              # Run specific test file (e.g., lists.test.ts)
 pnpm test WIP                # Run only WIP tests
-pnpm test --exclude WIP      # Run all except WIP (regression check)
+pnpm test --grep -v WIP      # Run all except WIP (regression check)
 pnpm test:watch              # Run in watch mode
-pnpm test:ui                 # Run with UI
-
-# Type tests
-pnpm test:types              # Run all type tests
-pnpm test:types GLOB         # Run type tests matching pattern
-pnpm test:types WIP          # Run only WIP type tests
+pnpm test:watch WIP          # Watch mode for WIP tests
+pnpm test:ui                 # Run with Vitest UI
+pnpm test:coverage           # Run with coverage report
 
 # Common patterns during development
-pnpm test utils              # Test all utils
-pnpm test:types utils        # Type test all utils
+pnpm test text               # Test text utilities
+pnpm test lists              # Test list utilities
+pnpm test --grep "trim"      # Test functions matching pattern
 ```
 
 ### Test Quality Checklist
 
 Before considering tests complete, verify:
 
-- [ ] All exported functions have runtime tests
-- [ ] Functions with complex types have type tests
+- [ ] All exported bash functions have automated tests
 - [ ] Happy path is tested
-- [ ] Edge cases are covered (empty, null, undefined, boundaries)
-- [ ] Error conditions are tested
+- [ ] Edge cases are covered (empty strings, null, undefined, boundaries)
+- [ ] Error conditions are tested (invalid input, missing files)
+- [ ] Exit codes are tested where relevant
 - [ ] Tests are independent (can run in any order)
 - [ ] Tests are deterministic (consistent results)
 - [ ] Test names clearly describe what's being tested
 - [ ] No regressions in existing tests
-- [ ] Tests run quickly (unit tests < 100ms per test)
+- [ ] Tests run quickly (< 100ms per test)
+- [ ] Temporary files are cleaned up
 
 ### Phase Completion Checklist
 
@@ -461,13 +517,13 @@ Before closing out a phase:
 
 - [ ] SNAPSHOT captured
 - [ ] Log file created with starting position
-- [ ] Tests written in `tests/unit/WIP/`
+- [ ] Tests written in `tests/WIP/`
 - [ ] Tests initially failed (proving validity)
 - [ ] Implementation completed
 - [ ] All WIP tests passing
 - [ ] Full test suite run (no regressions)
 - [ ] Tests migrated from WIP to permanent locations
-- [ ] `tests/unit/WIP/` directory removed
+- [ ] `tests/WIP/` directory removed
 - [ ] Log file updated with completion notes
 - [ ] User notified of phase completion
 
@@ -475,15 +531,21 @@ Before closing out a phase:
 
 ## Summary
 
-Effective testing requires understanding **what** to test, **how** to test it, and **when** to use different testing approaches:
+Effective testing in this repo requires understanding **what** to test, **how** to test it, and **when** to use different testing approaches:
 
-- **Type utilities** → Type tests only
-- **Simple functions** → Runtime tests (minimum)
-- **Complex functions** → Both runtime and type tests
-- **Classes** → Primarily runtime tests, add type tests for complex generics
+- **Bash functions** → Automated tests using Vitest (TypeScript)
+- **Color/visual features** → Demo scripts for manual inspection
+- **Simple utilities** → Focus on happy path + edge cases
+- **Complex utilities** → Comprehensive coverage including error conditions
+
+**Hybrid Approach:**
+
+- Write automated tests in TypeScript using Vitest (`*.test.ts`)
+- Create demo scripts in bash for visual verification (`*-demo.sh`)
+- Use `tests/helpers/bash.ts` to execute and test bash functions from TypeScript
 
 Follow TDD principles: write tests first, implement to pass them, then refactor with confidence. Keep tests fast, focused, and independent.
 
 For phase-based development, use the five-step workflow: SNAPSHOT → CREATE LOG → WRITE TESTS → IMPLEMENTATION → CLOSE OUT. This ensures comprehensive test coverage, prevents regressions, and maintains clear documentation of your progress.
 
-When tests fail, **understand why** before fixing. Prioritize fixing implementation over changing tests, unless the test itself was wrong.
+When tests fail, **understand why** before fixing. Prioritize fixing bash implementation over changing tests, unless the test itself was wrong.

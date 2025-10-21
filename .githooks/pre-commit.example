@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook for running tests before committing
+#
+# To enable this hook:
+#   cp .githooks/pre-commit.example .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or configure git to use the .githooks directory:
+#   git config core.hooksPath .githooks
+#
+
+set -e
+
+echo "Running pre-commit checks..."
+
+# Check if pnpm is available
+if ! command -v pnpm &> /dev/null; then
+    echo "❌ pnpm is not installed. Please install pnpm to run tests."
+    exit 1
+fi
+
+# Check if node_modules exists
+if [ ! -d "node_modules" ]; then
+    echo "📦 Installing dependencies..."
+    pnpm install
+fi
+
+# Run tests
+echo "🧪 Running tests..."
+if pnpm test; then
+    echo "✅ All tests passed!"
+else
+    echo "❌ Tests failed. Please fix the errors before committing."
+    echo "   You can skip this hook with: git commit --no-verify"
+    exit 1
+fi
+
+# Optional: Run linting (uncomment if you add linting)
+# echo "🔍 Running linter..."
+# pnpm lint
+
+echo "✨ Pre-commit checks completed successfully!"

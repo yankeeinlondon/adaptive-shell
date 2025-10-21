@@ -125,8 +125,37 @@ The `utils/color.sh` module provides extensive RGB-based colorization:
 
 ### Testing
 
-Run test scripts directly to see demonstrations:
+This repository uses a hybrid testing approach:
 
+**Automated Tests (Vitest)**:
 ```bash
-./tests/color.sh    # Demonstrates color utilities with examples
+pnpm test                  # Run all tests
+pnpm test:watch            # Run in watch mode
+pnpm test:coverage         # Generate coverage report
+pnpm test tests/text.test.ts  # Run specific test file
 ```
+
+**Visual Demos (Bash)**:
+```bash
+./tests/demos/color-demo.sh    # Interactive color demonstrations
+```
+
+**Test Structure**:
+- `tests/*.test.ts` - Automated TypeScript tests using Vitest
+- `tests/demos/*-demo.sh` - Visual demonstration scripts
+- `tests/helpers/bash.ts` - Test utilities for calling bash from TypeScript
+
+**Writing Tests**:
+```typescript
+import { sourcedBash, bashExitCode } from './helpers/bash'
+
+// Test string output
+const result = sourcedBash('./utils/text.sh', 'lc "HELLO"')
+expect(result).toBe('hello')
+
+// Test exit codes
+const exitCode = bashExitCode('source ./utils/text.sh && contains "world" "hello world"')
+expect(exitCode).toBe(0)
+```
+
+See `tests/README.md` for comprehensive testing guide.
