@@ -28,7 +28,7 @@ function du() {
             $(which du) "$*"
         fi
     fi
-    remove_colors  
+    remove_colors
 }
 # h <filter>
 #
@@ -77,7 +77,7 @@ function h () {
     remove_colors
 }
 
-function initialize() {
+function init() {
     bash "${ROOT}/programs/initialize.sh"
 }
 

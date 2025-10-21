@@ -13,13 +13,39 @@ else
 fi
 
 # shellcheck source="../color.sh"
-source "${ROOT}/color.sh"
+source "${UTILS}/color.sh"
 
 # log
 #
-# Logs the parameters passed to STDERR
+# Logs the parameters passed to STDERR.
+#
+# - always includes a RESET at the end of line
 function log() {
-    printf "%b\\n" "${*}" >&2
+    local -r reset="${RESET:-$'\033[0m'}"
+
+    printf "%b\\n" "${*}${reset}" >&2
+}
+# logc <content> <content> <...>
+#
+# Logs all passed parameters to STDERR.
+#   - unlike `log` function this will run the
+#   - parameters through `colorize()` to that
+#   the caller doesn't need to bother with the
+function logc() {
+    local -r reset="${RESET:-$'\033[0m'}"
+    local -r colors_missing=$(colors_not_setup)
+    local content
+
+    # Check if colors are not set up and set them up if needed
+    if [[ "$colors_missing" == "0" ]]; then
+        setup_colors
+        content="$(colorize "${*}")"
+        printf "%b\\n" "${content}${reset}" >&2
+        remove_colors
+    else
+        content="$(colorize "${*}")"
+        printf "%b\\n" "${content}${reset}" >&2
+    fi
 }
 
 

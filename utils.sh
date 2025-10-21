@@ -116,17 +116,6 @@ function is_bound() {
     fi
 }
 
-# append_to_path <path>
-#
-# Appends the path passed in to the PATH env variable
-function append_to_path() {
-    local -r new="${1:?No path passed into append_to_path()!}"
-    local -r current="${PATH:-}"
-    local -r newPath="${current};${new}"
-
-    export PATH="${newPath}"
-    echo "${newPath}"
-}
 
 
 

@@ -182,6 +182,140 @@ function is_keyword() {
     fi
 }
 
+# is_git_repo <path || CWD>
+#
+# tests whether the current working directory is part of a git repo
+function is_git_repo() {
+    local -r path="${1}:-${CWD}"
+    local repo_root
+
+    if is_git_repo "${path}"; then
+        repo_root="$(repo_root "${path}")"
+    else
+        repo_root="${path}"
+    fi
+    # TODO
+}
+
+# repo_is_dirty <path || CWD>
+#
+# tests whether the current git status has changes which have
+# not yet been committed
+function repo_is_dirty() {
+    local -r path="${1}:-${CWD}"
+    local repo_root
+
+    if is_git_repo "${path}"; then
+        repo_root="$(repo_root "${path}")"
+    else
+        repo_root="${path}"
+    fi
+    # TODO
+}
+
+# repo_root <path || CWD>
+#
+# if the current working directory is in a
+# git repository, find the root directory of
+# that repo.
+#
+# if the current working directory is NOT
+# a repo then return error code.
+function repo_root() {
+    local -r path="${1}:-${CWD}"
+    local repo_root
+
+    if is_git_repo "${path}"; then
+        repo_root="$(repo_root "${path}")"
+    else
+        repo_root="${path}"
+    fi
+    # TODO
+}
+
+# repo_root <path || $CWD>
+#
+# Finds the root directory if the $path is a
+# git repo.
+#
+# - if it is NOT a git repo then return an
+#   error code
+function is_monorepo() {
+    local -r path="${1}:-${CWD}"
+    local repo_root
+
+    if is_git_repo "${path}"; then
+        repo_root="$(repo_root "${path}")"
+    else
+        repo_root="${path}"
+    fi
+    # TODO
+}
+
+# has_package_json()
+#
+# checks if a `package.json` file can be found
+# in:
+#   - "${path}"
+#   - "${repo_root}"
+function has_package_json() {
+    local -r path="${1}:-${CWD}"
+    local repo_root
+
+    if is_git_repo "${path}"; then
+        repo_root="$(repo_root "${path}")"
+    else
+        repo_root="${path}"
+    fi
+    # TODO
+}
+
+# has_typescript_files <[path]>
+#
+# Looks for typescript files in:
+#   - "${repo_root}/"
+#   - "${repo_root}/src"
+#   - "${path}"
+#
+# the `${path}` is whatever is passed into "$1" or will
+# fallback to `${CWD}`
+function has_typescript_files() {
+    local -r path="${1}:-${CWD}"
+    local repo_root
+
+    if is_git_repo "${path}"; then
+        repo_root="$(repo_root "${path}")"
+    else
+        repo_root="${path}"
+    fi
+
+    # TODO
+}
+
+# looks_like_js()
+#
+# looks for files in the current directory which indicate that
+# this is a Javascript/Typescript project.
+function looks_like_js_project() {
+    # TODO: look for `package.json`,
+}
+
+# looks_like_rust_project()
+#
+# looks for files in the current directory which indicate
+# this is a Rust project.
+function looks_like_rust_project() {
+    # TODO
+}
+
+# looks_like_python_project()
+#
+# looks for files in the current directory which indicate
+# this is a Rust project.
+function looks_like_python_project() {
+    # TODO
+}
+
 # in_package_json <find>
 #
 # tests whether a given string exists in the package.json file
@@ -196,3 +330,18 @@ function in_package_json() {
         return 1;
     fi
 }
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    logc ""
+    logc "{{BOLD}}    detection.sh"
+    logc "--------------------"
+    logc ""
+    logc "{{ITALIC}}This script file is part of the {{BLUE}}adaptive{{DEF_COLOR}} shell"
+    logc "{{ITALIC}}setup and provides both {{BOLD}}OS{{NORMAL}} and {{BOLD}}Project{{NORMAL}} level"
+    logc "{{ITALIC}}initialization based on what it detects for OS"
+    logc "{{ITALIC}}and/or the Project/Repo."
+    logc ""
+    logc "This file should be {{ITALIC}}sourced{{NO_ITALIC}} by another script"
+    logc "file so that the functions this file exposes can"
+    logc "be used."
+fi

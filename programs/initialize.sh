@@ -13,9 +13,21 @@ else
 fi
 
 # shellcheck source="../color.sh"
-source "${ROOT}color.sh"
+source "${ROOT}/color.sh"
 # shellcheck source="../utils.sh"
-source "${ROOT}utils.sh"
+source "${ROOT}/utils.sh"
+
+# os_initialized()
+#
+# tests to see if the OS has been initialized yet; this is determined
+# by whether a file at `${HOME}/.adaptive-initialized-os` exists.
+function os_initialized() {
+    if file_exists "${HOME}/.adaptive-initialized-os"; then
+
+        log "{{DIM}}- OS initialization was already done; add {{BLUE}}--force{{RESET}}{{DIM}} if you want to re-run it{{RESET}}"
+
+}
+
 
 function get_nala() {
     set -e
@@ -45,7 +57,7 @@ function use_allowed_hosts_alias() {
         if file_exists "${HOME}/.ssh/authorized_keys"; then
             mv "${HOME}/.ssh/authorized_keys" "${HOME}/.ssh/authorized_keys.old"
         fi
-        cp "${HOME}/.config/authorized_keys" "${HOME}/.ssh/authorized_keys" 
+        cp "${HOME}/.config/authorized_keys" "${HOME}/.ssh/authorized_keys"
     fi
 }
 
@@ -55,7 +67,7 @@ function source_adaptive() {
 
 function debian() {
     setup_colors
-    if has_command "nala"; then 
+    if has_command "nala"; then
         log "- ${BOLD}${BLUE}nala${RESET} already installed, skipping"
     else
         if get_nala; then
@@ -80,7 +92,7 @@ function debian() {
         if ! has_command "n"; then
             log "- install the 'n' library from ${BOLD}npm${RESET}"
             log ""
-            if npm i -g n; then 
+            if npm i -g n; then
                 log "- switching node to version 22"
 
                 n 22
@@ -89,13 +101,13 @@ function debian() {
 
         if ! has_command "eslint_d"; then
             log "- installing the ${BLUE}${BOLD}eslint_d${RESET} linter"
-            npm i -g eslint_d 
+            npm i -g eslint_d
         fi
     fi
 
     log ""
     log "- Nala installation complete"
-    
+
     if ! has_command "nvim"; then
         if [[ "$(os_version)" -ge 13 ]]; then
             log ""
@@ -124,9 +136,9 @@ function debian() {
         fi
     fi
 
-    # add quemu client if approprite
+    # add quemu client if appropriate
     if is_lxc || is_vm; then
-        nala install 
+        nala install
     fi
 
     log ""
@@ -168,20 +180,20 @@ function debian() {
     else
         log "- installing ${BOLD}atuin${RESET} for history search"
         bash -e <(curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh)
-        log ""      
+        log ""
         log "- installed ${BOLD}${BLUE}atuin${RESET}"
         log ""
     fi
 
     # gpg
-    if has_command "gpg"; then 
+    if has_command "gpg"; then
         log "- the ${BOLD}${BLUE}gpg${RESET} utility is installed and you have the following private keys:"
         log ""
         gpg --list-secret-keys --keyid-format=long
         log ""
     fi
 
-    source_adaptive 
+    source_adaptive
 
     log ""
     log "${BOLD}Note:${RESET} you may need to ${ITALIC}source${RESET} your ${BOLD}rc${RESET} file to be fully configured."
@@ -194,10 +206,10 @@ function debian() {
 function main() {
     OS="$(os)"
 
+    setup_colors
     log "Initializing packages for ${BOLD}${YELLOW}${OS}${RESET}"
     log ""
 
-    setup_colors
 
     case "${OS}" in
 
@@ -212,7 +224,7 @@ function main() {
 
             log "- no initialization yet for ${BOLD}macOS${RESET}."
             ;;
-        
+
         windows)
 
             log "- no initialization yet for ${BOLD}Windows${RESET}."
@@ -222,11 +234,14 @@ function main() {
             log "- unknown OS ${RED}${BOLD}${OS}${RESET}"
             exit 1
             ;;
-    esac 
+    esac
 
 
     remove_colors
 }
 
 
-main
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "${@}"
+fi
+

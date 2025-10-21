@@ -19,7 +19,32 @@ __COLOR_SH_LOADED=1
 # shellcheck source="./text.sh"
 source "${UTILS}/text.sh"
 
+function colors_not_setup() {
+    if [[ -z "${BRIGHT_BLACK}" ]]; then
+        debug "colors_not_setup" "Colors are NOT setup"
+        echo "0";
+        return 0; # colors are NOT setup
+    else
+        debug "colors_not_setup" "Colors ARE setup"
+        echo "1"
+        return 1; # colors ARE setup
+    fi
+}
+
+function colors_are_setup() {
+    if [[ -z "${BRIGHT_BLACK}" ]]; then
+        debug "colors_not_setup" "Colors ARE setup"
+        echo "0"
+        return 0; # colors ARE setup
+    else
+        debug "colors_not_setup" "Colors are NOT setup"
+        echo "1";
+        return 1; # colors are NOT setup
+    fi
+}
+
 function setup_colors() {
+    export AD_COLORS_SETUP="true"
     export BLACK=$'\033[30m'
     export RED=$'\033[31m'
     export GREEN=$'\033[32m'
@@ -38,10 +63,11 @@ function setup_colors() {
     export BRIGHT_CYAN=$'\033[96m'
     export BRIGHT_WHITE=$'\033[97m'
 
+    # font weights
     export BOLD=$'\033[1m'
-    export NO_BOLD=$'\033[21m'
+    export NORMAL=$'\033[22m'
     export DIM=$'\033[2m'
-    export NO_DIM=$'\033[22m'
+
     export ITALIC=$'\033[3m'
     export NO_ITALIC=$'\033[23m'
     export STRIKE=$'\033[9m'
@@ -71,11 +97,15 @@ function setup_colors() {
     export BG_BRIGHT_CYAN=$'\033[106m'
     export BG_BRIGHT_WHITE=$'\033[107m'
 
-    export RESET=$'\033[0m'
+    export RESET=$'\033[0m' # RESET ALL ATTRIBUTES
+    export DEF_FG=$'\033[39m' # RESET the Foreground Color
+    export DEF_BG=$'\033[49m' # RESET the Background Color
+    export DEF_COLOR="${DEFAULT_FG}${DEFAULT_BG}" # RESET Foreground and Background
 
     export SAVE_POSITION=$'\033[s'
     export RESTORE_POSITION=$'\033[u'
     export CLEAR_SCREEN=$'\033[2J'
+
 }
 
 function screen_title() {
@@ -91,12 +121,12 @@ function clear_screen() {
 function remove_colors() {
     unset RED BLACK GREEN YELLOW BLUE MAGENTA CYAN WHITE
     unset BRIGHT_BLACK BRIGHT_RED BRIGHT_GREEN BRIGHT_YELLOW BRIGHT_BLUE BRIGHT_MAGENTA BRIGHT_CYAN BRIGHT_WHITE
-    unset BOLD NO_BOLD DIM NO_DIM ITALIC NO_ITALIC STRIKE NO_STRIKE REVERSE NO_REVERSE
+    unset BOLD NO_BOLD NORMAL DIM NO_DIM ITALIC NO_ITALIC STRIKE NO_STRIKE REVERSE NO_REVERSE
     unset UNDERLINE NO_UNDERLINE BLINK NO_BLINK
     unset BG_BLACK BG_RED BG_GREEN BG_YELLOW BG_BLUE BG_MAGENTA BG_CYAN BG_WHITE
     unset BG_BRIGHT_BLACK BG_BRIGHT_RED BG_BRIGHT_GREEN BG_BRIGHT_YELLOW BG_BRIGHT_BLUE BG_BRIGHT_MAGENTA BG_BRIGHT_CYAN BG_BRIGHT_WHITE
-    unset RESET
-    unset SAVE_POSITION RESTORE_POSITION
+    unset RESET DEF_FG DEF_BG DEF_COLOR
+    unset SAVE_POSITION RESTORE_POSITION CLEAR_SCREEN
 }
 
 # as_rgb_prefix <fg> <bg>
@@ -652,7 +682,7 @@ function bg_dark_red() {
 # Looks for tags which represent formatting instructions -- `{{RED}}`, `{{RESET}}`,
 # etc. -- and converts them using a variable of the same name.
 colorize() {
-    local -r content="${1:-}"
+    local -r content="${*:-}"
     local rest="$content"
     local result=""
     local tag

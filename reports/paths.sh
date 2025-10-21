@@ -12,26 +12,14 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="../color.sh"
-source "${ROOT}/color.sh"
-# shellcheck source="../utils.sh"
-source "${ROOT}/utils.sh"
-
-# has_path()
-#
-# checks whether the passed in path already exists in $PATH
-# variable
-function has_path() {
-    local -r find="${1:?no path passed into has_path()!}"
-
-    if contains "${find}" "${PATH:- }"; then
-        echo "true"
-        return 0
-    else
-        echo "false"
-        return 1
-    fi
-}
+# shellcheck source="../utils/color.sh"
+source "${UTILS}/color.sh"
+# shellcheck source="../utils/logging.sh"
+source "${UTILS}/logging.sh"
+# shellcheck source="../utils/color.sh"
+source "${UTILS}/color.sh"
+# shellcheck source="../utils/env.sh"
+source "${UTILS}/env.sh"
 
 
 # paths_for_env()
@@ -41,10 +29,10 @@ function has_path() {
 #
 # - each path will have a "name", "duplicate", and "path" property
 # - the "duplicate" property is a boolean flag indicating whether
-#   the 
+#   the
 function paths_for_env() {
     local -a paths=()
-    
+
     # Add real paths
     if dir_exists "${HOME}/bin"; then
         paths+=("User Binaries" "$(has_path "${HOME}/bin")" "${HOME}/bin")
@@ -75,7 +63,7 @@ function paths_for_env() {
     if dir_exists "${HOME}/.opencode/bin"; then
         paths+=("Opencode" "$(has_path "${HOME}/.opencode/bin")" "${HOME}/.opencode/bin")
     fi
-    
+
     local IFS='|'
     echo "${paths[*]}"
 }
