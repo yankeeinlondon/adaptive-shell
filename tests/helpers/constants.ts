@@ -1,0 +1,14 @@
+import { narrow } from "inferred-types";
+
+export const STDIO_OPTIONS = narrow({
+    /** Default behavior: pipe all streams so they can be captured. */
+    PIPE: "pipe",
+    /** Share the parent's stdio (interactive). */
+    INHERIT: "inherit",
+    /** Ignore/discard all streams. */
+    IGNORE: "ignore",
+    /** Create an IPC channel (used only with fork/spawn). */
+    IPC: "ipc",
+    /** Windows-only: open handle for asynchronous (overlapped) I/O. */
+    OVERLAPPED: "overlapped",
+});

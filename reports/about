@@ -47,9 +47,9 @@ function report_about() {
 
     CUSTOM_DESC="$(colorize "${MACHINE_DESC}")"
 
-    DESC="$(newline_on_word_boundary "${CUSTOM_DESC:-${DEFAULT_DESC}}" 60)"
+    DESC="$(newline_on_word_boundary "${CUSTOM_DESC:-${DEFAULT_DESC}}")"
 
-    if is_linux; then 
+    if is_linux; then
         OS_NAME="$(strip_after "/" "$(distro)")"
         KERNEL=", $(get_kernel_version)"
     else

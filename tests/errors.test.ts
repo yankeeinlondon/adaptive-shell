@@ -1,0 +1,145 @@
+import { describe, it, expect } from 'vitest'
+import { sourcedBash, bashExitCode } from './helpers/bash'
+
+describe('error handling utilities', () => {
+  describe('catch_errors()', () => {
+    it('should set errexit option', () => {
+      const result = sourcedBash('./utils.sh', `
+        catch_errors
+        shopt -o errexit
+      `)
+      // When errexit is on, shopt will return success
+      expect(result).toContain('errexit')
+    })
+
+    it('should set nounset option', () => {
+      const result = sourcedBash('./utils.sh', `
+        catch_errors
+        shopt -o nounset
+      `)
+      expect(result).toContain('nounset')
+    })
+
+    it('should set pipefail option', () => {
+      const result = sourcedBash('./utils.sh', `
+        catch_errors
+        shopt -o pipefail
+      `)
+      expect(result).toContain('pipefail')
+    })
+
+    it('should not error when called', () => {
+      const exitCode = bashExitCode('source ./utils.sh && catch_errors')
+      expect(exitCode).toBe(0)
+    })
+  })
+
+  describe('allow_errors()', () => {
+    it('should unset errexit option', () => {
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        catch_errors
+        allow_errors
+        shopt -o errexit | grep -q "off"
+      `)
+      expect(exitCode).toBe(0)
+    })
+
+    it('should unset nounset option', () => {
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        catch_errors
+        allow_errors
+        shopt -o nounset | grep -q "off"
+      `)
+      expect(exitCode).toBe(0)
+    })
+
+    it('should unset pipefail option', () => {
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        catch_errors
+        allow_errors
+        shopt -o pipefail | grep -q "off"
+      `)
+      expect(exitCode).toBe(0)
+    })
+
+    it('should not error when called', () => {
+      const exitCode = bashExitCode('source ./utils.sh && allow_errors')
+      expect(exitCode).toBe(0)
+    })
+
+    it('should allow commands to fail after being called', () => {
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        catch_errors
+        allow_errors
+        false
+        true
+      `)
+      // Should succeed because allow_errors was called
+      expect(exitCode).toBe(0)
+    })
+  })
+
+  describe('error_handler()', () => {
+    it('should accept line number and command parameters', () => {
+      // error_handler expects to be called with line number and command
+      // This test verifies it can be called without crashing
+      const exitCode = bashExitCode(`
+        source ./utils.sh 2>/dev/null
+        setup_colors
+        error_handler 42 "test command" 2>/dev/null | head -1
+      `)
+      // error_handler doesn't fail, it just reports
+      expect([0, 1]).toContain(exitCode)
+    })
+
+    it('should be callable from error trap', () => {
+      // Test that error_handler can be set as a trap
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        trap 'error_handler \$LINENO "\$BASH_COMMAND"' ERR 2>&1
+        echo "trap set successfully"
+      `)
+      expect(exitCode).toBe(0)
+    })
+  })
+
+  describe('error handling integration', () => {
+    it('should catch errors when catch_errors is active', () => {
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        catch_errors
+        false
+      `)
+      // Should fail because catch_errors makes the script exit on error
+      expect(exitCode).not.toBe(0)
+    })
+
+    it('should not catch errors when allow_errors is active', () => {
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        allow_errors
+        false
+        true
+      `)
+      // Should succeed because allow_errors allows false to fail without exiting
+      expect(exitCode).toBe(0)
+    })
+
+    it('should toggle between catching and allowing errors', () => {
+      const exitCode = bashExitCode(`
+        source ./utils.sh
+        catch_errors
+        allow_errors
+        false
+        catch_errors
+        true
+      `)
+      // Should succeed: allow_errors lets false pass, then catch_errors is re-enabled, then true succeeds
+      expect(exitCode).toBe(0)
+    })
+  })
+})

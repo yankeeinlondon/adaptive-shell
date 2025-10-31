@@ -195,6 +195,7 @@ function is_git_repo() {
         repo_root="${path}"
     fi
     # TODO
+    return 1
 }
 
 # repo_is_dirty <path || CWD>
@@ -211,6 +212,7 @@ function repo_is_dirty() {
         repo_root="${path}"
     fi
     # TODO
+    return 1
 }
 
 # repo_root <path || CWD>
@@ -231,6 +233,7 @@ function repo_root() {
         repo_root="${path}"
     fi
     # TODO
+    return 1
 }
 
 # repo_root <path || $CWD>
@@ -250,6 +253,7 @@ function is_monorepo() {
         repo_root="${path}"
     fi
     # TODO
+    return 1
 }
 
 # has_package_json()
@@ -268,6 +272,7 @@ function has_package_json() {
         repo_root="${path}"
     fi
     # TODO
+    return 1
 }
 
 # has_typescript_files <[path]>
@@ -290,14 +295,16 @@ function has_typescript_files() {
     fi
 
     # TODO
+    return 1
 }
 
-# looks_like_js()
+# looks_like_js_project()
 #
 # looks for files in the current directory which indicate that
 # this is a Javascript/Typescript project.
 function looks_like_js_project() {
-    # TODO: look for `package.json`,
+    # TODO: look for package.json
+    return 1
 }
 
 # looks_like_rust_project()
@@ -306,6 +313,7 @@ function looks_like_js_project() {
 # this is a Rust project.
 function looks_like_rust_project() {
     # TODO
+    return 1
 }
 
 # looks_like_python_project()
@@ -314,6 +322,7 @@ function looks_like_rust_project() {
 # this is a Rust project.
 function looks_like_python_project() {
     # TODO
+    return 1
 }
 
 # in_package_json <find>

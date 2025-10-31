@@ -1,5 +1,21 @@
 #!/usr/bin/env bash
 
+# Stub functions for not-yet-implemented features
+# TODO: Implement these properly
+is_list() { return 1; }
+is_kv_pair() { return 1; }
+is_numeric() { [[ "$1" =~ ^[0-9]+$ ]]; }
+is_function() { [[ "$(type -t "$1" 2>/dev/null)" == "function" ]]; }
+ends_with() {
+  local suffix="$1"
+  local content="$2"
+  [[ "$content" == *"$suffix" ]]
+}
+
+# Object prefix/suffix constants (TODO: define these properly)
+OBJECT_PREFIX="${OBJECT_PREFIX:-\{}"
+OBJECT_SUFFIX="${OBJECT_SUFFIX:-\}}"
+
 function is_bound() {
     allow_errors
     local -n __test_by_ref=$1 2>/dev/null || { debug "is_bound" "unbounded ref";  return 1; }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bash, sourcedBash, bashExitCode } from '../helpers/bash'
+import { bash, sourcedBash, bashExitCode } from './index'
 
 describe('bash helper utilities', () => {
   describe('bash()', () => {
