@@ -2,6 +2,7 @@ import { createKindError } from "@yankeeinlondon/kind-error";
 import { TestResult } from "./TestResult";
 import { TestOptions } from "./TestOptions";
 import {  TestAssertion } from "./TestUtil";
+import { darkPurpleBacked, green_backed, tangerine_highlighted } from "./format";
 
 
 
@@ -26,7 +27,7 @@ export const DidNotFail = <
     ctx: TCtx
 ) => createKindError(
     "DidNotFail", {
-        library: "adaptive-scripts",
+
         ...ctx
     },
 )(`A call to the function '${ctx.fn}' in '${ctx.source}' was supposed to FAIL but returned a successful outcome!`);
@@ -37,7 +38,7 @@ export const DidNotPass = <
 >(
     ctx: TCtx
 ) => createKindError(
-    "DidNotPass", { library: "adaptive-scripts", ...ctx },
+    "DidNotPass", { ...ctx },
 )(`A call to the function '${ctx.fn}' in '${ctx.source}' was supposed to FAIL but returned a successful outcome!`);
 
 export const StdOutReturn = <
@@ -45,15 +46,15 @@ export const StdOutReturn = <
 >(
     ctx: TCtx
 ) => createKindError(
-    "Returns/StdOut", { library: "adaptive-scripts", ...ctx },
-)(`The expected value of StdOut was not what was expected!`);
+    "Returns/StdOut", { ...ctx },
+)(`The expected value of StdOut [${darkPurpleBacked(ctx.expected)}] was not what was expected [${tangerine_highlighted(ctx.result.stdout)}]!`);
 
 export const StdErrReturn = <
     TCtx extends ErrorContext
 >(
     ctx: TCtx
 ) => createKindError(
-    "Returns/StdErr", { library: "adaptive-scripts", ...ctx },
+    "Returns/StdErr", { ...ctx },
 )(`The expected value of StdErr was not what was expected!`);
 
 
@@ -62,7 +63,7 @@ export const StdOutReturnTrimmed = <
 >(
     ctx: TCtx
 ) => createKindError(
-    "ReturnsTrimmed/StdOut", { library: "adaptive-scripts", ...ctx },
+    "ReturnsTrimmed/StdOut", { ...ctx },
 )(`The expected value of StdOut was not what was expected!`);
 
 export const StdErrReturnTrimmed = <
@@ -70,6 +71,6 @@ export const StdErrReturnTrimmed = <
 >(
     ctx: TCtx
 ) => createKindError(
-    "ReturnsTrimmed/StdErr", { library: "adaptive-scripts", ...ctx },
+    "ReturnsTrimmed/StdErr", { ...ctx },
 )(`The expected value of StdErr was not what was expected!`);
 

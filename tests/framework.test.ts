@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {  sourceScript, SourcedTestUtil } from './helpers'
 import type { TestApi, TestOptions, TestUtil } from './helpers';
 import { AssertEqual, Expect } from 'inferred-types';
+import { StdOutReturn } from './helpers/errors';
 
 const mod = sourceScript("test.sh");
 
@@ -41,9 +42,14 @@ describe("Test Utility Usage", () => {
 
     it("example test", () => {
         const api = sourceScript("utils/text.sh")("lc")("HELLO WORLD");
-        console.log(api.result.stdout);
-        expect(api.result.stdout).toBe("hello world");
+        expect(api.result.stdout).toBe("hello world"); // This works
 
+        // intentional fail
+        // expect(api.returns("hello world2"), String(api.returns("hello world2"))).is.not.instanceOf(Error);
+
+        const e = StdOutReturn({source: "source",fn: "fn", params: [], assertion: "returns", result: {code: 1, stderr: "", stdout:""}});
+
+        console.log(e)
 
         type cases = [
             /** type tests */
