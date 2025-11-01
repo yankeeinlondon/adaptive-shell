@@ -1,13 +1,16 @@
-import { isString, isStringArray, isUndefined, contains,  Never, createFnWithProps } from 'inferred-types';
-import type { EmptyObject, EnsureLeading, OnlyFn, } from "inferred-types/types"
+import { isString, contains,  createFnWithProps, ensureLeading, startsWith, stripTrailing } from 'inferred-types';
+import type { EmptyObject } from "inferred-types/types"
 import { IOType, spawnSync, SpawnSyncOptions, SpawnSyncReturns } from 'node:child_process';
 import { cwd } from 'node:process';
-import { TestResult, TestOptions, asArray, SourcedTestUtil, TestUtil, TestApi, ToSpawnOptions, AsCommand } from './index';
+import { TestResult, TestOptions, asArray, SourcedTestUtil, TestUtil, TestApi, ToSpawnOptions, AsCommand, Quoted } from './index';
 import { DidNotFail, DidNotPass, StdErrReturn, StdOutReturn, StdOutReturnTrimmed } from './errors';
 import { fallback } from './fallback';
+import { TEST_ENV } from './constants';
 
-
-function toSpawnOption<T extends TestOptions>(opt: T): ToSpawnOptions<T> & SpawnSyncOptions {
+/**
+ * converts a `TestOptions` hash into a `SpawnSyncOptions` hash.
+ */
+export function toSpawnOption<T extends TestOptions>(opt: T): ToSpawnOptions<T> & SpawnSyncOptions {
     const t = fallback(opt.stdin, "pipe");
     return {
         encoding: "utf-8",
@@ -37,9 +40,21 @@ export function runScript<
 
     return {
         exitCode: result.status ?? -1, // unknown failure is set to -1
-        stdout: result.stdout as string ?? "",
-        stderr: result.stderr as string ?? "",
+        stdout: stripTrailing(result.stdout as string ?? "", "\n"),
+        stderr: stripTrailing(result.stderr as string ?? "", "\n"),
     }
+}
+
+
+
+function quoteParameters<T extends readonly string[]>(params: T): Quoted<T> {
+    return (
+        [...params]
+            .map(i => startsWith(i , "'", "")
+                ? i
+                : `"${i}"`
+            )
+         ) as unknown as Quoted<T>
 }
 
 const command = <
@@ -52,26 +67,21 @@ const command = <
     fn: TFn,
     params: TParams,
     opts: TOpt
-) => [
-    "bash",
-    [
-        "-c",
-        "source",
-        source,
-        "&&",
+) => {
+    const p = quoteParameters(params);
+
+    return [
         "bash",
-        "-e",
-        fn,
-        ...params.map(i =>
-            i.startsWith("\"") || i.startsWith("'")
-                ? i
-                : `"${i}"`
-        )
-    ],
-    toSpawnOption(opts)
-
-] as AsCommand<TSource,TFn,TParams,TOpt>
-
+        [
+            "-e",
+            "-o",
+            "pipefail",
+            "-c",
+            `source ${source} && ${fn} ${p.join(" ")}`
+        ],
+        toSpawnOption(opts)
+    ] as unknown as AsCommand<TSource,TFn,TParams,TOpt>
+};
 
 
 function createApiSurface<
@@ -99,7 +109,8 @@ function createApiSurface<
         fn,
         params,
         options,
-        command: command(source,fn,params,options),
+        result,
+        command: command(source,fn,params,options) as readonly unknown[] as AsCommand<TSource,TFn,TParams,TOpt>,
 
 
         success() {
@@ -129,7 +140,7 @@ function createApiSurface<
             }
         },
         returns(expected) {
-            if(result.stdout !== expected) {
+            if(result.stdout !== (expected as string)) {
                 return StdOutReturn({
                     assertion: "returns",
                     source,
@@ -142,7 +153,7 @@ function createApiSurface<
         },
 
         returnsTrimmed(expected) {
-            if(result.stdout !== expected) {
+            if(result.stdout !== (expected as string)) {
                 return StdOutReturnTrimmed({
                     assertion: "returnsTrimmed",
                     source,
@@ -155,7 +166,7 @@ function createApiSurface<
         },
 
         stdErrReturns(expected) {
-            if(result.stdout !== expected) {
+            if(result.stderr !== (expected as string)) {
                 return StdErrReturn({
                     assertion: "stdErrReturns",
                     source,
@@ -168,7 +179,7 @@ function createApiSurface<
         },
 
         stdErrReturnsTrimmed(expected) {
-            if(result.stdout !== expected) {
+            if(result.stderr !== (expected as string)) {
                 return StdErrReturn({
                     assertion: "stdErrReturnsTrimmed",
                     source,
@@ -194,7 +205,7 @@ function createApiSurface<
         },
 
         stdErrContains(expected) {
-            if(isString(result.stdout) && contains(result.stdout, expected) ) {
+            if(isString(result.stderr) && contains(result.stderr, expected) ) {
                 return StdErrReturn({
                     assertion: "stdErrContains",
                     source,
@@ -243,16 +254,15 @@ function addFunctionName<TSource extends string, TOpt extends TestOptions>(
     source: TSource,
     options: TOpt
 ): SourcedTestUtil<TSource, TOpt> {
-    const kv = {
-        source,
-        options
-    } as { source: TSource, options: TOpt };
 
     const fn = <const TFn extends string>(fn: TFn) => {
-        return addParameters(source,fn,options) as TestUtil<TSource,TFn,TOpt>;
+        return addParameters(source,fn,options) as unknown as TestUtil<TSource,TFn,TOpt>;
     }
 
-    return createFnWithProps(fn,kv) as SourcedTestUtil<TSource, TOpt>;
+    fn["source"] = source;
+    fn["options"] = options;
+
+    return fn as unknown as SourcedTestUtil<TSource, TOpt>;
 }
 
 /**
@@ -275,8 +285,11 @@ export function sourceScript<
     const TOpt extends TestOptions
 >(
     source: TSource,
-    options = {} as EmptyObject & TestOptions as TOpt
+    options = { env: TEST_ENV} as EmptyObject & TestOptions as TOpt
 ) {
-    return addFunctionName(source, options);
+    return addFunctionName(
+        ensureLeading(source, "./"),
+        options
+    );
 }
 

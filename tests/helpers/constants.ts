@@ -12,3 +12,11 @@ export const STDIO_OPTIONS = narrow({
     /** Windows-only: open handle for asynchronous (overlapped) I/O. */
     OVERLAPPED: "overlapped",
 });
+
+export const TEST_ENV = {
+    HOME: process.env.HOME,
+    USER: process.env.USER,
+    COLORTERM: process.env.COLORTERM,
+    LANG: process.env.LANG,
+    PATH: process.env.PATH
+}

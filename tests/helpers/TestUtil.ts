@@ -1,13 +1,12 @@
-import {  Expand, Not, StringKeys } from "inferred-types/types";
+import type {  As,  Join, Not, StartsWith, StringKeys } from "inferred-types/types";
 import { SpawnSyncOptions } from "node:child_process";
 import { TestOptions, ToSpawnOptions } from "./TestOptions"
 import { TestResult } from "./TestResult"
-import { ExpandRecursively } from "inferred-types";
 
 export type AddFunctionToTestUtil<
     TSource extends string,
     TOpt extends TestOptions
-> = <const TFn extends string>(fn: string) => TestUtil<
+> = <const TFn extends string>(fn: TFn) => TestUtil<
     TSource,
     TFn,
     TOpt
@@ -54,6 +53,12 @@ export type TestUtil<
 } & AddParametersToTestUtil<TSource,TFn,TOpt>;
 
 
+export type Quoted<T extends readonly string[]> = As<{
+    [K in keyof T]: StartsWith<T[K], "'" | "\""> extends true
+        ? T[K]
+        : `"${T[K]}"`
+}, readonly string[]>
+
 export type AsCommand<
     TSource extends string,
     TFn extends string,
@@ -62,14 +67,12 @@ export type AsCommand<
 > = [
     "bash",
     [
-        "-c",
-        "source",
-        TSource,
-        "&&",
-        "bash",
         "-e",
-        TFn,
-        ...TParams
+        "source",
+        "-o",
+        "pipefail",
+        "-c",
+        `source ${TSource} && ${TFn} ${Join<TParams, " ">}`
     ],
     ToSpawnOptions<TOpt> & SpawnSyncOptions
 ];
@@ -84,12 +87,13 @@ export type TestApi<
     fn: TFn;
     params: TParams;
     options: TOpt;
+    result: TestResult<TOpt,TParams>,
     command: AsCommand<TSource,TFn,TParams,TOpt>
 
     /**
      * tests that the function call returns a _successful_ exit code
      */
-    success(): TestResult<TOpt, TParams>;
+    success(): void | Error;
     /**
      * tests that the function call returns a _failure_ exit code
      */

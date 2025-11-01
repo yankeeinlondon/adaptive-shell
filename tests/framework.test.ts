@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {  sourceScript, SourcedTestUtil } from './helpers'
-import type { TestOptions } from './helpers';
-import { AssertEqual, AssertExtends, Expect } from 'inferred-types';
+import type { TestApi, TestOptions, TestUtil } from './helpers';
+import { AssertEqual, Expect } from 'inferred-types';
 
 const mod = sourceScript("test.sh");
 
@@ -29,13 +29,27 @@ describe("Test Utility Usage", () => {
 
         type Sourced = typeof sourced;
         type WithFnName = typeof withFnName;
+        type Api = typeof api;
 
         type cases = [
-            Expect<AssertEqual<Sourced, SourcedTestUtil<"text.sh", TestOptions>>>,
-            Expect<AssertEqual<WithFnName, TestUtil<"text.sh", "do_something", TestOptions>>>,
-
+            Expect<AssertEqual<Sourced, SourcedTestUtil<"./text.sh", TestOptions>>>,
+            Expect<AssertEqual<WithFnName, TestUtil<"./text.sh", "do_something", TestOptions>>>,
+            Expect<AssertEqual<Api, TestApi<"./text.sh", "do_something", ["foo","bar"], TestOptions>>>
         ];
     });
+
+
+    it("example test", () => {
+        const api = sourceScript("utils/text.sh")("lc")("HELLO WORLD");
+        console.log(api.result.stdout);
+        expect(api.result.stdout).toBe("hello world");
+
+
+        type cases = [
+            /** type tests */
+        ];
+    });
+
 
 
 
