@@ -47,7 +47,7 @@ export const StdOutReturn = <
     ctx: TCtx
 ) => createKindError(
     "Returns/StdOut", { ...ctx },
-)(`The expected value of StdOut [${darkPurpleBacked(ctx.expected)}] was not what was expected [${tangerine_highlighted(ctx.result.stdout)}]!`);
+)(`\nThe expected value of StdOut [${darkPurpleBacked(ctx.expected)}] was not what was expected [${tangerine_highlighted(ctx.result.stdout)}]!`);
 
 export const StdErrReturn = <
     TCtx extends ErrorContext

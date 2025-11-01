@@ -39,7 +39,7 @@ export function runScript<
     const result = spawnSync(cmd, params,opts) as SpawnSyncReturns<string>;
 
     return {
-        exitCode: result.status ?? -1, // unknown failure is set to -1
+        code: result.status ?? -1, // unknown failure is set to -1
         stdout: stripTrailing(result.stdout as string ?? "", "\n"),
         stderr: stripTrailing(result.stderr as string ?? "", "\n"),
     }
@@ -50,10 +50,14 @@ export function runScript<
 function quoteParameters<T extends readonly string[]>(params: T): Quoted<T> {
     return (
         [...params]
-            .map(i => startsWith(i , "'", "")
-                ? i
-                : `"${i}"`
-            )
+            .map(i => {
+                // If already quoted, return as-is (using native .startsWith())
+                if (i.startsWith("'") || i.startsWith("\"")) {
+                    return i;
+                }
+                // Otherwise, wrap in double quotes and escape any internal quotes
+                return `"${i.replace(/"/g, '\\"')}"`;
+            })
          ) as unknown as Quoted<T>
 }
 
@@ -97,10 +101,12 @@ function createApiSurface<
 ) {
     /** the result of executing the command */
     const args = command(source,fn,params,options);
+    const scriptResult = runScript(...args);
     const result = {
-        ...runScript(...args),
-        params,
-        options
+        code: scriptResult.code,
+        stdout: scriptResult.stdout,
+        stderr: scriptResult.stderr,
+        parameters: params,
     } as unknown as TestResult<TOpt,TParams>;
 
 
@@ -153,7 +159,9 @@ function createApiSurface<
         },
 
         returnsTrimmed(expected) {
-            if(result.stdout !== (expected as string)) {
+            const trimmedStdout = result.stdout.trim();
+            const trimmedExpected = (expected as string).trim();
+            if(trimmedStdout !== trimmedExpected) {
                 return StdOutReturnTrimmed({
                     assertion: "returnsTrimmed",
                     source,
@@ -179,7 +187,9 @@ function createApiSurface<
         },
 
         stdErrReturnsTrimmed(expected) {
-            if(result.stderr !== (expected as string)) {
+            const trimmedStderr = result.stderr.trim();
+            const trimmedExpected = (expected as string).trim();
+            if(trimmedStderr !== trimmedExpected) {
                 return StdErrReturn({
                     assertion: "stdErrReturnsTrimmed",
                     source,
@@ -192,8 +202,8 @@ function createApiSurface<
         },
 
         contains(expected) {
-            if(isString(result.stdout) && contains(result.stdout, expected) ) {
-                return StdErrReturn({
+            if(isString(result.stdout) && !contains(result.stdout, expected) ) {
+                return StdOutReturn({
                     assertion: "contains",
                     source,
                     fn,
@@ -205,7 +215,7 @@ function createApiSurface<
         },
 
         stdErrContains(expected) {
-            if(isString(result.stderr) && contains(result.stderr, expected) ) {
+            if(isString(result.stderr) && !contains(result.stderr, expected) ) {
                 return StdErrReturn({
                     assertion: "stdErrContains",
                     source,
@@ -285,7 +295,7 @@ export function sourceScript<
     const TOpt extends TestOptions
 >(
     source: TSource,
-    options = { env: TEST_ENV} as EmptyObject & TestOptions as TOpt
+    options = { env: process.env } as EmptyObject & TestOptions as TOpt
 ) {
     return addFunctionName(
         ensureLeading(source, "./"),
