@@ -1,3 +1,4 @@
+import { EmptyString, Fallback } from "inferred-types";
 import { IOType } from "node:child_process";
 
 /**
@@ -19,4 +20,16 @@ export type TestOptions = {
      * how you want the tests to handle STDERR (by default it is `pipe`)
      */
     stderr?: IOType,
+}
+
+
+export type ToSpawnOptions<T extends TestOptions> = {
+    encoding: "utf-8";
+    cwd: Fallback<T["cwd"], string>;
+    env: Fallback<T["env"], EmptyString>;
+    stdio: [
+        T["stdin"] | "pipe",
+        T["stdout"] | "pipe",
+        T["stderr"] | "pipe",
+    ]
 }

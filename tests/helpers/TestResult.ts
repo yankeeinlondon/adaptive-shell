@@ -2,9 +2,15 @@ import { TestOptions } from "./index";
 
 
 /**
+ * **TestResult**`<T,P>`
+ *
  * a shell script test result
  */
-export type TestResult<T extends TestOptions> = {
+export type TestResult<
+    T extends TestOptions,
+    P extends readonly string[]
+> = {
+    parameters: P,
     stdout: T["stdout"] extends "ignore"
     ? undefined
     : T["stdout"] extends "pipe"

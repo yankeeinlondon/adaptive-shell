@@ -7,8 +7,9 @@ const mod = sourceScript("test.sh");
 describe('text utilities', () => {
 
     describe("Test Utility Usage", () => {
-        const step1 = sourceScript("text");
-        const api = step1("utils.sh");
+        const step1 = sourceScript("text.sh"); // sourced file
+        const util = step1("do_something"); // add fn
+        const api = util(); // add parameters
 
         /** API Surface */
         expect(typeof api.success).toBe("function")
