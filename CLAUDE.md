@@ -143,19 +143,57 @@ pnpm test tests/text.test.ts  # Run specific test file
 **Test Structure**:
 - `tests/*.test.ts` - Automated TypeScript tests using Vitest
 - `tests/demos/*-demo.sh` - Visual demonstration scripts
-- `tests/helpers/bash.ts` - Test utilities for calling bash from TypeScript
+- `tests/helpers/` - Test framework and utilities
 
-**Writing Tests**:
+**Writing Tests (Modern Approach)**:
+
+The repository uses a custom test framework with `sourceScript()` and Vitest custom matchers:
+
 ```typescript
-import { sourcedBash, bashExitCode } from './helpers/bash'
+import { sourceScript } from './helpers'
 
-// Test string output
-const result = sourcedBash('./utils/text.sh', 'lc "HELLO"')
-expect(result).toBe('hello')
+// Test a function with parameters
+const api = sourceScript('./utils/text.sh')('lc')('HELLO')
 
-// Test exit codes
-const exitCode = bashExitCode('source ./utils/text.sh && contains "world" "hello world"')
-expect(exitCode).toBe(0)
+// Use custom matchers for readable assertions
+expect(api).toBeSuccessful()       // Exit code 0
+expect(api).toReturn('hello')      // Exact stdout match
+expect(api).toContainInStdOut('ell')  // Stdout contains substring
+
+// Test failure cases
+const failApi = sourceScript('./utils.sh')('some_fn')('arg')
+expect(failApi).toFail()           // Non-zero exit code
+expect(failApi).toFail(42)         // Specific exit code
+
+// Access result properties directly
+expect(api.result.stdout).toBe('hello')
+expect(api.result.code).toBe(0)
 ```
 
-See `tests/README.md` for comprehensive testing guide.
+**Available Custom Matchers**:
+- `.toBeSuccessful()` - Assert exit code 0
+- `.toFail(code?)` - Assert non-zero exit code (optional: specific code)
+- `.toReturn(expected)` - Assert exact stdout match
+- `.toReturnTrimmed(expected)` - Assert trimmed stdout match
+- `.toContainInStdOut(substring)` - Assert stdout contains string
+- `.toReturnStdErr(expected)` - Assert exact stderr match
+- `.toReturnStdErrTrimmed(expected)` - Assert trimmed stderr match
+- `.toContainInStdErr(substring)` - Assert stderr contains string
+
+**Limitations**:
+
+The `sourceScript()` framework is designed for calling individual functions with parameters.
+It cannot handle:
+- Multi-step bash scripts with state setup (e.g., `var="x" && func $var`)
+- Bash array initialization and reference passing
+- Piping data to stdin
+- Environment variable state between calls
+
+For tests requiring these capabilities, use the deprecated helpers:
+```typescript
+import { bashExitCode, sourcedBash } from './helpers'
+
+const exitCode = bashExitCode('source ./utils.sh && arr=("a" "b") && func arr')
+```
+
+See `tests/CUSTOM_MATCHERS.md` and `tests/README.md` for comprehensive testing guides.

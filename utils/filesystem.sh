@@ -126,7 +126,7 @@ function get_file() {
     if file_exists "${filepath}"; then
         debug "get_file(${filepath})" "getting data"
         local content
-        { IFS= read -rd '' content <"${filepath}";}  2>/dev/null
+        { IFS= read -rd '' content <"${filepath}"; } 2>/dev/null || true
         printf '%s' "${content}"
     else
         debug "get_file(${filepath})" "call to get_file(${filepath}) had invalid filepath"

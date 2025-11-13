@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { sourcedBash, sourcedBashWithStderr } from './helpers/bash'
+import { sourceScript } from './helpers'
 
 describe('file dependency analysis', () => {
   let tempTestFile: string
@@ -28,13 +28,14 @@ rgb_text "255 0 0" "red text"
 
     // Run the expensive operations once and cache results
     // This reduces test time from ~7.8s to ~2.5s by running bash only 3 times instead of 6
-    const resultJson = sourcedBash('./reports/file-deps.sh', `file_dependencies "${tempTestFile}"`)
-    cachedFileDepsResult = JSON.parse(resultJson)
+    const fileDepsApi = sourceScript('./reports/file-deps.sh')('file_dependencies')(tempTestFile)
+    cachedFileDepsResult = JSON.parse(fileDepsApi.result.stdout)
 
-    cachedReportConsoleOutput = sourcedBashWithStderr('./reports/file-deps.sh', `report_file_dependencies "${tempTestFile}"`)
+    const reportConsoleApi = sourceScript('./reports/file-deps.sh')('report_file_dependencies')(tempTestFile)
+    cachedReportConsoleOutput = reportConsoleApi.result.stdout + reportConsoleApi.result.stderr
 
-    const jsonOutput = sourcedBash('./reports/file-deps.sh', `report_file_dependencies "${tempTestFile}" --json`)
-    cachedReportJsonResult = JSON.parse(jsonOutput)
+    const reportJsonApi = sourceScript('./reports/file-deps.sh')('report_file_dependencies')(tempTestFile, '--json')
+    cachedReportJsonResult = JSON.parse(reportJsonApi.result.stdout)
   })
 
   afterAll(() => {

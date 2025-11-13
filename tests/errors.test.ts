@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sourcedBash, bashExitCode } from './helpers/bash'
+import { sourcedBash, bashExitCode } from './helpers'
 
 describe('error handling utilities', () => {
   describe('catch_errors()', () => {

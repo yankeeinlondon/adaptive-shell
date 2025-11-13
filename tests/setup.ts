@@ -5,7 +5,7 @@
  * It registers custom matchers for the bash testing framework.
  */
 
-import { setupBashMatchers } from './helpers/matchers';
+import { setupBashMatchers } from "./helpers/vitest-matchers";
 
 // Register custom matchers globally
 setupBashMatchers();

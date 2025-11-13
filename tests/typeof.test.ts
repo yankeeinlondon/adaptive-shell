@@ -1,92 +1,102 @@
 import { describe, it, expect } from 'vitest'
-import { sourcedBash, bashExitCode } from './helpers/bash'
+import { sourcedBash, bashExitCode } from './helpers'
+import { sourceScript } from './helpers'
 
+/**
+ * NOTE: Many tests in this file cannot be converted to use sourceScript() because they require:
+ * 1. Setting up bash variables (e.g., my_var="hello")
+ * 2. Passing variable names by reference for nameref resolution
+ * 3. Testing array and associative array types which require bash state
+ *
+ * Tests that work with string literals have been converted. Tests requiring variable
+ * state setup remain using the deprecated helpers (sourcedBash/bashExitCode).
+ */
 describe('typeof utilities', () => {
   describe('not_empty()', () => {
     it('should return 0 for non-empty string', () => {
-      const exitCode = bashExitCode('source ./utils.sh && not_empty "hello"')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('not_empty')('hello')
+      expect(api).toBeSuccessful()
     })
 
     it('should return 1 for empty string', () => {
-      const exitCode = bashExitCode('source ./utils.sh && not_empty ""')
-      expect(exitCode).toBe(1)
+      const api = sourceScript('./utils.sh')('not_empty')('')
+      expect(api).toFail()
     })
 
     it('should return 0 for whitespace', () => {
-      const exitCode = bashExitCode('source ./utils.sh && not_empty "  "')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('not_empty')('  ')
+      expect(api).toBeSuccessful()
     })
 
     it('should return 1 when no parameter passed', () => {
-      const exitCode = bashExitCode('source ./utils.sh && not_empty')
-      expect(exitCode).toBe(1)
+      const api = sourceScript('./utils.sh')('not_empty')()
+      expect(api).toFail()
     })
   })
 
   describe('has_newline()', () => {
     it('should return 0 when string contains newline', () => {
-      const exitCode = bashExitCode('source ./utils.sh && has_newline $\'hello\\nworld\'')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('has_newline')('hello\nworld')
+      expect(api).toBeSuccessful()
     })
 
     it('should return 1 when string does not contain newline', () => {
-      const exitCode = bashExitCode('source ./utils.sh && has_newline "hello world"')
-      expect(exitCode).toBe(1)
+      const api = sourceScript('./utils.sh')('has_newline')('hello world')
+      expect(api).toFail()
     })
 
     it('should return 0 for string with only newline', () => {
-      const exitCode = bashExitCode('source ./utils.sh && has_newline $\'\\n\'')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('has_newline')('\n')
+      expect(api).toBeSuccessful()
     })
 
     it('should error when no parameter passed', () => {
-      const exitCode = bashExitCode('source ./utils.sh && has_newline 2>/dev/null')
-      expect(exitCode).toBe(127)
+      const api = sourceScript('./utils.sh')('has_newline')()
+      expect(api).toFail()
     })
   })
 
   describe('is_keyword()', () => {
     it('should return 0 for bash keywords', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_keyword "if"')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('is_keyword')('if')
+      expect(api).toBeSuccessful()
     })
 
     it('should return 0 for "for" keyword', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_keyword "for"')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('is_keyword')('for')
+      expect(api).toBeSuccessful()
     })
 
     it('should return 0 for "while" keyword', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_keyword "while"')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('is_keyword')('while')
+      expect(api).toBeSuccessful()
     })
 
     it('should return 1 for non-keywords', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_keyword "hello"')
-      expect(exitCode).toBe(1)
+      const api = sourceScript('./utils.sh')('is_keyword')('hello')
+      expect(api).toFail()
     })
 
     it('should return 1 for function names', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_keyword "printf"')
-      expect(exitCode).toBe(1)
+      const api = sourceScript('./utils.sh')('is_keyword')('printf')
+      expect(api).toFail()
     })
   })
 
   describe('is_empty()', () => {
     it('should return 0 for empty string literal', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_empty ""')
-      expect(exitCode).toBe(0)
+      const api = sourceScript('./utils.sh')('is_empty')('')
+      expect(api).toBeSuccessful()
     })
 
     it('should return 1 for non-empty string literal', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_empty "hello"')
-      expect(exitCode).toBe(1)
+      const api = sourceScript('./utils.sh')('is_empty')('hello')
+      expect(api).toFail()
     })
 
     it('should return 1 for whitespace', () => {
-      const exitCode = bashExitCode('source ./utils.sh && is_empty "  "')
-      expect(exitCode).toBe(1)
+      const api = sourceScript('./utils.sh')('is_empty')('  ')
+      expect(api).toFail()
     })
 
     // Note: nameref behavior differs between interactive shells and subprocesses

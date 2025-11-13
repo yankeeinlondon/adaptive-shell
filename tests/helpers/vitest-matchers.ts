@@ -53,13 +53,22 @@ declare module 'vitest' {
 export function setupBashMatchers() {
   expect.extend({
     toBeSuccessful(api: TestApi<any, any, any, any>) {
-      const { isNot } = this;
+      const { isNot, utils } = this;
       const error = api.success();
 
       if (error) {
+        const hint = utils.matcherHint('toBeSuccessful', 'api', '', { isNot });
+        const received = utils.printReceived(`Exit code: ${api.result.code}`);
+        const expected = utils.printExpected('Exit code: 0');
+
         return {
           pass: false,
-          message: () => error.message,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected: ${expected}\n` +
+            `Received: ${received}\n` +
+            (api.result.stderr ? `\nStderr: ${utils.DIM_COLOR(api.result.stderr)}` : ''),
           actual: api.result.code,
           expected: 0,
         };
@@ -74,15 +83,24 @@ export function setupBashMatchers() {
     },
 
     toFail(api: TestApi<any, any, any, any>, exitCode?: number) {
-      const { isNot } = this;
-      const error = api.failure(exitCode);
+      const { isNot, utils } = this;
+      const error = api.failure(exitCode as any);
 
       if (error) {
+        const hint = utils.matcherHint('toFail', 'api', exitCode ? String(exitCode) : '', { isNot });
+        const received = utils.printReceived(`Exit code: ${api.result.code}`);
+        const exp = exitCode ?? 'non-zero exit code';
+        const expected = utils.printExpected(`Exit code: ${exp}`);
+
         return {
           pass: false,
-          message: () => error.message,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected: ${expected}\n` +
+            `Received: ${received}`,
           actual: api.result.code,
-          expected: exitCode ?? 'non-zero exit code',
+          expected: exp,
         };
       }
 
@@ -98,13 +116,19 @@ export function setupBashMatchers() {
     },
 
     toReturn(api: TestApi<any, any, any, any>, expected: string) {
-      const { isNot } = this;
+      const { isNot, utils } = this;
       const error = api.returns(expected);
 
       if (error) {
+        const hint = utils.matcherHint('toReturn', 'api', '', { isNot });
+
         return {
           pass: false,
-          message: () => error.message,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected stdout: ${utils.printExpected(expected)}\n` +
+            `Received stdout: ${utils.printReceived(api.result.stdout)}`,
           actual: api.result.stdout,
           expected,
         };
@@ -119,14 +143,21 @@ export function setupBashMatchers() {
     },
 
     toReturnTrimmed(api: TestApi<any, any, any, any>, expected: string) {
-      const { isNot } = this;
+      const { isNot, utils } = this;
       const error = api.returnsTrimmed(expected);
 
       if (error) {
+        const hint = utils.matcherHint('toReturnTrimmed', 'api', '', { isNot });
+        const trimmed = api.result.stdout ? api.result.stdout.trim() : '';
+
         return {
           pass: false,
-          message: () => error.message,
-          actual: api.result.stdout,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected (trimmed): ${utils.printExpected(expected)}\n` +
+            `Received (trimmed): ${utils.printReceived(trimmed)}`,
+          actual: trimmed,
           expected,
         };
       }
@@ -140,13 +171,19 @@ export function setupBashMatchers() {
     },
 
     toReturnStdErr(api: TestApi<any, any, any, any>, expected: string) {
-      const { isNot } = this;
+      const { isNot, utils } = this;
       const error = api.stdErrReturns(expected);
 
       if (error) {
+        const hint = utils.matcherHint('toReturnStdErr', 'api', '', { isNot });
+
         return {
           pass: false,
-          message: () => error.message,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected stderr: ${utils.printExpected(expected)}\n` +
+            `Received stderr: ${utils.printReceived(api.result.stderr)}`,
           actual: api.result.stderr,
           expected,
         };
@@ -161,14 +198,21 @@ export function setupBashMatchers() {
     },
 
     toReturnStdErrTrimmed(api: TestApi<any, any, any, any>, expected: string) {
-      const { isNot } = this;
+      const { isNot, utils } = this;
       const error = api.stdErrReturnsTrimmed(expected);
 
       if (error) {
+        const hint = utils.matcherHint('toReturnStdErrTrimmed', 'api', '', { isNot });
+        const trimmed = api.result.stderr ? api.result.stderr.trim() : '';
+
         return {
           pass: false,
-          message: () => error.message,
-          actual: api.result.stderr,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected stderr (trimmed): ${utils.printExpected(expected)}\n` +
+            `Received stderr (trimmed): ${utils.printReceived(trimmed)}`,
+          actual: trimmed,
           expected,
         };
       }
@@ -182,13 +226,19 @@ export function setupBashMatchers() {
     },
 
     toContainInStdOut(api: TestApi<any, any, any, any>, expected: string) {
-      const { isNot } = this;
+      const { isNot, utils } = this;
       const error = api.contains(expected);
 
       if (error) {
+        const hint = utils.matcherHint('toContainInStdOut', 'api', '', { isNot });
+
         return {
           pass: false,
-          message: () => error.message,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected stdout to contain: ${utils.printExpected(expected)}\n` +
+            `Received stdout: ${utils.printReceived(api.result.stdout)}`,
           actual: api.result.stdout,
           expected: `string containing "${expected}"`,
         };
@@ -203,13 +253,19 @@ export function setupBashMatchers() {
     },
 
     toContainInStdErr(api: TestApi<any, any, any, any>, expected: string) {
-      const { isNot } = this;
+      const { isNot, utils } = this;
       const error = api.stdErrContains(expected);
 
       if (error) {
+        const hint = utils.matcherHint('toContainInStdErr', 'api', '', { isNot });
+
         return {
           pass: false,
-          message: () => error.message,
+          message: () =>
+            `${hint}\n\n` +
+            `Function: ${utils.BOLD_WEIGHT(api.fn)} in ${api.source}\n` +
+            `Expected stderr to contain: ${utils.printExpected(expected)}\n` +
+            `Received stderr: ${utils.printReceived(api.result.stderr)}`,
           actual: api.result.stderr,
           expected: `string containing "${expected}"`,
         };

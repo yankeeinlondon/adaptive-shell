@@ -1,4 +1,4 @@
-import { RGB, HexColor, stripBefore, trim, narrow } from "inferred-types";
+import { RGB, HexColor, stripBefore, trim, narrow, StringKeys, Fallback } from "inferred-types";
 
 const FG_START = narrow("\x1b[38;2;");
 const FG_END = "m" as const;
@@ -647,3 +647,92 @@ export {
     bg_light_red,
     bg_dark_red
 };
+
+
+const BOLD = "\x1b[1m" as const;
+const NORMAL =  "\x1b[22m" as const;
+const DIM =  "\x1b[2m" as const;
+const UNDERLINE = `\x1b[4m` as const;
+const NO_UNDERLINE = `\x1b[24m` as const;
+const STRIKETHROUGH = `\x1b[9m` as const;
+const NO_STRIKETHROUGH = `\x1b[29m` as const;
+const BLINK = `` as const;
+const NO_BLINK = `` as const;
+const RESET = narrow(`\x1b[33m`);
+
+const LOOKUP = narrow({
+    dim: DIM,
+    normal: NORMAL,
+    bold: BOLD,
+    reset: RESET,
+    strikethrough: STRIKETHROUGH,
+    no_strikethrough: NO_STRIKETHROUGH
+});
+
+type EscapeCode<T extends StringKeys<typeof LOOKUP>[number]> = typeof LOOKUP[T];
+
+export const format = {
+    // mode: ,
+
+    /**
+     * Boldfaces the text passed in and returns font weight to **normal**
+     * afterward.
+     */
+    bold<T extends string>(content: T): `${typeof BOLD}${T}${typeof NORMAL}` {
+        return `${BOLD}${content}${NORMAL}`
+    },
+    /**
+     * Dims the text passed in and returns font weight to **normal**
+     * afterward.
+     */
+    dim<T extends string>(content: T): `${typeof DIM}${T}${typeof NORMAL}` {
+        return `${DIM}${content}${NORMAL}`
+    },
+    /**
+     * **normal**`(content,[returnTo],[after])`
+     *
+     * Sets the text passed in to the default/normal weight.
+     *
+     * - by default it will simply set this before adding the `content`
+     *   and just leave this font weight in place
+     * - however, if you want to _return to_ some other font weight (e.g., bold/dim)
+     *   then you can specify that in `returnTo`.
+     * - in this situation where you are using the _return to_ functionality then
+     */
+    normal<T extends string, R extends "dim" | "normal" | "bold", A extends string>(
+        content: T,
+        returnTo: R = "normal" as R,
+        after?: A
+    ): R extends "normal" ? `${typeof NORMAL}${T}${Fallback<A,"">}` : `${typeof NORMAL}${T}${EscapeCode<R>}${Fallback<A,"">}}` {
+        return (
+            returnTo === "normal"
+                ? `${NORMAL}${content}${after || ""}`
+                : `${NORMAL}${content}${LOOKUP[returnTo]}${after || ""}${NORMAL}`
+        ) as R extends "normal" ? `${typeof NORMAL}${T}${Fallback<A,"">}` : `${typeof NORMAL}${T}${EscapeCode<R>}${Fallback<A,"">}}`
+    },
+
+    /**
+     * adds an _underline_ to the text in `content` and the adds a **no underline** escape
+     * code at the end.
+     */
+    underline<T extends string>(content: T): `${typeof UNDERLINE}${T}${typeof NO_UNDERLINE}` {
+        return `${UNDERLINE}${content}${NO_UNDERLINE}`
+    },
+
+    /**
+     * adds a _strikethrough_ adornment to the text in `content` and the adds a
+     * **no strikethrough** escape code at the end.
+     */
+    strikethrough<T extends string>(content: T): `${EscapeCode<"strikethrough">}${T}${EscapeCode<"no_strikethrough">}` {
+        return `${STRIKETHROUGH}${content}${NO_STRIKETHROUGH}`
+    },
+
+    /**
+     * returns the RESET escape sequence for terminals
+     */
+    reset(): EscapeCode<"reset"> {
+        return RESET
+    },
+
+
+}

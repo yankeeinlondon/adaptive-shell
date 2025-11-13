@@ -142,23 +142,30 @@ toBeSuccessful(api: TestApi<any, any, any, any>) {
 
 ### Error Message Beauty
 
-When a matcher fails, you get:
+When a matcher fails, you get beautifully formatted, **colored** output:
 
 ```txt
-ReturnsStdOut Error: The expected value of StdOut [something] was not what was expected [nothing]!
+expect(api).toReturn()
 
-in file tests/example.ts at line 4
+Function: lc in ./utils/text.sh
+Expected stdout: "WRONG VALUE"
+Received stdout: "hello"
 
-Context:
-  assertion: "returns",
-  source: "./utils/text.sh",
-  fn: "do_it",
-  expected: "something",
-  params: [],
-  result: {"code":1,"stderr":"","stdout":"nothing","parameters":[]}
+- Expected
++ Received
+
+- WRONG VALUE
++ hello
 ```
 
-This is provided automatically by `@yankeeinlondon/kind-error` and integrated seamlessly with Vitest!
+**Terminal Colors:**
+- Expected values: **Green**
+- Received values: **Red**
+- Function names: **Bold**
+- Diffs: Green (-) and Red (+)
+- Secondary info: Dimmed
+
+This uses Vitest's native color utilities (`utils.printExpected`, `utils.printReceived`, etc.) for consistent, professional error messages that match Vitest's own output style!
 
 ## Migration Guide
 

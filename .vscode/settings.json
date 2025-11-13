@@ -22,6 +22,7 @@
         "dotenv",
         "dscacheutil",
         "dups",
+        "errexit",
         "eslintcache",
         "findall",
         "flushcache",
@@ -52,6 +53,8 @@
         "ncpu",
         "neofetch",
         "nextid",
+        "notakeyword",
+        "nounset",
         "NUSHELL",
         "nvmrc",
         "opencode",
@@ -69,6 +72,7 @@
         "rubymine",
         "runlevel",
         "RUSTUP",
+        "shopt",
         "signingkey",
         "stty",
         "stylua",
@@ -87,6 +91,7 @@
         "wscript",
         "xclip",
         "xonsh",
+        "yaza",
         "yazi"
     ]
 }

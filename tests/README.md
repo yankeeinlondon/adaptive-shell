@@ -32,7 +32,7 @@ We use two complementary testing strategies:
 
 ### Directory Structure
 
-```
+```txt
 tests/
 ├── README.md                 # This file
 ├── helpers/

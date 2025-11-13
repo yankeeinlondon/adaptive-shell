@@ -5,7 +5,7 @@ import { cwd } from 'node:process';
 import { TestResult, TestOptions, asArray, SourcedTestUtil, TestUtil, TestApi, ToSpawnOptions, AsCommand, Quoted } from './index';
 import { DidNotFail, DidNotPass, StdErrReturn, StdOutReturn, StdOutReturnTrimmed } from './errors';
 import { fallback } from './fallback';
-import { TEST_ENV } from './constants';
+
 
 /**
  * converts a `TestOptions` hash into a `SpawnSyncOptions` hash.
@@ -159,7 +159,7 @@ function createApiSurface<
         },
 
         returnsTrimmed(expected) {
-            const trimmedStdout = result.stdout.trim();
+            const trimmedStdout = result.stdout ? result.stdout.trim() : "";
             const trimmedExpected = (expected as string).trim();
             if(trimmedStdout !== trimmedExpected) {
                 return StdOutReturnTrimmed({
@@ -187,7 +187,7 @@ function createApiSurface<
         },
 
         stdErrReturnsTrimmed(expected) {
-            const trimmedStderr = result.stderr.trim();
+            const trimmedStderr = result.stderr ? result.stderr.trim() : "";
             const trimmedExpected = (expected as string).trim();
             if(trimmedStderr !== trimmedExpected) {
                 return StdErrReturn({

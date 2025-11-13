@@ -13,13 +13,9 @@ export type TestResult<
     parameters: P,
     stdout: T["stdout"] extends "ignore"
     ? undefined
-    : T["stdout"] extends "pipe"
-    ? string
-    : undefined | string;
+    : string;
     stderr: T["stderr"] extends "ignore"
     ? undefined
-    : T["stderr"] extends "pipe"
-    ? string
-    : undefined | string;
+    : string;
     code: number;
 }

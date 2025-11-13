@@ -7,19 +7,26 @@ const mod = sourceScript("test.sh");
 describe('text utilities', () => {
 
     describe("Test Utility Usage", () => {
-        const step1 = sourceScript("text.sh"); // sourced file
-        const util = step1("do_something"); // add fn
-        const api = util(); // add parameters
 
-        /** API Surface */
-        expect(typeof api.success).toBe("function")
-        expect(typeof api.failure).toBe("function")
-        expect(typeof api.returns).toBe("function")
-        expect(typeof api.stdErrReturns).toBe("function")
-        expect(typeof api.returnsTrimmed).toBe("function")
-        expect(typeof api.stdErrReturnsTrimmed).toBe("function")
-        expect(typeof api.contains).toBe("function")
-        expect(typeof api.stdErrContains).toBe("function")
+
+        it("test", () => {
+
+            const step1 = sourceScript("text.sh"); // sourced file
+            const util = step1("do_something"); // add fn
+            const api = util(); // add parameters
+
+            /** API Surface */
+            expect(typeof api.success).toBe("function")
+            expect(typeof api.failure).toBe("function")
+            expect(typeof api.returns).toBe("function")
+            expect(typeof api.stdErrReturns).toBe("function")
+            expect(typeof api.returnsTrimmed).toBe("function")
+            expect(typeof api.stdErrReturnsTrimmed).toBe("function")
+            expect(typeof api.contains).toBe("function")
+            expect(typeof api.stdErrContains).toBe("function")
+
+        });
+
 
     })
 

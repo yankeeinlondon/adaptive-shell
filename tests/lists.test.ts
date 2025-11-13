@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { sourcedBash, bashExitCode } from './helpers/bash'
+import { sourcedBash, bashExitCode } from './helpers'
 
+/**
+ * NOTE: These tests cannot be easily converted to use sourceScript() because they require:
+ * 1. Setting up bash arrays (e.g., test_items=("apple" "banana"))
+ * 2. Passing array variable names by reference to functions
+ * 3. Piping data to stdin for *_val variant functions
+ *
+ * The sourceScript() framework is designed for calling individual functions with parameters,
+ * not for running multi-step bash scripts with state setup. These tests remain using the
+ * deprecated helpers (sourcedBash/bashExitCode) for now.
+ */
 describe('list utilities', () => {
   const testItems = ['apple', 'apricot', 'banana', 'berry', 'cherry', 'date', 'grape']
 

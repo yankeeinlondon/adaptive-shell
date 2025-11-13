@@ -23,6 +23,19 @@ rust() {
     log ""
 }
 
+neovim() {
+    nix-env -iA nixpkgs.neovim
+}
+
+eza() {
+    nix-env -iA nixpkgs.eza
+}
+
+dust() {
+    nix-env -iA nixpkgs.dust
+}
+
+
 bun() {
     log "- installing ${BOLD}${BLUE}Bun${RESET}"
     log ""
@@ -36,6 +49,10 @@ uv() {
     log ""
 }
 
+ripgrep() {
+    nix-env -iA nixpkgs.ripgrep
+}
+
 nvm() {
     # brew is often outdated
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
@@ -43,6 +60,21 @@ nvm() {
 
 yaza() {
     log ""
+}
+
+claude_code() {
+    if is_windows; then
+        irm https://claude.ai/install.ps1 | iex
+    fi
+
+}
+
+install_node() {
+    if is_wsl; then
+        sudo apt update && sudo apt upgrade -y
+    elif is_debian; then
+        sud apt update && sudo apt upgrade -y && apt install nodejs
+    fi
 }
 
 cloudflared() {
@@ -89,4 +121,4 @@ case "${1}" in
         log "- unknown package ${RED}${BOLD}${OS}${RESET} requested to install"
         exit 1
         ;;
-esac 
+esac
