@@ -197,3 +197,52 @@ const exitCode = bashExitCode('source ./utils.sh && arr=("a" "b") && func arr')
 ```
 
 See `tests/CUSTOM_MATCHERS.md` and `tests/README.md` for comprehensive testing guides.
+
+**Mocking External Commands**:
+
+For testing functions that call external commands (package managers, system tools), use the mock infrastructure in `tests/helpers/install-mocks.sh`. This allows testing install logic without actually installing anything.
+
+```typescript
+import { execSync } from 'child_process'
+
+function runWithMocks(options: {
+  availableCommands: string[]    // Commands that appear "installed"
+  existingPackages: string[]     // Packages that "exist" (format: "manager:pkg")
+  script: string                 // The bash script to run
+}): { calls: string[]; exitCode: number } {
+  // Source install.sh first, THEN mocks to override functions
+  const fullScript = `
+source utils/install.sh
+source tests/helpers/install-mocks.sh
+mock_available_commands ${options.availableCommands.map(c => `"${c}"`).join(' ')}
+mock_package_exists ${options.existingPackages.map(p => `"${p}"`).join(' ')}
+${options.script}
+# ... capture calls and exit code
+`
+  // Execute and parse results
+}
+
+// Example test
+it('should prefer brew over port', () => {
+  const result = runWithMocks({
+    availableCommands: ['brew', 'port'],
+    existingPackages: ['brew:jq'],
+    script: 'install_on_macos jq'
+  })
+  expect(result.calls.some(c => c.startsWith('brew:install'))).toBe(true)
+})
+```
+
+**Mock Infrastructure Features**:
+- `mock_available_commands "cmd1" "cmd2"` - Set which commands `has_command` returns true for
+- `mock_package_exists "brew:jq" "apt:vim"` - Set which packages "exist" in which managers
+- `mock_install_succeeds "brew:jq"` - Control which installs succeed (all succeed by default)
+- `reset_mocks` - Clear all mock state
+- `MOCK_CALLS` array - Records all mock function calls for verification
+
+**Supported Mocked Commands**:
+- Package managers: `brew`, `port`, `fink`, `apt`, `nala`, `dnf`, `yum`, `apk`, `pacman`, `yay`, `paru`
+- Language tools: `nix-env`, `cargo`
+- Utility overrides: `has_command`, `logc`, `SUDO`
+
+**Important Limitation**: Commands piped to other commands (e.g., `nix-env -qa pkg | grep`) run in subshells and cannot record mock calls. Test install commands (not piped) rather than query commands when verifying behavior.

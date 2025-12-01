@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { sourceScript, bashExitCode } from './helpers'
 import { execSync } from 'child_process'
 
@@ -11,16 +11,20 @@ import { execSync } from 'child_process'
 function runWithMocks(options: {
   availableCommands: string[]
   existingPackages: string[]
+  installedPackages?: string[]
   installSucceeds?: string[]
   script: string
 }): { calls: string[]; exitCode: number; output: string } {
-  const { availableCommands, existingPackages, installSucceeds = [], script } = options
+  const { availableCommands, existingPackages, installedPackages = [], installSucceeds = [], script } = options
 
   const availableCmd = availableCommands.length > 0
     ? `mock_available_commands ${availableCommands.map(c => `"${c}"`).join(' ')}`
     : ''
   const existingPkgs = existingPackages.length > 0
     ? `mock_package_exists ${existingPackages.map(p => `"${p}"`).join(' ')}`
+    : ''
+  const installedPkgs = installedPackages.length > 0
+    ? `mock_installed_packages ${installedPackages.map(p => `"${p}"`).join(' ')}`
     : ''
   const successPkgs = installSucceeds.length > 0
     ? `mock_install_succeeds ${installSucceeds.map(p => `"${p}"`).join(' ')}`
@@ -32,6 +36,7 @@ source utils/install.sh
 source tests/helpers/install-mocks.sh
 ${availableCmd}
 ${existingPkgs}
+${installedPkgs}
 ${successPkgs}
 ${script}
 exit_code=$?
@@ -42,6 +47,7 @@ done
 echo "---EXIT_CODE---"
 echo "$exit_code"
 `
+// ... existing execution logic ...
 
   let output = ''
   try {
@@ -540,3 +546,77 @@ describe('OS detection for install functions', () => {
     })
   })
 })
+
+describe('installed package listing', () => {
+  it('installed_cargo should list and link packages', () => {
+    const result = runWithMocks({
+      availableCommands: ['cargo'],
+      existingPackages: [],
+      installedPackages: ['cargo:ripgrep'],
+      script: 'installed_cargo'
+    })
+    expect(result.exitCode).toBe(0)
+    // Should contain formatted link [cargo] ripgrep
+    expect(result.output).toContain('[cargo]')
+    // Check for link escape code \033]8;;...
+    expect(result.output).toContain('https://crates.io/crates/ripgrep')
+  })
+
+  it('installed_brew should list formulae and casks', () => {
+    const result = runWithMocks({
+      availableCommands: ['brew'],
+      existingPackages: [],
+      installedPackages: ['brew:wget', 'cask:firefox'],
+      script: 'installed_brew'
+    })
+    expect(result.exitCode).toBe(0)
+    expect(result.output).toContain('[brew]')
+    expect(result.output).toContain('https://formulae.brew.sh/formula/wget')
+    expect(result.output).toContain('[cask]')
+    expect(result.output).toContain('https://formulae.brew.sh/cask/firefox')
+  })
+
+  it('installed should aggregate multiple managers', () => {
+    const result = runWithMocks({
+      availableCommands: ['brew', 'cargo'],
+      existingPackages: [],
+      installedPackages: ['brew:jq', 'cargo:ripgrep'],
+      script: 'installed'
+    })
+    expect(result.exitCode).toBe(0)
+    expect(result.output).toContain('[brew]')
+    expect(result.output).toContain('jq')
+    expect(result.output).toContain('[cargo]')
+    expect(result.output).toContain('ripgrep')
+  })
+
+  it('should filter output when arguments are provided', () => {
+    const result = runWithMocks({
+      availableCommands: ['brew', 'cargo'],
+      existingPackages: [],
+      installedPackages: ['brew:jq', 'brew:wget', 'cargo:ripgrep', 'cargo:fd-find'],
+      script: 'installed "jq" "fd"'
+    })
+    expect(result.exitCode).toBe(0)
+    // Should match jq
+    expect(result.output).toContain('jq')
+    // Should match fd-find (contains fd)
+    expect(result.output).toContain('fd-find')
+    // Should NOT match wget
+    expect(result.output).not.toContain('wget')
+    // Should NOT match ripgrep
+    expect(result.output).not.toContain('ripgrep')
+  })
+
+  it('should handle case-insensitive filtering', () => {
+    const result = runWithMocks({
+      availableCommands: ['brew'],
+      existingPackages: [],
+      installedPackages: ['brew:RipGrep'],
+      script: 'installed "ripgrep"'
+    })
+    expect(result.exitCode).toBe(0)
+    expect(result.output).toContain('RipGrep')
+  })
+})
+

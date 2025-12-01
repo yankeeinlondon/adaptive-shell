@@ -346,27 +346,133 @@ function install_on_fedora() {
 }
 
 
-# installed_cargo <filter>
+# _filter_and_link <manager_label> <url_prefix> <url_suffix> [filters...]
 #
-# TODO: implement this function
+# Helper function to filter and link packages from stdin.
+# Reads package names from stdin, filters them using grep (OR logic),
+# and prints them with links.
+function _filter_and_link() {
+    local -r label="${1}"
+    local -r url_prefix="${2}"
+    local -r url_suffix="${3}"
+    shift 3
+    local -r filters=("$@")
+
+    local grep_pattern=""
+    if [[ ${#filters[@]} -gt 0 ]]; then
+        local first=true
+        for f in "${filters[@]}"; do
+            if $first; then first=false; else grep_pattern+="|"; fi
+            grep_pattern+="$f"
+        done
+    fi
+
+    while read -r pkg; do
+        if [[ -z "$pkg" ]]; then continue; fi
+
+        if [[ -z "$grep_pattern" ]] || echo "$pkg" | grep -q -i -E "$grep_pattern"; then
+             local url="${url_prefix}${pkg}${url_suffix}"
+             local linked
+             linked="$(link "$pkg" "$url")"
+             echo "[${label}] ${linked}"
+        fi
+    done
+}
+
+# installed_cargo [filters...]
 function installed_cargo() {
-    :
+    if ! has_command "cargo"; then return; fi
+    cargo install --list 2>/dev/null | grep -E '^[a-z0-9_-]+ v' | cut -d' ' -f1 | \
+        _filter_and_link "cargo" "https://crates.io/crates/" "" "$@"
 }
 
-# installed_brew <filter>
-#
-# TODO: implement this function
+# installed_brew [filters...]
 function installed_brew() {
-    :
+    if ! has_command "brew"; then return; fi
+    # Formulae
+    brew list --formula -1 2>/dev/null | \
+        _filter_and_link "brew" "https://formulae.brew.sh/formula/" "" "$@"
+    # Casks
+    brew list --cask -1 2>/dev/null | \
+        _filter_and_link "cask" "https://formulae.brew.sh/cask/" "" "$@"
 }
 
+# installed_npm [filters...]
+function installed_npm() {
+    if ! has_command "npm"; then return; fi
+    # parseable returns /path/to/package, we want basename
+    npm list -g --depth=0 --parseable 2>/dev/null | \
+        awk -F/ '{print $NF}' | tail -n +2 | \
+        _filter_and_link "npm" "https://www.npmjs.com/package/" "" "$@"
+}
 
+# installed_pip [filters...]
+function installed_pip() {
+    if ! has_command "pip"; then return; fi
+    pip list --format=columns 2>/dev/null | tail -n +3 | awk '{print $1}' | \
+        _filter_and_link "pip" "https://pypi.org/project/" "" "$@"
+}
 
-# installed <filter>
+# installed_gem [filters...]
+function installed_gem() {
+    if ! has_command "gem"; then return; fi
+    gem list 2>/dev/null | cut -d' ' -f1 | \
+        _filter_and_link "gem" "https://rubygems.org/gems/" "" "$@"
+}
+
+# installed_nix [filters...]
+function installed_nix() {
+    if ! has_command "nix-env"; then return; fi
+    nix-env -q 2>/dev/null | \
+        _filter_and_link "nix" "https://search.nixos.org/packages?channel=unstable&query=" "" "$@"
+}
+
+# installed_apt [filters...]
+function installed_apt() {
+    if ! has_command "apt"; then return; fi
+    # apt list is noisy ("Listing..."), grep -v removes it
+    apt list --installed 2>/dev/null | grep -v "^Listing..." | cut -d/ -f1 | \
+        _filter_and_link "apt" "https://packages.debian.org/search?keywords=" "" "$@"
+}
+
+# installed_apk [filters...]
+function installed_apk() {
+    if ! has_command "apk"; then return; fi
+    apk info 2>/dev/null | \
+        _filter_and_link "apk" "https://pkgs.alpinelinux.org/packages?name=" "" "$@"
+}
+
+# installed_pacman [filters...]
+function installed_pacman() {
+    if ! has_command "pacman"; then return; fi
+    pacman -Qq 2>/dev/null | \
+        _filter_and_link "pacman" "https://archlinux.org/packages/?q=" "" "$@"
+}
+
+# installed_dnf [filters...]
+function installed_dnf() {
+    if ! has_command "dnf"; then return; fi
+    dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}' | cut -d. -f1 | \
+        _filter_and_link "dnf" "https://packages.fedoraproject.org/pkgs/" "" "$@"
+}
+
+# installed [filters...]
 #
-# TODO: implement this function
+# Lists installed packages from all detected package managers.
+# Accepts optional arguments as filters (OR condition).
 function installed() {
-    :
+    local -r filters=("$@")
+
+    installed_brew "${filters[@]}"
+    installed_cargo "${filters[@]}"
+    installed_npm "${filters[@]}"
+    installed_pip "${filters[@]}"
+    installed_gem "${filters[@]}"
+    installed_nix "${filters[@]}"
+    installed_apt "${filters[@]}"
+    installed_apk "${filters[@]}"
+    installed_pacman "${filters[@]}"
+    installed_dnf "${filters[@]}"
 }
 
 
