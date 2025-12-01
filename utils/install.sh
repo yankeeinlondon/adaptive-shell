@@ -15,6 +15,56 @@ fi
 # shellcheck source="../utils.sh"
 source "${ROOT}/utils.sh"
 
+# _try_cargo_install <pkg1> [<pkg2>] ...
+#
+# Attempts to install packages using cargo. Returns 0 on success, 1 on failure.
+# Note: cargo install builds from source, which takes longer than pre-built binaries.
+function _try_cargo_install() {
+    local -r pkg_names=("$@")
+
+    if ! has_command "cargo"; then
+        return 1
+    fi
+
+    for pkg in "${pkg_names[@]}"; do
+        # Check if package exists on crates.io
+        if cargo search --limit 1 "${pkg}" 2>/dev/null | grep -q "^${pkg} = "; then
+            logc "- building {{GREEN}}${pkg}{{RESET}} from source using {{BOLD}}cargo{{RESET}}"
+            cargo install "${pkg}" && return 0
+            logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to build {{GREEN}}${pkg}{{RESET}} package!"
+            return 1
+        else
+            logc "- {{BOLD}}cargo{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+        fi
+    done
+
+    return 1
+}
+
+# _try_nix_install <pkg1> [<pkg2>] ...
+#
+# Attempts to install packages using nix-env. Returns 0 on success, 1 on failure.
+function _try_nix_install() {
+    local -r pkg_names=("$@")
+
+    if ! has_command "nix-env"; then
+        return 1
+    fi
+
+    for pkg in "${pkg_names[@]}"; do
+        if nix-env -qa "${pkg}" 2>/dev/null | grep -q .; then
+            logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nix{{RESET}}"
+            nix-env -iA "nixpkgs.${pkg}" && return 0
+            logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+            return 1
+        else
+            logc "- {{BOLD}}nix{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+        fi
+    done
+
+    return 1
+}
+
 deno() {
     log ""
 }
@@ -23,127 +73,454 @@ rust() {
     log ""
 }
 
-# install_on_macos <pkg> [<alt_for_nix>]
+# install_on_macos [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
 #
-# Attempts to install a named package on macos
+# Attempts to install a named package on macOS. Accepts multiple package name
+# variants which are tried in order with each package manager until one succeeds.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
 function install_on_macos() {
-    local -r pkg="${1:?no package provided to install_on_macos()!}"
-    local -r nixAlt="${2:-${pkg}}"
+    local prefer_nix=false
+    local prefer_cargo=false
+    local pkg_names=()
 
-    if [[ "$(has_command "brew")" && "$(brew info "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}brew{{RESET}}"
-        brew install "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
+    # Parse flags from arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prefer-nix)
+                prefer_nix=true
+                shift
+                ;;
+            --prefer-cargo)
+                prefer_cargo=true
+                shift
+                ;;
+            *)
+                pkg_names+=("$1")
+                shift
+                ;;
+        esac
+    done
 
-    # TODO if there is a way to validate whether "port" has this package like
-    # we're doing for Brew then add that here
-    elif has_command "port"; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}port{{RESET}}"
-        port install "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    # TODO if there is a way to validate whether "fink" has this package like
-    # we're doing for Brew then add that here
-    elif has_command "fink"; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}fink{{RESET}}"
-        fink install "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    # TODO if there is a way to validate whether "nix-env" has this package like
-    # we're doing for Brew then add that here
-    elif has_command "nix-env"; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nix{{RESET}}"
-        nix-env -iA "nixpkgs.${nixAlt}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-
-    else
-        logc "- unsure how to install '${pkg}' on this machine's OS and available package managers"
+    if [[ ${#pkg_names[@]} -eq 0 ]]; then
+        logc "{{RED}}ERROR{{RESET}}: no package provided to install_on_macos()!"
         return 1
     fi
 
+    # Try cargo first if preferred
+    if [[ "$prefer_cargo" == true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try nix first if preferred
+    if [[ "$prefer_nix" == true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try brew with each package name variant
+    if has_command "brew"; then
+        for pkg in "${pkg_names[@]}"; do
+            if brew info "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}brew{{RESET}}"
+                brew install "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}brew{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try port with each package name variant
+    if has_command "port"; then
+        for pkg in "${pkg_names[@]}"; do
+            if port search --exact "${pkg}" 2>/dev/null | grep -q .; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}port{{RESET}}"
+                port install "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}port{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try fink with each package name variant
+    if has_command "fink"; then
+        for pkg in "${pkg_names[@]}"; do
+            if fink list -t "${pkg}" 2>/dev/null | grep -q "^${pkg}"; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}fink{{RESET}}"
+                fink install "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}fink{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try nix-env (if not already tried as preferred)
+    if [[ "$prefer_nix" != true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try cargo (if not already tried as preferred)
+    if [[ "$prefer_cargo" != true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Nothing worked
+    logc "- unsure how to install any of '${pkg_names[*]}' on this macOS system"
+    return 1
 }
 
+# install_on_debian [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
+#
+# Attempts to install a named package on Debian/Ubuntu. Accepts multiple package name
+# variants which are tried in order with each package manager until one succeeds.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
 function install_on_debian() {
-    local -r pkg="${1:?no package provided to install_on_debian()!}"
-    local -r nixAlt="${2:-${pkg}}"
+    local prefer_nix=false
+    local prefer_cargo=false
+    local pkg_names=()
 
-    if [[ "$(has_command "nala")" && "$(apt info "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nala{{RESET}}"
-        ${SUDO} nala install "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    elif [[ "$(has_command "apt")" && "$(apt info "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}apt{{RESET}}"
-        ${SUDO} apt install "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    elif [[ "$(has_command "nix-env")" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nix{{RESET}}"
-        nix-env -iA "nixpkgs.${nixAlt}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    else
-        logc "- unsure how to install '${pkg}' on this Debian system"
+    # Parse flags from arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prefer-nix)
+                prefer_nix=true
+                shift
+                ;;
+            --prefer-cargo)
+                prefer_cargo=true
+                shift
+                ;;
+            *)
+                pkg_names+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ${#pkg_names[@]} -eq 0 ]]; then
+        logc "{{RED}}ERROR{{RESET}}: no package provided to install_on_debian()!"
         return 1
     fi
+
+    # Try cargo first if preferred
+    if [[ "$prefer_cargo" == true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try nix first if preferred
+    if [[ "$prefer_nix" == true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try nala (preferred over apt) with each package name variant
+    if has_command "nala"; then
+        for pkg in "${pkg_names[@]}"; do
+            if apt info "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nala{{RESET}}"
+                ${SUDO} nala install -y "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}nala{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try apt with each package name variant
+    if has_command "apt"; then
+        for pkg in "${pkg_names[@]}"; do
+            if apt info "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}apt{{RESET}}"
+                ${SUDO} apt install -y "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}apt{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try nix-env (if not already tried as preferred)
+    if [[ "$prefer_nix" != true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try cargo (if not already tried as preferred)
+    if [[ "$prefer_cargo" != true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Nothing worked
+    logc "- unsure how to install any of '${pkg_names[*]}' on this Debian system"
+    return 1
 }
 
-# install_on_fedora <pkg> [<alt_for_nix>]
+# install_on_fedora [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
 #
-# Attempts to install a named package on Fedora/RHEL/CentOS using dnf or yum
+# Attempts to install a named package on Fedora/RHEL/CentOS. Accepts multiple package name
+# variants which are tried in order with each package manager until one succeeds.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
 function install_on_fedora() {
-    local -r pkg="${1:?no package provided to install_on_fedora()!}"
-    local -r nixAlt="${2:-${pkg}}"
+    local prefer_nix=false
+    local prefer_cargo=false
+    local pkg_names=()
 
-    if [[ "$(has_command "dnf")" && "$(dnf info "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}dnf{{RESET}}"
-        ${SUDO} dnf install -y "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    elif [[ "$(has_command "yum")" && "$(yum info "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}yum{{RESET}}"
-        ${SUDO} yum install -y "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    elif [[ "$(has_command "nix-env")" && "$(nix-env -qa "${nixAlt}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nix{{RESET}}"
-        nix-env -iA "nixpkgs.${nixAlt}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    else
-        logc "- unsure how to install '${pkg}' on this Fedora system"
+    # Parse flags from arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prefer-nix)
+                prefer_nix=true
+                shift
+                ;;
+            --prefer-cargo)
+                prefer_cargo=true
+                shift
+                ;;
+            *)
+                pkg_names+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ${#pkg_names[@]} -eq 0 ]]; then
+        logc "{{RED}}ERROR{{RESET}}: no package provided to install_on_fedora()!"
         return 1
     fi
+
+    # Try cargo first if preferred
+    if [[ "$prefer_cargo" == true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try nix first if preferred
+    if [[ "$prefer_nix" == true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try dnf with each package name variant
+    if has_command "dnf"; then
+        for pkg in "${pkg_names[@]}"; do
+            if dnf info "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}dnf{{RESET}}"
+                ${SUDO} dnf install -y "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}dnf{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try yum with each package name variant
+    if has_command "yum"; then
+        for pkg in "${pkg_names[@]}"; do
+            if yum info "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}yum{{RESET}}"
+                ${SUDO} yum install -y "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}yum{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try nix-env (if not already tried as preferred)
+    if [[ "$prefer_nix" != true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try cargo (if not already tried as preferred)
+    if [[ "$prefer_cargo" != true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Nothing worked
+    logc "- unsure how to install any of '${pkg_names[*]}' on this Fedora system"
+    return 1
 }
 
-# install_on_alpine <pkg> [<alt_for_nix>]
+# installed <filter>
+function installed() {
+    # TODO
+}
+
+
+# install_on_alpine [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
 #
-# Attempts to install a named package on Alpine Linux using apk
+# Attempts to install a named package on Alpine Linux. Accepts multiple package name
+# variants which are tried in order with each package manager until one succeeds.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
 function install_on_alpine() {
-    local -r pkg="${1:?no package provided to install_on_alpine()!}"
-    local -r nixAlt="${2:-${pkg}}"
+    local prefer_nix=false
+    local prefer_cargo=false
+    local pkg_names=()
 
-    if [[ "$(has_command "apk")" && "$(apk search -e "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}apk{{RESET}}"
-        ${SUDO} apk add "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    elif [[ "$(has_command "nix-env")" && "$(nix-env -qa "${nixAlt}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nix{{RESET}}"
-        nix-env -iA "nixpkgs.${nixAlt}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    else
-        logc "- unsure how to install '${pkg}' on this Alpine system"
+    # Parse flags from arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prefer-nix)
+                prefer_nix=true
+                shift
+                ;;
+            --prefer-cargo)
+                prefer_cargo=true
+                shift
+                ;;
+            *)
+                pkg_names+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ${#pkg_names[@]} -eq 0 ]]; then
+        logc "{{RED}}ERROR{{RESET}}: no package provided to install_on_alpine()!"
         return 1
     fi
+
+    # Try cargo first if preferred
+    if [[ "$prefer_cargo" == true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try nix first if preferred
+    if [[ "$prefer_nix" == true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try apk with each package name variant
+    if has_command "apk"; then
+        for pkg in "${pkg_names[@]}"; do
+            if apk search -e "${pkg}" 2>/dev/null | grep -q .; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}apk{{RESET}}"
+                ${SUDO} apk add "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}apk{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try nix-env (if not already tried as preferred)
+    if [[ "$prefer_nix" != true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try cargo (if not already tried as preferred)
+    if [[ "$prefer_cargo" != true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Nothing worked
+    logc "- unsure how to install any of '${pkg_names[*]}' on this Alpine system"
+    return 1
 }
 
-# install_on_arch <pkg> [<alt_for_nix>]
+# install_on_arch [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
 #
-# Attempts to install a named package on Arch Linux using pacman, with yay/paru fallback for AUR
+# Attempts to install a named package on Arch Linux. Accepts multiple package name
+# variants which are tried in order with each package manager until one succeeds.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
 function install_on_arch() {
-    local -r pkg="${1:?no package provided to install_on_arch()!}"
-    local -r nixAlt="${2:-${pkg}}"
+    local prefer_nix=false
+    local prefer_cargo=false
+    local pkg_names=()
 
-    # Check if package exists in official repos via pacman
-    if [[ "$(has_command "pacman")" && "$(pacman -Si "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}pacman{{RESET}}"
-        ${SUDO} pacman -S --noconfirm "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    # Check AUR via yay
-    elif [[ "$(has_command "yay")" && "$(yay -Si "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}yay{{RESET}} (AUR)"
-        yay -S --noconfirm "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    # Check AUR via paru
-    elif [[ "$(has_command "paru")" && "$(paru -Si "${pkg}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}paru{{RESET}} (AUR)"
-        paru -S --noconfirm "${pkg}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    # Fallback to nix-env
-    elif [[ "$(has_command "nix-env")" && "$(nix-env -qa "${nixAlt}" 2>/dev/null)" ]]; then
-        logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}nix{{RESET}}"
-        nix-env -iA "nixpkgs.${nixAlt}" || ( logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!" && return 1 )
-    else
-        logc "- unsure how to install '${pkg}' on this Arch system"
+    # Parse flags from arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prefer-nix)
+                prefer_nix=true
+                shift
+                ;;
+            --prefer-cargo)
+                prefer_cargo=true
+                shift
+                ;;
+            *)
+                pkg_names+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ${#pkg_names[@]} -eq 0 ]]; then
+        logc "{{RED}}ERROR{{RESET}}: no package provided to install_on_arch()!"
         return 1
     fi
+
+    # Try cargo first if preferred
+    if [[ "$prefer_cargo" == true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try nix first if preferred
+    if [[ "$prefer_nix" == true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try pacman (official repos) with each package name variant
+    if has_command "pacman"; then
+        for pkg in "${pkg_names[@]}"; do
+            if pacman -Si "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}pacman{{RESET}}"
+                ${SUDO} pacman -S --noconfirm "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}pacman{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try yay (AUR) with each package name variant
+    if has_command "yay"; then
+        for pkg in "${pkg_names[@]}"; do
+            if yay -Si "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}yay{{RESET}} (AUR)"
+                yay -S --noconfirm "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}yay{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try paru (AUR) with each package name variant
+    if has_command "paru"; then
+        for pkg in "${pkg_names[@]}"; do
+            if paru -Si "${pkg}" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}paru{{RESET}} (AUR)"
+                paru -S --noconfirm "${pkg}" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}paru{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try nix-env (if not already tried as preferred)
+    if [[ "$prefer_nix" != true ]]; then
+        _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try cargo (if not already tried as preferred)
+    if [[ "$prefer_cargo" != true ]]; then
+        _try_cargo_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Nothing worked
+    logc "- unsure how to install any of '${pkg_names[*]}' on this Arch system"
+    return 1
 }
 
 function install_jq() {
@@ -151,17 +528,37 @@ function install_jq() {
         install_on_macos "jq"
     elif is_debian || is_ubuntu; then
         install_on_debian "jq"
+    elif is_alpine; then
+        install_on_alpine "jq"
+    elif is_fedora; then
+        install_on_fedora "jq"
+    elif is_arch; then
+        install_on_arch "jq"
+
     else
         logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}jq{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
         return 1
     fi
 }
 
-neovim() {
-    nix-env -iA nixpkgs.neovim
+function install_neovim() {
+    logc "\nInstalling {{BOLD}}{{BLUE}}neovim{{RESET}}"
+    if is_mac; then
+        install_on_macos "neovim"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "neovim"
+    elif is_alpine; then
+        install_on_alpine "neovim"
+    elif is_fedora; then
+        install_on_fedora "neovim"
+    else
+        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}neovim{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
+        return 1
+    fi
 }
 
-eza() {
+# installs `eza` if it can but if not then it will try `exa`
+function install_eza() {
     nix-env -iA nixpkgs.eza
 }
 
@@ -170,7 +567,7 @@ dust() {
 }
 
 
-bun() {
+install_bun() {
     log "- installing ${BOLD}${BLUE}Bun${RESET}"
     log ""
     curl -fsSL https://bun.sh/install | bash

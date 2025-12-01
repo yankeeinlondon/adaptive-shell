@@ -132,6 +132,20 @@ function has_command() {
     fi
 }
 
+# missing_command <cmd>
+#
+# checks that a given `cmd` is **NOT** installed on system
+# currently.
+function missing_command() {
+    local -r cmd="${1:?cmd is missing}"
+
+    if command -v "${cmd}" &> /dev/null; then
+        return 1
+    else
+        return 0
+    fi
+}
+
 
 # justfile()
 #

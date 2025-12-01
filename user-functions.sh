@@ -199,7 +199,7 @@ function track() {
 # information about aliases, functions, binary
 # paths, etc.
 function about() {
-    local -r file="${REPORTS}/about"
+    local -r file="${REPORTS}/about.sh"
 
     bash "${file}" "report_about"
 }

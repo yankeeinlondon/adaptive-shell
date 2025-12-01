@@ -17,12 +17,36 @@ source "${ROOT}/color.sh"
 # shellcheck source="../utils.sh"
 source "${ROOT}/utils.sh"
 
+# lxc_container [-j | --json]
+#
+# Returns the lxc container information.
+# This will be different based on whether
+# an API Key is found at `${HOME}/.config/pve/container/container.env`
+#
+# if this function is called with `-h` or `--help`
+# then a help message will be returned
+function lxc_container() {
+    local message;
+
+    if is_lxc; then
+
+        if file_exists "${HOME}/.config/pve/container/container.env"; then
+            message="{{BOLD}}Proxmox LXC{{RESET}} "
+        else
+            message="{{BOLD}}LXC{{RESET}} container"
+        fi
+
+
+
+    fi
+}
+
 
 function net() {
     setup_colors
     if [[ "$(os)" == "macos" ]]; then
         ifconfig | grep "inet "
-    elif [[ "$(os)" == "linux" ]]; then 
+    elif [[ "$(os)" == "linux" ]]; then
         ip addr show | grep "inet "
     fi
     remove_colors
@@ -179,7 +203,7 @@ function sys() {
         log "${BOLD}SSH:${RESET}       $(get_ssh_connection)"
     fi
 
-    editors 
+    editors
     setup_colors
     log "${BOLD}Lang:${RESET}      ${PROG[*]}"
 
@@ -199,7 +223,7 @@ function sys() {
     fi
 
     log "${BOLD}Network:${RESET}"
-    net 
+    net
 
     STORAGE="$(get_storage)"
     STORAGE="$(find_replace "dev" "${DIM}dev${RESET}" "${STORAGE}")"
@@ -213,7 +237,7 @@ function sys() {
 
     log "${BOLD}Storage:${RESET}"
     log "$(indent "    " "${STORAGE}")"
-    
+
     remove_colors
 }
 

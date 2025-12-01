@@ -48,9 +48,21 @@ function logc() {
     fi
 }
 
-
-function out() {
-    printf "%b\\n" "${*}"
+# stdout <content>
+#
+# Logs to **stdout** and will also identify color template codes
+# and use them in the output.
+function stdout() {
+    # Check if colors are not set up and set them up if needed
+    if [[ "$colors_missing" == "0" ]]; then
+        setup_colors
+        content="$(colorize "${*}")"
+        printf "%b\\n" "${content}${reset}"
+        remove_colors
+    else
+        content="$(colorize "${*}")"
+        printf "%b\\n" "${content}${reset}"
+    fi
 }
 
 function panic() {

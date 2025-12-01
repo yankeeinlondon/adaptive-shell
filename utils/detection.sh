@@ -116,7 +116,9 @@ is_lxc() {
     return 1
 }
 
-# Check for VM
+# is_vm
+#
+# Check for VM (any hypervisor)
 is_vm() {
     # Check common VM indicators
     if grep -q 'hypervisor' /proc/cpuinfo 2>/dev/null ||
@@ -125,6 +127,49 @@ is_vm() {
         return 0
     fi
     return 1
+}
+
+# is_kvm_vm
+#
+# Check if running in a KVM/QEMU VM specifically.
+# This is the virtualization technology used by Proxmox VE,
+# but also by other hypervisors (libvirt, oVirt, OpenStack, etc.)
+is_kvm_vm() {
+    # Method 1: Use systemd-detect-virt if available (most reliable)
+    if command -v systemd-detect-virt >/dev/null 2>&1; then
+        local virt_type
+        virt_type=$(systemd-detect-virt --vm 2>/dev/null)
+        if [[ "$virt_type" == "kvm" || "$virt_type" == "qemu" ]]; then
+            return 0
+        fi
+    fi
+
+    # Method 2: Check DMI/SMBIOS for QEMU manufacturer
+    if [ -f /sys/class/dmi/id/sys_vendor ]; then
+        if grep -qi 'qemu' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    # Method 3: Check product name for KVM
+    if [ -f /sys/class/dmi/id/product_name ]; then
+        if grep -qi -e 'kvm' -e 'qemu' /sys/class/dmi/id/product_name 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+#
+is_pve_container() {
+    if is_lxc; then
+        return 0;
+    elif is_vm; then
+        return 0;
+    else
+        return 1;
+    fi
 }
 
 # using_bash_3

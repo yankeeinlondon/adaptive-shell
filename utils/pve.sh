@@ -46,16 +46,19 @@ API_BASE="/api2/json/"
 function has_pve_api_key() {
     # Check environment variable first (fastest)
     if not_empty "${PVE_API_KEY}"; then
+        # shellcheck disable=SC2086
         return ${EXIT_OK}
     fi
 
     # Check for mounted config in containers/VMs
     if is_lxc || is_vm; then
         if file_exists "${HOME}/.config/pve/api-key"; then
+            # shellcheck disable=SC2086
             return ${EXIT_OK}
         fi
     fi
 
+    # shellcheck disable=SC2086
     return ${EXIT_FALSE}
 }
 
@@ -67,6 +70,7 @@ function has_pve_api_key() {
 function is_pve_container() {
     # Must be running in a container or VM
     if ! is_lxc && ! is_vm; then
+        # shellcheck disable=SC2086
         return ${EXIT_FALSE}
     fi
 
@@ -90,11 +94,13 @@ function pve_api_get() {
 
     if ! has_command "jq"; then
         log_error "jq is required for Proxmox API calls. Install with: apt install jq"
+        # shellcheck disable=SC2086
         return ${EXIT_CONFIG}
     fi
 
     if is_empty "${host}"; then
         log_error "No Proxmox host found. Set PROXMOX_HOST environment variable."
+        # shellcheck disable=SC2086
         return ${EXIT_API}
     fi
 
@@ -106,6 +112,7 @@ function pve_api_get() {
 
     if [[ -z "${result}" ]] || ! echo "${result}" | jq -e '.data' &>/dev/null; then
         log_error "Proxmox API call failed: GET https://${host}:${PROXMOX_API_PORT}${fq_path}"
+        # shellcheck disable=SC2086
         return ${EXIT_API}
     fi
 
@@ -395,6 +402,7 @@ function about_container() {
             message="{{BOLD}}VM{{RESET}}"
         fi
     else
+        # shellcheck disable=SC2086
         return ${EXIT_FALSE}
     fi
 
