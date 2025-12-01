@@ -23,8 +23,10 @@ source "${UTILS}/text.sh"
 #
 # Internal helper to send OSC query and read response.
 # Returns the response content or empty string on timeout/failure.
+#
+# Supports tmux passthrough when running inside tmux.
 _query_terminal_osc() {
-    local -r osc_code="${1:?OSC code required}"
+    local osc_code="${1:?OSC code required}"
     local response=""
 
     # Check if we have a terminal
@@ -47,8 +49,20 @@ _query_terminal_osc() {
         return 1
     }
 
+    # Build the query sequence
+    local query_seq
+    query_seq=$(printf '\033]%s;?\a' "$osc_code")
+
+    # If running in tmux, wrap with passthrough sequence
+    # tmux requires: ESC Ptmux; ESC <actual sequence> ESC \
+    if [[ -n "${TMUX:-}" ]]; then
+        # Double the ESC characters and wrap in tmux passthrough
+        # ESC P tmux; ESC ESC ] code ; ? BEL ESC \
+        query_seq=$(printf '\033Ptmux;\033\033]%s;?\a\033\\' "$osc_code")
+    fi
+
     # Send query to terminal
-    printf '\033]%s;?\a' "$osc_code" >/dev/tty
+    printf '%s' "$query_seq" >/dev/tty
 
     # Read response with timeout
     response=$(dd bs=100 count=1 2>/dev/null </dev/tty)
@@ -59,6 +73,56 @@ _query_terminal_osc() {
     printf '%s' "$response"
 }
 
+# _parse_osc_rgb_response <response>
+#
+# Internal helper to parse OSC RGB response format.
+# Input: Response string containing "rgb:RRRR/GGGG/BBBB"
+# Output: "R G B" in 0-255 range, or empty on failure
+#
+# Works in both Bash and Zsh by avoiding shell-specific regex arrays.
+_parse_osc_rgb_response() {
+    local response="${1:-}"
+
+    # Extract the rgb:XXXX/YYYY/ZZZZ portion using parameter expansion
+    # This approach avoids BASH_REMATCH vs match array incompatibility
+    local rgb_part=""
+
+    # Find "rgb:" in the response
+    if [[ "$response" == *"rgb:"* ]]; then
+        # Extract everything after "rgb:"
+        rgb_part="${response#*rgb:}"
+        # Remove anything after the RGB values (BEL, ST, etc.)
+        # RGB format is HEX/HEX/HEX where HEX is 2-4 hex chars
+        rgb_part="${rgb_part%%[^0-9a-fA-F/]*}"
+    else
+        return 1
+    fi
+
+    # Split by "/" - need to handle both shells
+    local r_hex g_hex b_hex
+    local IFS_save="$IFS"
+    IFS='/'
+    # Use read to split - works in both bash and zsh
+    read -r r_hex g_hex b_hex <<< "$rgb_part"
+    IFS="$IFS_save"
+
+    # Validate we got all three components
+    [[ -n "$r_hex" ]] && [[ -n "$g_hex" ]] && [[ -n "$b_hex" ]] || return 1
+
+    # Validate hex format
+    [[ "$r_hex" =~ ^[0-9a-fA-F]+$ ]] || return 1
+    [[ "$g_hex" =~ ^[0-9a-fA-F]+$ ]] || return 1
+    [[ "$b_hex" =~ ^[0-9a-fA-F]+$ ]] || return 1
+
+    # Convert to 8-bit (take first 2 hex digits if 4 digits)
+    local r g b
+    r=$((16#${r_hex:0:2}))
+    g=$((16#${g_hex:0:2}))
+    b=$((16#${b_hex:0:2}))
+
+    printf '%d %d %d' "$r" "$g" "$b"
+}
+
 # terminal_background_color
 #
 # Query the terminal for its default background color using OSC 11.
@@ -66,34 +130,121 @@ _query_terminal_osc() {
 #
 # Environment variable overrides:
 # - TERMINAL_BG_COLOR: If set, returns this value directly (format: "R G B")
+#
+# Shell compatibility: Works in both Bash and Zsh.
+# tmux support: Automatically uses passthrough sequences when running in tmux.
 terminal_background_color() {
-    # Check for override
+    # Check for explicit override (highest priority)
     if [[ -n "${TERMINAL_BG_COLOR:-}" ]]; then
         printf '%s' "$TERMINAL_BG_COLOR"
         return 0
     fi
 
-    local response
+    # Query terminal
+    local response result
     response=$(_query_terminal_osc 11) || return 1
 
-    # Parse rgb:RRRR/GGGG/BBBB format
-    # Terminal returns 16-bit hex values (0000-ffff)
-    if [[ "$response" =~ rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+) ]]; then
-        local r_hex="${BASH_REMATCH[1]}"
-        local g_hex="${BASH_REMATCH[2]}"
-        local b_hex="${BASH_REMATCH[3]}"
+    # Parse the response
+    result=$(_parse_osc_rgb_response "$response") || return 1
 
-        # Convert to 8-bit (take first 2 hex digits if 4 digits)
-        local r g b
-        r=$((16#${r_hex:0:2}))
-        g=$((16#${g_hex:0:2}))
-        b=$((16#${b_hex:0:2}))
+    printf '%s' "$result"
+}
 
-        printf '%d %d %d' "$r" "$g" "$b"
+# terminal_foreground_color
+#
+# Query the terminal for its default foreground (text) color using OSC 10.
+# Returns RGB values as "R G B" (0-255 range) or empty string if unavailable.
+#
+# Environment variable overrides:
+# - TERMINAL_FG_COLOR: If set, returns this value directly (format: "R G B")
+#
+# Shell compatibility: Works in both Bash and Zsh.
+# tmux support: Automatically uses passthrough sequences when running in tmux.
+terminal_foreground_color() {
+    # Check for explicit override (highest priority)
+    if [[ -n "${TERMINAL_FG_COLOR:-}" ]]; then
+        printf '%s' "$TERMINAL_FG_COLOR"
         return 0
     fi
 
-    return 1
+    # Query terminal
+    local response result
+    response=$(_query_terminal_osc 10) || return 1
+
+    # Parse the response
+    result=$(_parse_osc_rgb_response "$response") || return 1
+
+    printf '%s' "$result"
+}
+
+# calculate_luminance <R> <G> <B>
+#
+# Calculate the relative luminance of an RGB color using ITU-R BT.709 formula.
+# Input: R G B values in 0-255 range (as separate arguments or space-separated)
+# Output: Luminance value 0-255
+#
+# Shell compatibility: Works in both Bash and Zsh (uses integer math only).
+calculate_luminance() {
+    local r g b
+
+    if [[ $# -eq 3 ]]; then
+        r="$1"
+        g="$2"
+        b="$3"
+    elif [[ $# -eq 1 ]]; then
+        read -r r g b <<< "$1"
+    else
+        return 1
+    fi
+
+    # Validate inputs
+    [[ "$r" =~ ^[0-9]+$ ]] && [[ "$g" =~ ^[0-9]+$ ]] && [[ "$b" =~ ^[0-9]+$ ]] || return 1
+
+    # Calculate luminance using ITU-R BT.709 formula:
+    # L = 0.2126*R + 0.7152*G + 0.0722*B
+    # Using integer math with scaling: L = (2126*R + 7152*G + 722*B) / 10000
+    local luminance=$(( (2126 * r + 7152 * g + 722 * b) / 10000 ))
+
+    printf '%d' "$luminance"
+}
+
+# calculate_contrast_ratio <fg_rgb> <bg_rgb>
+#
+# Calculate the contrast ratio between foreground and background colors.
+# Input: Two RGB strings, each as "R G B" in 0-255 range
+# Output: Contrast ratio as integer (multiplied by 100 for precision)
+#
+# WCAG contrast ratios:
+# - 4.5:1 (450) minimum for normal text
+# - 3:1 (300) minimum for large text
+# - 7:1 (700) enhanced for normal text
+#
+# Shell compatibility: Works in both Bash and Zsh (uses integer math only).
+calculate_contrast_ratio() {
+    local fg_rgb="${1:?Foreground RGB required}"
+    local bg_rgb="${2:?Background RGB required}"
+
+    local fg_lum bg_lum
+    fg_lum=$(calculate_luminance "$fg_rgb") || return 1
+    bg_lum=$(calculate_luminance "$bg_rgb") || return 1
+
+    # Convert to relative luminance (0-1 scaled to 0-255, then add 5 for the +0.05 offset)
+    # Formula: (L1 + 0.05) / (L2 + 0.05) where L1 is lighter
+    # Since we're using 0-255 scale, add 12 (≈0.05 * 255) instead of 0.05
+    local lighter darker
+    if [[ $fg_lum -gt $bg_lum ]]; then
+        lighter=$fg_lum
+        darker=$bg_lum
+    else
+        lighter=$bg_lum
+        darker=$fg_lum
+    fi
+
+    # Calculate ratio * 100 for integer precision
+    # (lighter + 12) / (darker + 12) * 100
+    local ratio=$(( ((lighter + 12) * 100) / (darker + 12) ))
+
+    printf '%d' "$ratio"
 }
 
 # is_dark_mode -> boolean

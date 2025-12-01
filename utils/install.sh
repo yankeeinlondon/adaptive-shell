@@ -1380,6 +1380,35 @@ install_claude_code() {
     fi
 }
 
+# https://opencode.ai/
+install_opencode() {
+    if has_command "opencode"; then
+        logc "- {{BOLD}}{{BLUE}}OpenCode CLI{RESET}} is already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}}"
+    if has_command "npm"; then
+        (npm i -g opencode-ai && logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} installed ({{ITALIC}}via {{BOLD}}npm{{RESET}})") || error "failed to install OpenCode via npm" 1
+    elif has_command "brew"; then
+        (brew install opencode && logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} installed ({{ITALIC}}via {{BOLD}}brew{{RESET}})") || error "failed to install OpenCode via brew" 1
+    elif has_command "paru"; then
+        (paru -S opencode && logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} installed ({{ITALIC}}via {{BOLD}}paru{{RESET}})") || error "failed to install OpenCode via paru" 1
+    elif has_command "curl"; then
+        (curl -fsSL https://opencode.ai/install | bash && logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} installed ({{ITALIC}}via {{BOLD}}curl{{RESET}})") || error "failed to install OpenCode via curl" 1
+    else
+        logc "- installing {{BOLD}}{{BLUE}}opencode{{RESET}} requires that either {{BOLD}}curl{{RESET}} is installed or you have the {{BOLD}}brew{{RESET}} or {{BOLD}}paru{{RESET}} package managers."
+        if commit "Install curl now?"; then
+            install_curl || error "failed to install curl!" 1
+            (curl -fsSL https://opencode.ai/install | bash && logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} installed ({{ITALIC}}via {{BOLD}}curl{{RESET}})") || error "failed to install OpenCode via curl" 1
+        else
+            logc "Ok. You can install {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} manually or install one of the specified dependencies before trying again."
+
+            exit 1
+        fi
+    fi
+}
+
 install_gemini_cli() {
     if has_command "gemini"; then
         logc "- {{BOLD}}{{BLUE}}Gemini CLI{{RESET}} is already installed"

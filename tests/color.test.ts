@@ -384,5 +384,185 @@ describe('color utilities', () => {
         expect(lightApi).toBeSuccessful()
       })
     })
+
+    describe('terminal_foreground_color()', () => {
+      it('should respect TERMINAL_FG_COLOR environment override', () => {
+        const api = sourceScript('./utils/color.sh', {
+          env: { TERMINAL_FG_COLOR: '200 200 200' }
+        })('terminal_foreground_color')()
+
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('200 200 200')
+      })
+
+      it('should handle various RGB values via override', () => {
+        const testCases = [
+          '0 0 0',       // Pure black text
+          '255 255 255', // Pure white text
+          '128 128 128', // Gray text
+          '0 255 0',     // Green text
+        ]
+
+        for (const rgb of testCases) {
+          const api = sourceScript('./utils/color.sh', {
+            env: { TERMINAL_FG_COLOR: rgb }
+          })('terminal_foreground_color')()
+
+          expect(api).toBeSuccessful()
+          expect(api).toReturn(rgb)
+        }
+      })
+
+      it('should return empty string when no terminal is attached', () => {
+        const api = sourceScript('./utils/color.sh')('terminal_foreground_color')()
+
+        // In CI/non-interactive context, the function should fail
+        if (api.result.code !== 0) {
+          expect(api).toFail()
+        } else {
+          expect(api).toReturn('')
+        }
+      })
+    })
+
+    describe('calculate_luminance()', () => {
+      it('should calculate luminance for pure black (0)', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_luminance')('0 0 0')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('0')
+      })
+
+      it('should calculate luminance for pure white (255)', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_luminance')('255 255 255')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('255')
+      })
+
+      it('should calculate luminance for mid-gray (128)', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_luminance')('128 128 128')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('128')
+      })
+
+      it('should weight green highest in luminance calculation', () => {
+        // Pure green (0, 255, 0) should have higher luminance than
+        // pure red (255, 0, 0) or pure blue (0, 0, 255)
+        const greenApi = sourceScript('./utils/color.sh')('calculate_luminance')('0 255 0')
+        const redApi = sourceScript('./utils/color.sh')('calculate_luminance')('255 0 0')
+        const blueApi = sourceScript('./utils/color.sh')('calculate_luminance')('0 0 255')
+
+        expect(greenApi).toBeSuccessful()
+        expect(redApi).toBeSuccessful()
+        expect(blueApi).toBeSuccessful()
+
+        const greenLum = parseInt(greenApi.result.stdout)
+        const redLum = parseInt(redApi.result.stdout)
+        const blueLum = parseInt(blueApi.result.stdout)
+
+        // Green should be brightest, then red, then blue
+        expect(greenLum).toBeGreaterThan(redLum)
+        expect(redLum).toBeGreaterThan(blueLum)
+      })
+
+      it('should accept three separate arguments', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_luminance')('100', '150', '200')
+        expect(api).toBeSuccessful()
+        // (2126*100 + 7152*150 + 722*200) / 10000 = 130 (approx)
+        const luminance = parseInt(api.result.stdout)
+        expect(luminance).toBeGreaterThan(0)
+        expect(luminance).toBeLessThan(256)
+      })
+
+      it('should fail for invalid input', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_luminance')('invalid')
+        expect(api).toFail()
+      })
+    })
+
+    describe('calculate_contrast_ratio()', () => {
+      it('should calculate highest contrast for black on white', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_contrast_ratio')('0 0 0', '255 255 255')
+        expect(api).toBeSuccessful()
+        // Maximum contrast ratio is 21:1 (2100 when * 100)
+        const ratio = parseInt(api.result.stdout)
+        expect(ratio).toBeGreaterThan(2000)
+      })
+
+      it('should calculate highest contrast for white on black', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_contrast_ratio')('255 255 255', '0 0 0')
+        expect(api).toBeSuccessful()
+        const ratio = parseInt(api.result.stdout)
+        expect(ratio).toBeGreaterThan(2000)
+      })
+
+      it('should calculate 1:1 ratio for same colors', () => {
+        const api = sourceScript('./utils/color.sh')('calculate_contrast_ratio')('128 128 128', '128 128 128')
+        expect(api).toBeSuccessful()
+        const ratio = parseInt(api.result.stdout)
+        expect(ratio).toBe(100) // 1:1 = 100 when * 100
+      })
+
+      it('should produce reasonable ratios for typical dark theme', () => {
+        // Light gray text on dark background
+        const api = sourceScript('./utils/color.sh')('calculate_contrast_ratio')('200 200 200', '30 30 30')
+        expect(api).toBeSuccessful()
+        const ratio = parseInt(api.result.stdout)
+        // Should have good contrast (>= 450 for WCAG AA)
+        expect(ratio).toBeGreaterThan(400)
+      })
+
+      it('should produce reasonable ratios for typical light theme', () => {
+        // Dark text on light background
+        const api = sourceScript('./utils/color.sh')('calculate_contrast_ratio')('30 30 30', '240 240 240')
+        expect(api).toBeSuccessful()
+        const ratio = parseInt(api.result.stdout)
+        expect(ratio).toBeGreaterThan(400)
+      })
+    })
+
+    describe('_parse_osc_rgb_response()', () => {
+      it('should parse standard 4-digit hex response', () => {
+        // Simulating response: ESC]11;rgb:1c1c/1c1c/1c1cBEL
+        const api = sourceScript('./utils/color.sh')('_parse_osc_rgb_response')('rgb:1c1c/1c1c/1c1c')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('28 28 28')
+      })
+
+      it('should parse 2-digit hex response', () => {
+        const api = sourceScript('./utils/color.sh')('_parse_osc_rgb_response')('rgb:ff/80/00')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('255 128 0')
+      })
+
+      it('should handle response with surrounding noise', () => {
+        // Real responses have ESC sequences before and BEL/ST after
+        const api = sourceScript('./utils/color.sh')('_parse_osc_rgb_response')('junk;rgb:abab/cdcd/efef;morejunk')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('171 205 239')
+      })
+
+      it('should fail for invalid response format', () => {
+        const api = sourceScript('./utils/color.sh')('_parse_osc_rgb_response')('not a valid response')
+        expect(api).toFail()
+      })
+
+      it('should fail for empty input', () => {
+        const api = sourceScript('./utils/color.sh')('_parse_osc_rgb_response')('')
+        expect(api).toFail()
+      })
+
+      it('should parse pure black response', () => {
+        const api = sourceScript('./utils/color.sh')('_parse_osc_rgb_response')('rgb:0000/0000/0000')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('0 0 0')
+      })
+
+      it('should parse pure white response', () => {
+        const api = sourceScript('./utils/color.sh')('_parse_osc_rgb_response')('rgb:ffff/ffff/ffff')
+        expect(api).toBeSuccessful()
+        expect(api).toReturn('255 255 255')
+      })
+    })
+
   })
 })
