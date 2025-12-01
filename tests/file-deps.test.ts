@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { sourceScript } from './helpers'
+import { execSync } from 'child_process'
 
 describe('file dependency analysis', () => {
   let tempTestFile: string
@@ -26,16 +26,37 @@ trim "  test  "
 rgb_text "255 0 0" "red text"
 `)
 
-    // Run the expensive operations once and cache results
-    // This reduces test time from ~7.8s to ~2.5s by running bash only 3 times instead of 6
-    const fileDepsApi = sourceScript('./reports/file-deps.sh')('file_dependencies')(tempTestFile)
-    cachedFileDepsResult = JSON.parse(fileDepsApi.result.stdout)
+    // Run all operations in a SINGLE bash process to cache the function registry
+    // The registry is built once on first file_dependencies call, then reused
+    // This reduces test time from ~5s to ~1.7s by running bash only 1 time instead of 3
+    const DELIMITER = '___SPLIT_MARKER___'
+    const script = `
+      source ./reports/file-deps.sh
 
-    const reportConsoleApi = sourceScript('./reports/file-deps.sh')('report_file_dependencies')(tempTestFile)
-    cachedReportConsoleOutput = reportConsoleApi.result.stdout + reportConsoleApi.result.stderr
+      # First call - builds and caches the registry
+      file_dependencies "${tempTestFile}"
+      echo "${DELIMITER}"
 
-    const reportJsonApi = sourceScript('./reports/file-deps.sh')('report_file_dependencies')(tempTestFile, '--json')
-    cachedReportJsonResult = JSON.parse(reportJsonApi.result.stdout)
+      # Second call - reuses cached registry
+      report_file_dependencies "${tempTestFile}" 2>&1
+      echo "${DELIMITER}"
+
+      # Third call - reuses cached registry
+      report_file_dependencies "${tempTestFile}" --json
+    `
+
+    const result = execSync(script, {
+      shell: 'bash',
+      encoding: 'utf-8',
+      cwd: process.cwd(),
+      env: { ...process.env, ROOT: process.cwd() }
+    })
+
+    const [fileDepsJson, consoleOutput, reportJson] = result.split(DELIMITER).map(s => s.trim())
+
+    cachedFileDepsResult = JSON.parse(fileDepsJson)
+    cachedReportConsoleOutput = consoleOutput
+    cachedReportJsonResult = JSON.parse(reportJson)
   })
 
   afterAll(() => {

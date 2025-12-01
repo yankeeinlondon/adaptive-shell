@@ -65,13 +65,7 @@ function _try_nix_install() {
     return 1
 }
 
-deno() {
-    log ""
-}
 
-rust() {
-    log ""
-}
 
 # install_on_macos [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
 #
@@ -346,44 +340,123 @@ function install_on_fedora() {
 }
 
 
+# _construct_pkg_url <prefix> <suffix> <pkg>
+#
+# Helper to construct the package URL, handling {{PKG}} template substitution.
+function _construct_pkg_url() {
+    local prefix="$1"
+    local suffix="$2"
+    local pkg="$3"
+    if [[ "$prefix" == *"{{PKG}}"* ]]; then
+        echo "${prefix//\{\{PKG\}\}/$pkg}"
+    else
+        echo "${prefix}${pkg}${suffix}"
+    fi
+}
+
 # _filter_and_link <manager_label> <url_prefix> <url_suffix> [filters...]
 #
 # Helper function to filter and link packages from stdin.
 # Reads package names from stdin, filters them using grep (OR logic),
-# and prints them with links.
+# and prints them with links in a grouped, horizontal layout.
 function _filter_and_link() {
-    local -r label="${1}"
-    local -r url_prefix="${2}"
-    local -r url_suffix="${3}"
-    shift 3
-    local -r filters=("$@")
+    # Run in subshell with stderr silenced to suppress any debug/xtrace noise
+    (
+        # Explicitly disable trace in case XTRACE_FD is redirected to stdout
+        set +x
+        set +v
 
-    local grep_pattern=""
-    if [[ ${#filters[@]} -gt 0 ]]; then
-        local first=true
-        for f in "${filters[@]}"; do
-            if $first; then first=false; else grep_pattern+="|"; fi
-            grep_pattern+="$f"
-        done
-    fi
+        local -r label="${1}"
+        local -r url_prefix="${2}"
+        local -r url_suffix="${3}"
+        shift 3
+        local -r filters=("$@")
 
-    while read -r pkg; do
-        if [[ -z "$pkg" ]]; then continue; fi
-
-        if [[ -z "$grep_pattern" ]] || echo "$pkg" | grep -q -i -E "$grep_pattern"; then
-             local url="${url_prefix}${pkg}${url_suffix}"
-             local linked
-             linked="$(link "$pkg" "$url")"
-             echo "[${label}] ${linked}"
+        local grep_pattern=""
+        if [[ ${#filters[@]} -gt 0 ]]; then
+            local first=true
+            for f in "${filters[@]}"; do
+                if $first; then first=false; else grep_pattern+="|"; fi
+                grep_pattern+="$f"
+            done
         fi
-    done
+
+        # Determine terminal width
+        local term_cols
+        if [[ -n "${COLUMNS:-}" ]]; then
+            term_cols="${COLUMNS}"
+        elif command -v tput >/dev/null 2>&1; then
+            term_cols=$(tput cols)
+        else
+            term_cols=80
+        fi
+        # Subtract a bit for safety/padding
+        local -i max_width=$((term_cols - 5))
+        if [[ $max_width -lt 20 ]]; then max_width=20; fi
+
+        local -a pkgs=()
+        # Read all matching packages
+        while read -r pkg; do
+            if [[ -z "$pkg" ]]; then continue; fi
+
+            if [[ -z "$grep_pattern" ]] || echo "$pkg" | grep -q -i -E "$grep_pattern"; then
+                 pkgs+=("$pkg")
+            fi
+        done
+
+        # If we have packages, print them with wrapping
+        if [[ ${#pkgs[@]} -gt 0 ]]; then
+            # Ensure colors are set up
+            if [[ "$(colors_not_setup)" == "0" ]]; then
+                setup_colors
+            fi
+
+            # Print Header
+            local -r heading="$(tangerine "${label}")"
+            printf "\n%s\n" "${heading}"
+
+            local current_line=""
+            local -i current_len=0
+
+            for pkg in "${pkgs[@]}"; do
+                local -i pkg_len=${#pkg}
+
+                # Check if adding this package would exceed width
+                # We add 2 spaces padding if line is not empty
+                local -i added_len=$pkg_len
+                if [[ $current_len -gt 0 ]]; then
+                    added_len=$((pkg_len + 2))
+                fi
+
+                if [[ $((current_len + added_len)) -gt $max_width ]]; then
+                    # Flush current line
+                    echo "$current_line"
+                    current_line="$(link "$pkg" "$(_construct_pkg_url "$url_prefix" "$url_suffix" "$pkg")")"
+                    current_len=$pkg_len
+                else
+                    if [[ -z "$current_line" ]]; then
+                        current_line="$(link "$pkg" "$(_construct_pkg_url "$url_prefix" "$url_suffix" "$pkg")")"
+                        current_len=$pkg_len
+                    else
+                        current_line="${current_line}  $(link "$pkg" "$(_construct_pkg_url "$url_prefix" "$url_suffix" "$pkg")")"
+                        current_len=$((current_len + added_len))
+                    fi
+                fi
+            done
+
+            # Flush remaining
+            if [[ -n "$current_line" ]]; then
+                echo "$current_line"
+            fi
+        fi
+    ) 2>/dev/null
 }
 
 # installed_cargo [filters...]
 function installed_cargo() {
     if ! has_command "cargo"; then return; fi
     cargo install --list 2>/dev/null | grep -E '^[a-z0-9_-]+ v' | cut -d' ' -f1 | \
-        _filter_and_link "cargo" "https://crates.io/crates/" "" "$@"
+        _filter_and_link "cargo" "https://crates.io/crates/{{PKG}}" "" "$@"
 }
 
 # installed_brew [filters...]
@@ -391,76 +464,80 @@ function installed_brew() {
     if ! has_command "brew"; then return; fi
     # Formulae
     brew list --formula -1 2>/dev/null | \
-        _filter_and_link "brew" "https://formulae.brew.sh/formula/" "" "$@"
+        _filter_and_link "brew" "https://formulae.brew.sh/formula/{{PKG}}" "" "$@"
     # Casks
     brew list --cask -1 2>/dev/null | \
-        _filter_and_link "cask" "https://formulae.brew.sh/cask/" "" "$@"
+        _filter_and_link "brew > cask" "https://formulae.brew.sh/cask/{{PKG}}" "" "$@"
 }
 
 # installed_npm [filters...]
 function installed_npm() {
     if ! has_command "npm"; then return; fi
-    # parseable returns /path/to/package, we want basename
+    # parseable returns /path/to/package. We split by "/node_modules/" to get the package name,
+    # which preserves scopes (e.g. @org/pkg). Fallback to basename if node_modules not found.
     npm list -g --depth=0 --parseable 2>/dev/null | \
-        awk -F/ '{print $NF}' | tail -n +2 | \
-        _filter_and_link "npm" "https://www.npmjs.com/package/" "" "$@"
+        tail -n +2 | \
+        awk -F'/node_modules/' '{if (NF>1) print $NF; else { n=split($0, a, "/"); print a[n] }}' | \
+        _filter_and_link "npm" "https://www.npmjs.com/package/{{PKG}}" "" "$@"
 }
 
 # installed_pip [filters...]
 function installed_pip() {
     if ! has_command "pip"; then return; fi
     pip list --format=columns 2>/dev/null | tail -n +3 | awk '{print $1}' | \
-        _filter_and_link "pip" "https://pypi.org/project/" "" "$@"
+        _filter_and_link "pip" "https://pypi.org/project/{{PKG}}" "" "$@"
 }
 
 # installed_gem [filters...]
 function installed_gem() {
     if ! has_command "gem"; then return; fi
     gem list 2>/dev/null | cut -d' ' -f1 | \
-        _filter_and_link "gem" "https://rubygems.org/gems/" "" "$@"
+        _filter_and_link "gem" "https://rubygems.org/gems/{{PKG}}" "" "$@"
 }
 
 # installed_nix [filters...]
 function installed_nix() {
     if ! has_command "nix-env"; then return; fi
     nix-env -q 2>/dev/null | \
-        _filter_and_link "nix" "https://search.nixos.org/packages?channel=unstable&query=" "" "$@"
+        sed 's/-[0-9].*//' | \
+        _filter_and_link "nix" "https://search.nixos.org/packages?channel=unstable&show={{PKG}}&query={{PKG}}" "" "$@"
 }
 
 # installed_apt [filters...]
 function installed_apt() {
-    if ! has_command "apt"; then return; fi
-    # apt list is noisy ("Listing..."), grep -v removes it
-    apt list --installed 2>/dev/null | grep -v "^Listing..." | cut -d/ -f1 | \
-        _filter_and_link "apt" "https://packages.debian.org/search?keywords=" "" "$@"
+    if ! has_command "dpkg-query"; then return; fi
+
+    # Use dpkg-query for stable, scriptable output of installed packages
+    dpkg-query -f '${Package}\n' -W 2>/dev/null | \
+        _filter_and_link "apt" "https://packages.debian.org/search?keywords={{PKG}}" "" "$@"
 }
 
 # installed_apk [filters...]
 function installed_apk() {
     if ! has_command "apk"; then return; fi
     apk info 2>/dev/null | \
-        _filter_and_link "apk" "https://pkgs.alpinelinux.org/packages?name=" "" "$@"
+        _filter_and_link "apk" "https://pkgs.alpinelinux.org/packages?name={{PKG}}" "" "$@"
 }
 
 # installed_pacman [filters...]
 function installed_pacman() {
     if ! has_command "pacman"; then return; fi
     pacman -Qq 2>/dev/null | \
-        _filter_and_link "pacman" "https://archlinux.org/packages/?q=" "" "$@"
+        _filter_and_link "pacman" "https://archlinux.org/packages/?q={{PKG}}" "" "$@"
 }
 
 # installed_dnf [filters...]
 function installed_dnf() {
     if ! has_command "dnf"; then return; fi
     dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}' | cut -d. -f1 | \
-        _filter_and_link "dnf" "https://packages.fedoraproject.org/pkgs/" "" "$@"
+        _filter_and_link "dnf" "https://packages.fedoraproject.org/pkgs/{{PKG}}" "" "$@"
 }
 
 # installed [filters...]
 #
 # Lists installed packages from all detected package managers.
 # Accepts optional arguments as filters (OR condition).
-function installed() {
+function show_installed() {
     local -r filters=("$@")
 
     installed_brew "${filters[@]}"
@@ -649,6 +726,10 @@ function install_on_arch() {
 }
 
 function install_jq() {
+    if has_command "jq"; then
+        logc "- {{BOLD}}{{BLUE}}jq{{RESET}} is already installed"
+        return 0
+    fi
     if is_mac; then
         install_on_macos "jq"
     elif is_debian || is_ubuntu; then
@@ -667,7 +748,11 @@ function install_jq() {
 }
 
 function install_neovim() {
-    logc "\nInstalling {{BOLD}}{{BLUE}}neovim{{RESET}}"
+    if has_command "nvim"; then
+        logc "- {{BOLD}}{{BLUE}}neovim{{RESET}} is already installed"
+        return 0
+    fi
+    logc "- installing {{BOLD}}{{BLUE}}neovim{{RESET}}"
     if is_mac; then
         install_on_macos "neovim"
     elif is_debian || is_ubuntu; then
@@ -677,44 +762,153 @@ function install_neovim() {
     elif is_fedora; then
         install_on_fedora "neovim"
     else
-        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}neovim{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
+        logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}neovim{{RESET}}"
         return 1
     fi
 }
 
 # installs `eza` if it can but if not then it will try `exa`
 function install_eza() {
-    nix-env -iA nixpkgs.eza
+    if has_command "eza" || has_command "exa"; then
+        if has_command "eza"; then
+            logc "- {{BOLD}}{{BLUE}}eza{{RESET}} is already installed"
+        else
+            logc "- {{BOLD}}{{BLUE}}exa{{RESET}} is installed ({{ITALIC}}{{DIM}}indicating eza is not yet avail{{RESET}})"
+        fi
+        return 0
+    fi
+    logc "- installing {{BOLD}}{{BLUE}}eza{{RESET}}"
+    if is_mac; then
+        install_on_macos "eza"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "eza"
+    elif is_alpine; then
+        install_on_alpine "eza"
+    elif is_fedora; then
+        install_on_fedora "eza"
+    else
+        if is_mac; then
+            install_on_macos "exa"
+        elif is_debian || is_ubuntu; then
+            install_on_debian "exa"
+        elif is_alpine; then
+            install_on_alpine "exa"
+        elif is_fedora; then
+            install_on_fedora "exa"
+        else
+            logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}eza{{RESET}}"
+        return 1
+        fi
+    fi
+
 }
 
-dust() {
-    nix-env -iA nixpkgs.dust
+install_dust() {
+    if has_command "dust"; then
+        logc "- {{BOLD}}{{BLUE}}dust{{RESET}} is already installed"
+        return 0
+    fi
+    if is_mac; then
+        install_on_macos "dust"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "dust"
+    elif is_alpine; then
+        install_on_alpine "dust"
+    elif is_fedora; then
+        install_on_fedora "dust"
+    elif is_arch; then
+        install_on_arch "dust"
+
+    else
+        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}dust{{RESET}}"
+        return 1
+    fi
+}
+
+install_deno() {
+    if has_command "deno"; then
+        logc "- {{BOLD}}{{BLUE}}Deno{{RESET}} is already installed"
+        return 0
+    fi
+}
+
+install_rust() {
+    if has_command "rustc"; then
+        logc "- {{BOLD}}{{BLUE}}Rust{{RESET}} is already installed"
+        return 0
+    fi
 }
 
 
 install_bun() {
-    log "- installing ${BOLD}${BLUE}Bun${RESET}"
+    if has_command "bun"; then
+        logc "- {{BOLD}}{{BLUE}}Bun{{RESET}} is already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}Bun{{RESET}}"
     log ""
     curl -fsSL https://bun.sh/install | bash
     log ""
-    log "- ${BOLD}${BLUE}Bun${RESET} installed"
+    logc "- {{BOLD}}{{BLUE}}Bun{{RESET}} installed"
     log ""
 }
 
-uv() {
-    log ""
+install_uv() {
+    if has_command "uv"; then
+        logc "- {{BOLD}}{{BLUE}}uv{{RESET}} is already installed"
+        return 0
+    fi
+
+    if is_windows; then
+        :
+    else
+        logc "- installing {{BOLD}}{{BLUE}}uv{{RESET}}"
+        curl -LsSf https://astral.sh/uv/install.sh | sh || (error "Failed to install uv!" 1)
+    fi
+
 }
 
-ripgrep() {
-    nix-env -iA nixpkgs.ripgrep
+install_ripgrep() {
+    if has_command "rg"; then
+        logc "- {{BOLD}}{{BLUE}}ripgrep{{RESET}} is already installed"
+        return 0
+    fi
+    logc "- installing {{BOLD}}{{BLUE}}ripgrep{{RESET}}"
+    if is_mac; then
+        install_on_macos "ripgrep"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "ripgrep"
+    elif is_alpine; then
+        install_on_alpine "ripgrep"
+    elif is_fedora; then
+        install_on_fedora "ripgrep"
+    else
+        logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}ripgrep{{RESET}}"
+        return 1
+    fi
 }
 
-nvm() {
-    # brew is often outdated
+install_nvm() {
+    logc "\nInstalling {{BOLD}}{{BLUE}}neovim{{RESET}}"
+
+    if ! has_command "curl"; then
+        logc "{{BOLD}}{{BLUE}}curl{{RESET}} is required to install {{BOLD}}{{BLUE}}nvm{{RESET}}."
+        if confirm "Install curl now?"; then
+            if ! install_curl; then
+                error "Failed to install {{BOLD}}{{BLUE}}jq{{RESET}}" "${EXIT_API}"
+            fi
+        else
+            logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"
+            # shellcheck disable=SC2086
+            return ${EXIT_CONFIG}
+        fi
+    fi
+
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 }
 
-yaza() {
+install_yaza() {
     log ""
 }
 
@@ -733,7 +927,7 @@ install_node() {
     fi
 }
 
-cloudflared() {
+install_cloudflared() {
     if is_debian; then
         # Add cloudflare gpg key
         ${SUDO} mkdir -p --mode=0755 /usr/share/keyrings
@@ -748,7 +942,13 @@ cloudflared() {
 }
 
 
-starship() {
+install_starship() {
+    if has_command "starship"; then
+        logc "- {{BOLD}}{{BLUE}}starship{{RESET}} is already installed"
+        return 0
+    fi
+
+
     if is_linux || is_macos; then
         log "- installing ${BOLD}Starship${RESET} prompt"
         log ""
@@ -768,7 +968,7 @@ starship() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "${1}" in
         starship)
-            starship
+            install_starship
             ;;
         bun)
             bun

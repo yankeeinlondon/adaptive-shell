@@ -21,7 +21,8 @@ source "${UTILS}/color.sh"
 #
 # - always includes a RESET at the end of line
 function log() {
-    local -r reset="${RESET:-$'\033[0m'}"
+    local reset="${RESET:-}"
+    [[ -z "$reset" ]] && reset=$'\033[0m'
 
     printf "%b\\n" "${*}${reset}" >&2
 }
@@ -32,19 +33,22 @@ function log() {
 #   - parameters through `colorize()` to that
 #   the caller doesn't need to bother with the
 function logc() {
-    local -r reset="${RESET:-$'\033[0m'}"
     local -r colors_missing=$(colors_not_setup)
     local content
 
     # Check if colors are not set up and set them up if needed
     if [[ "$colors_missing" == "0" ]]; then
         setup_colors
-        content="$(colorize "${*}")"
-        printf "%b\\n" "${content}${reset}" >&2
+    fi
+
+    local reset="${RESET:-}"
+    [[ -z "$reset" ]] && reset=$'\033[0m'
+
+    content="$(colorize "${*}")"
+    printf "%b\\n" "${content}${reset}" >&2
+
+    if [[ "$colors_missing" == "0" ]]; then
         remove_colors
-    else
-        content="$(colorize "${*}")"
-        printf "%b\\n" "${content}${reset}" >&2
     fi
 }
 
@@ -53,15 +57,22 @@ function logc() {
 # Logs to **stdout** and will also identify color template codes
 # and use them in the output.
 function stdout() {
+    local -r colors_missing=$(colors_not_setup)
+    local content
+
     # Check if colors are not set up and set them up if needed
     if [[ "$colors_missing" == "0" ]]; then
         setup_colors
-        content="$(colorize "${*}")"
-        printf "%b\\n" "${content}${reset}"
+    fi
+
+    local reset="${RESET:-}"
+    [[ -z "$reset" ]] && reset=$'\033[0m'
+
+    content="$(colorize "${*}")"
+    printf "%b\\n" "${content}${reset}"
+
+    if [[ "$colors_missing" == "0" ]]; then
         remove_colors
-    else
-        content="$(colorize "${*}")"
-        printf "%b\\n" "${content}${reset}"
     fi
 }
 

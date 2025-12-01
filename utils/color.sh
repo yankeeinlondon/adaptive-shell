@@ -143,27 +143,22 @@ function as_rgb_prefix() {
 
     # Build foreground escape code if provided
     if [[ -n "$fg" ]]; then
-        # Parse RGB values (expecting "r g b" format)
-        # shellcheck disable=SC2206
-        local -ra fg_values=($fg)
-        if [[ ${#fg_values[@]} -eq 3 ]] &&
-           [[ "${fg_values[0]}" =~ ^[0-9]+$ ]] &&
-           [[ "${fg_values[1]}" =~ ^[0-9]+$ ]] &&
-           [[ "${fg_values[2]}" =~ ^[0-9]+$ ]]; then
-            result+=$'\033[38;2;'${fg_values[0]}';'${fg_values[1]}';'${fg_values[2]}'m'
+        local r g b
+        # Use read to split into scalars, avoiding Bash(0-based)/Zsh(1-based) array index confusion
+        if read -r r g b <<< "$fg"; then
+            if [[ "$r" =~ ^[0-9]+$ ]] && [[ "$g" =~ ^[0-9]+$ ]] && [[ "$b" =~ ^[0-9]+$ ]]; then
+                result+=$'\033[38;2;'${r}';'${g}';'${b}'m'
+            fi
         fi
     fi
 
     # Build background escape code if provided
     if [[ -n "$bg" ]]; then
-        # Parse RGB values (expecting "r g b" format)
-        # shellcheck disable=SC2206
-        local -ra bg_values=($bg)
-        if [[ ${#bg_values[@]} -eq 3 ]] &&
-           [[ "${bg_values[0]}" =~ ^[0-9]+$ ]] &&
-           [[ "${bg_values[1]}" =~ ^[0-9]+$ ]] &&
-           [[ "${bg_values[2]}" =~ ^[0-9]+$ ]]; then
-            result+=$'\033[48;2;'${bg_values[0]}';'${bg_values[1]}';'${bg_values[2]}'m'
+        local r g b
+        if read -r r g b <<< "$bg"; then
+            if [[ "$r" =~ ^[0-9]+$ ]] && [[ "$g" =~ ^[0-9]+$ ]] && [[ "$b" =~ ^[0-9]+$ ]]; then
+                result+=$'\033[48;2;'${r}';'${g}';'${b}'m'
+            fi
         fi
     fi
 
@@ -700,10 +695,27 @@ colorize() {
         tag="${rest%%\}\}*}"
         rest="${rest#*\}\}}"
 
-        if [[ ${!tag+x} ]]; then
-            result+="${!tag}"
-        else
+        # Ensure tag is a valid variable name to prevent injection/errors
+        if [[ ! "$tag" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
             result+="{{${tag}}}"
+            continue
+        fi
+
+        if [ -n "${ZSH_VERSION:-}" ]; then
+            if (( ${+parameters[$tag]} )); then
+                result+="${(P)tag}"
+            else
+                result+="{{${tag}}}"
+            fi
+        else
+            # Bash: Use eval to safely handle indirection and avoid Zsh parsing errors
+            if eval "[[ \${!tag+x} ]]"; then
+                local val
+                eval 'val="${!tag}"'
+                result+="$val"
+            else
+                result+="{{${tag}}}"
+            fi
         fi
     done
 

@@ -10,9 +10,17 @@ fi
 
 # __get_function_registry()
 #
-# Returns a function map by scanning all bash files
+# Returns a function map by scanning all bash files.
+# The result is cached in __FUNCTION_REGISTRY_CACHE for the duration
+# of the shell session to avoid expensive re-scans.
 # Output: JSON object with function names as keys and file paths as values
 __get_function_registry() {
+    # Return cached registry if available
+    if [ -n "${__FUNCTION_REGISTRY_CACHE:-}" ]; then
+        echo "$__FUNCTION_REGISTRY_CACHE"
+        return
+    fi
+
     local summary function_map
     summary=$(bash_functions_summary "${ROOT}")
 
@@ -20,6 +28,9 @@ __get_function_registry() {
     function_map=$(echo "$summary" | jq '
         .functions | map({(.name): .file}) | add // {}
     ')
+
+    # Cache for subsequent calls in the same session
+    __FUNCTION_REGISTRY_CACHE="$function_map"
 
     echo "$function_map"
 }
@@ -38,9 +49,16 @@ function file_dependencies() {
         return 1
     fi
 
-    # Get the function registry (cached or fresh)
+    # Get the function registry - use cache if available, otherwise build it
+    # Note: We check the cache here to avoid subshell overhead of $()
     local registry
-    registry=$(__get_function_registry)
+    if [ -n "${__FUNCTION_REGISTRY_CACHE:-}" ]; then
+        registry="$__FUNCTION_REGISTRY_CACHE"
+    else
+        registry=$(__get_function_registry)
+        # Propagate cache to parent scope (subshell sets it but it's lost)
+        __FUNCTION_REGISTRY_CACHE="$registry"
+    fi
 
     # JSON escape function (reuse from bash_functions_summary)
     __fd_json_escape() {

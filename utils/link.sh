@@ -24,7 +24,7 @@ function link() {
 
     # Use BEL (\007) terminator which works better with printf %b
     # shellcheck disable=SC2028
-    echo "\\033]8;;${uri}\\007${text}\\033]8;;\\007"
+    printf "\\033]8;;%s\\007%s\\033]8;;\\007" "${uri}" "${text}"
 }
 
 
@@ -41,7 +41,7 @@ function link_file() {
 
     # Use BEL (\007) terminator which works better with printf %b
     # shellcheck disable=SC2028
-    echo "\\033]8;;${file_uri}\\007${text}\\033]8;;\\007"
+    printf "\\033]8;;%s\\007%s\\033]8;;\\007" "${file_uri}" "${text}"
 }
 
 # link_repo <uri>

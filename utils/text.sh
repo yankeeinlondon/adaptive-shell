@@ -12,6 +12,10 @@ else
     UTILS="${ROOT}/utils"
 fi
 
+# Guard to prevent circular dependencies
+[[ -n "${__TEXT_SH_LOADED:-}" ]] && return
+__TEXT_SH_LOADED=1
+
 # shellcheck source="./logging.sh"
 source "${UTILS}/logging.sh"
 # shellcheck source="./logging.sh"
@@ -446,6 +450,10 @@ function newline_on_word_boundary() {
 #
 # Returns the visual width as a number.
 function char_width() {
+    # Ensure no debug output leaks
+    set +x
+    set +v
+
     local -r content="${1:-}"
 
     [[ -z "$content" ]] && echo "0" && return 0
@@ -508,59 +516,10 @@ function char_width() {
     done
 
     # Now count the visual width of the clean content
-    # For simplicity in pure Bash, we'll count characters with rough Unicode handling
-    local -i width=0
-    local -i i=0
-
-    while [[ $i -lt ${#result} ]]; do
-        local byte="${result:$i:1}"
-        local byte_val
-        printf -v byte_val '%d' "'$byte"
-
-        # Handle multi-byte UTF-8 sequences
-        if [[ $byte_val -ge 240 ]]; then
-            # 4-byte sequence (U+10000 to U+10FFFF) - often emojis
-            # Most emojis are wide (2 columns)
-            width=$((width + 2))
-            i=$((i + 4))
-        elif [[ $byte_val -ge 224 ]]; then
-            # 3-byte sequence (U+0800 to U+FFFF)
-            # Includes CJK characters (wide), but also some narrow chars
-            # We'll approximate: CJK ranges and emoji are wide
-            local char_bytes="${result:$i:3}"
-            # Rough heuristic: most 3-byte chars in common use are wide
-            # This includes CJK unified ideographs, Hangul, etc.
-            # For better accuracy, we'd need to check specific ranges
-            if [[ $byte_val -ge 224 && $byte_val -le 239 ]]; then
-                # Common wide character ranges start around 0xE0
-                # CJK, Hangul, etc. are typically wide
-                width=$((width + 2))
-            else
-                width=$((width + 1))
-            fi
-            i=$((i + 3))
-        elif [[ $byte_val -ge 194 ]]; then
-            # 2-byte sequence (U+0080 to U+07FF)
-            # Most are narrow (1 column)
-            width=$((width + 1))
-            i=$((i + 2))
-        elif [[ $byte_val -ge 128 ]]; then
-            # Invalid/continuation byte - skip
-            i=$((i + 1))
-        else
-            # Single-byte ASCII character (0-127)
-            # Control characters (0-31) typically have 0 width, but we'll count them as 1
-            # Tab, newline, etc. would need special handling in a real terminal
-            if [[ $byte_val -ge 32 && $byte_val -lt 127 ]]; then
-                width=$((width + 1))
-            elif [[ $byte_val -eq 9 ]]; then
-                # Tab - approximate as 4 spaces
-                width=$((width + 4))
-            fi
-            # Other control chars: treat as 0 width
-            i=$((i + 1))
-        fi
-    done
+    # For simplicity, we count characters. This handles multi-byte characters correctly
+    # as 1 unit, but treats wide characters (CJK/Emoji) as 1 column instead of 2.
+    # This avoids complex and fragile ordinal calculation logic across shells.
+    local -i width=${#result}
 
     debug "char_width" "content length ${#content}, visual width: $width"
     echo "$width"

@@ -81,6 +81,14 @@ function init() {
     bash "${ROOT}/programs/initialize.sh"
 }
 
+function installed() {
+    # shellcheck source="./utils/install.sh"
+    source "${UTILS}/install.sh"
+
+    show_installed "$@"
+
+}
+
 
 function vitesse() {
   if [ -z "$1" ]; then

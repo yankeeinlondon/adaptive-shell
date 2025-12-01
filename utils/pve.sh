@@ -30,8 +30,7 @@ EXIT_FALSE=1
 EXIT_API=2
 EXIT_NOTFOUND=3
 
-# sniff out an API key
-API_KEY=${API_KEY:-${PROXMOX_API_KEY}}
+
 
 # Proxmox API Port
 PROXMOX_API_PORT="${PROXMOX_API_PORT:-8006}"
@@ -110,8 +109,8 @@ function pve_api_get() {
     if ! has_command "curl"; then
         logc "{{BOLD}}{{BLUE}}curl{{RESET}} is required for Proxmox API calls."
         if confirm "Install curl now?"; then
-            if ! install_jq; then
-                error "Failed to install {{BOLD}}{{BLUE}}jq{{RESET}}" "${EXIT_API}"
+            if ! install_curl; then
+                error "Failed to install {{BOLD}}{{BLUE}}curl{{RESET}}" "${EXIT_API}"
             fi
         else
             logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"

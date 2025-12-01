@@ -24,8 +24,8 @@ source "${ROOT}/utils.sh"
 function os_initialized() {
     if file_exists "${HOME}/.adaptive-initialized-os"; then
 
-        log "{{DIM}}- OS initialization was already done; add {{BLUE}}--force{{RESET}}{{DIM}} if you want to re-run it{{RESET}}"
-
+        logc "{{DIM}}- OS initialization was already done; add {{BLUE}}--force{{RESET}}{{DIM}} if you want to re-run it{{RESET}}"
+    fi
 }
 
 
@@ -204,6 +204,9 @@ function debian() {
 
 
 function main() {
+    # shellcheck source="../utils/install.sh"
+    source "${UTILS}/install.sh"
+
     OS="$(os)"
 
     setup_colors
@@ -222,7 +225,13 @@ function main() {
             ;;
         macos)
 
-            log "- no initialization yet for ${BOLD}macOS${RESET}."
+            install_neovim
+            install_jq
+            install_eza
+            install_dust
+            install_ripgrep
+            install_starship
+            install_uv
             ;;
 
         windows)
