@@ -206,3 +206,132 @@ function about_container() {
     logc "${message}"
 }
 
+
+# whereami - Show which Proxmox node and VMID this container is running on
+#
+# Usage: whereami [-q|--quiet] [-j|--json]
+#
+# Options:
+#   -q, --quiet   Output only "node:vmid" (for scripting)
+#   -j, --json    Output as JSON
+#   -h, --help    Show this help
+function whereami() {
+    set -euo pipefail
+
+    ENV_FILE="${PVE_API_ENV:-${HOME}/.config/pve/container/pve-api.env}"
+
+    # Node to IP mapping
+    declare -A NODE_IPS=(
+        ["pve"]="192.168.100.2"
+        ["shadow"]="192.168.100.4"
+        ["sidekick"]="192.168.100.5"
+        ["monster"]="192.168.100.14"
+    )
+
+    # Colors
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    BOLD='\033[1m'
+    NC='\033[0m'
+
+    usage() {
+        sed -n '3,10p' "$0" | sed 's/^#//' | sed 's/^ //'
+        exit 0
+    }
+
+    # Parse arguments
+    QUIET=false
+    JSON=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -q|--quiet)
+                QUIET=true
+                shift
+                ;;
+            -j|--json)
+                JSON=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                echo -e "${RED}Unknown option: $1${NC}" >&2
+                usage
+                ;;
+        esac
+    done
+
+    # Load API token
+    if [[ ! -f "$ENV_FILE" ]]; then
+        echo -e "${RED}Error: API token file not found at $ENV_FILE${NC}" >&2
+        exit 1
+    fi
+
+    source "${ENV_FILE}"
+
+    if [[ -z "${PVE_API_TOKEN:-}" ]]; then
+        echo -e "${RED}Error: PVE_API_TOKEN not set in $ENV_FILE${NC}" >&2
+        exit 1
+    fi
+
+    HOSTNAME=$(hostname)
+
+    # Query each node to find this container
+    for node in "${!NODE_IPS[@]}"; do
+        host="${NODE_IPS[$node]}"
+
+        # Try LXC
+        result=$(curl -sk --max-time 5 \
+            -H "Authorization: PVEAPIToken=$PVE_API_TOKEN" \
+            "https://$host:8006/api2/json/nodes/$node/lxc" 2>/dev/null) || continue
+
+        match=$(echo "$result" | jq -r --arg name "$HOSTNAME" \
+            '.data[] | select(.name == $name) | "\(.vmid)"' 2>/dev/null) || continue
+
+        if [[ -n "$match" ]]; then
+            VMID="$match"
+            NODE="$node"
+            TYPE="lxc"
+            break
+        fi
+
+        # Try QEMU
+        result=$(curl -sk --max-time 5 \
+            -H "Authorization: PVEAPIToken=$PVE_API_TOKEN" \
+            "https://$host:8006/api2/json/nodes/$node/qemu" 2>/dev/null) || continue
+
+        match=$(echo "$result" | jq -r --arg name "$HOSTNAME" \
+            '.data[] | select(.name == $name) | "\(.vmid)"' 2>/dev/null) || continue
+
+        if [[ -n "$match" ]]; then
+            VMID="$match"
+            NODE="$node"
+            TYPE="qemu"
+            break
+        fi
+    done
+
+    if [[ -z "${VMID:-}" ]]; then
+        echo -e "${RED}Error: Could not find container with hostname '$HOSTNAME'${NC}" >&2
+        exit 1
+    fi
+
+    # Output
+    if [[ "$JSON" == true ]]; then
+        jq -n \
+            --arg hostname "$HOSTNAME" \
+            --arg node "$NODE" \
+            --arg vmid "$VMID" \
+            --arg type "$TYPE" \
+            '{hostname: $hostname, node: $node, vmid: ($vmid | tonumber), type: $type}'
+    elif [[ "$QUIET" == true ]]; then
+        echo "$NODE:$VMID"
+    else
+        echo -e "${BOLD}Hostname:${NC}  $HOSTNAME"
+        echo -e "${BOLD}Node:${NC}      $NODE"
+        echo -e "${BOLD}VMID:${NC}      $VMID"
+        echo -e "${BOLD}Type:${NC}      $TYPE"
+    fi
+}

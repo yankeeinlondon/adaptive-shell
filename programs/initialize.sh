@@ -225,6 +225,7 @@ function main() {
             ;;
         macos)
 
+            install_git
             install_neovim
             install_jq
             install_eza
@@ -232,6 +233,9 @@ function main() {
             install_ripgrep
             install_starship
             install_uv
+            install_claude_code
+            install_gemini_cli
+            install_btop
             ;;
 
         windows)

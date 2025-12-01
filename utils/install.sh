@@ -908,22 +908,104 @@ install_nvm() {
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 }
 
-install_yaza() {
-    log ""
+install_yazi() {
+    if has_command "yazi"; then
+        logc "- {{BOLD}}{{BLUE}}yazi{{RESET}} is already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}yazi{{RESET}}"
+    if is_mac; then
+        install_on_macos "yazi"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "yazi"
+    elif is_alpine; then
+        install_on_alpine "yazi"
+    elif is_fedora; then
+        install_on_fedora "yazi"
+    else
+        logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}yazi{{RESET}}"
+        return 1
+    fi
 }
 
-claude_code() {
+install_claude_code() {
+    if has_command "claude"; then
+        logc "- {{BOLD}}{{BLUE}}Claude Code{{RESET}} is already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}Claude Code{{RESET}}"
     if is_windows; then
         irm https://claude.ai/install.ps1 | iex
+    else
+        curl -fsSL https://claude.ai/install.sh | bash || (error "failed to install Claude Code" 1)
+    fi
+}
+
+install_gemini_cli() {
+    if has_command "gemini"; then
+        logc "- {{BOLD}}{{BLUE}}Gemini CLI{{RESET}} is already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}Gemini CLI{{RESET}}"
+    if has_command "npm"; then
+        npm install -g @google/gemini-cli || error "Failed to install Gemini CLI using npm" 1
+        logc "- {{BOLD}}{{BLUE}}Gemini CLI{{RESET}} installed"
+    elif has_command "nix-env"; then
+        _try_nix_install "gemini-cli" || error "Failed to install Gemini CLI using nix"
+    else
+        logc "- the most common means of installing Gemini CLI is with {{BOLD}}{{BLUE}}npm{{RESET}} but {{BOLD}}{{BLUE}}npm{{RESET}} is not currently installed."
+        if confirm "Install node and npm?"; then
+            install_node
+            if ! has_command "npm"; then
+                install_npm
+            fi
+        else
+            logc "Ok. Gemini CLI was {{RED}}not installed{{RESET}}. Install manually or rerun this command.\n"
+        fi
+    fi
+}
+
+install_npm() {
+    if has_command "npm"; then
+        logc "- {{BOLD}}{{BLUE}}npm CLI{{RESET}} is already installed"
+        return 0
+    fi
+    if is_mac; then
+        install_on_macos "npm"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "npm"
+    elif is_alpine; then
+        install_on_alpine "npm"
+    elif is_fedora; then
+        install_on_fedora "npm"
+    else
+        logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}npm{{RESET}}"
+        return 1
     fi
 
 }
 
 install_node() {
-    if is_wsl; then
-        ${SUDO} apt update && ${SUDO} apt upgrade -y
-    elif is_debian; then
-        ${SUDO} apt update && ${SUDO} apt upgrade -y && ${SUDO} apt install nodejs
+    if has_command "node"; then
+        logc "- {{BOLD}}{{BLUE}}node{{RESET}} is already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}node{{RESET}}"
+    if is_mac; then
+        install_on_macos "node" "nodejs_24"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "nodejs" "nodejs_24"
+    elif is_alpine; then
+        install_on_alpine "nodejs" "nodejs_24"
+    elif is_fedora; then
+        install_on_fedora "nodejs" "node" "nodejs_24"
+    else
+        logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}node{{RESET}}"
+        return 1
     fi
 }
 
@@ -941,6 +1023,47 @@ install_cloudflared() {
     fi
 }
 
+install_git() {
+    if has_command "git"; then
+        logc "- {{BOLD}}{{BLUE}}git{{RESET}} is already installed"
+        return 0
+    else
+        logc "- installing {{BOLD}}{{BLUE}}git{{RESET}}"
+        if is_mac; then
+            install_on_macos "git"
+        elif is_debian || is_ubuntu; then
+            install_on_debian "git"
+        elif is_alpine; then
+            install_on_alpine "git"
+        elif is_fedora; then
+            install_on_fedora "git"
+        else
+            logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}git{{RESET}}"
+            return 1
+        fi
+    fi
+}
+
+install_btop() {
+    if has_command "btop"; then
+        logc "- {{BOLD}}{{BLUE}}btop{{RESET}} is already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}yazi{{RESET}}"
+    if is_mac; then
+        install_on_macos "btop" "btopjs_24"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "btop"
+    elif is_alpine; then
+        install_on_alpine "btop"
+    elif is_fedora; then
+        install_on_fedora "btop"
+    else
+        logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}btop{{RESET}}"
+        return 1
+    fi
+}
 
 install_starship() {
     if has_command "starship"; then
@@ -966,16 +1089,5 @@ install_starship() {
 
 # Only run CLI if executed directly (not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    case "${1}" in
-        starship)
-            install_starship
-            ;;
-        bun)
-            bun
-            ;;
-        *)
-            log "- unknown package ${RED}${BOLD}${OS}${RESET} requested to install"
-            exit 1
-            ;;
-    esac
+    logc "{{BOLD}}install.sh"
 fi
