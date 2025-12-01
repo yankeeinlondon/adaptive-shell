@@ -39,11 +39,10 @@ function report_about() {
     # shellcheck source="../programs/ssh.sh"
     source "${PROGRAMS}/ssh.sh"
 
-    setup_colors
 
     TITLE="${MACHINE_NAME:-${TITLE:-${DIM:-}${ITALIC:-}your System}}"
 
-    DEFAULT_DESC="${DIM}This system uses the ${ITALIC}adaptive shell${RESET}${DIM} bootstrap which provides functions, aliases, and installers based on the detected environment.${RESET}"
+    DEFAULT_DESC="${DIM}This system uses the ${ITALIC}adaptive shell{{RESET}}${DIM} bootstrap which provides functions, aliases, and installers based on the detected environment.{{RESET}}"
 
     CUSTOM_DESC="$(colorize "${MACHINE_DESC}")"
 
@@ -56,30 +55,29 @@ function report_about() {
         OS_NAME="$(os)"
         KERNEL=""
     fi
-    OS_INFO=" (${DIM}${OS_NAME} $(os_version)${KERNEL}${RESET})"
+    OS_INFO=" (${DIM}${OS_NAME} $(os_version)${KERNEL}{{RESET}})"
 
-    log ""
-    log "${BOLD}${YELLOW}About${RESET} ${TITLE}${RESET}${OS_INFO}"
-    log "------------------------------------------------------------"
-    log "${DESC}"
+    logc ""
+    logc "{{BOLD}}{{YELLOW}}About{{RESET}} ${TITLE}{{RESET}}${OS_INFO}"
+    logc "------------------------------------------------------------"
+    logc "${DESC}"
 
-    log ""
+    logc ""
 
-    log "${BOLD}Aliases:${RESET}"
-    log "------------------------------------------------------------"
+    logc "{{BOLD}}Aliases:{{RESET}}"
+    logc "------------------------------------------------------------"
     report_aliases
 
-    log ""
-    log "${BOLD}Executable ${RESET}${DIM}paths detected${RESET}${BOLD}:${RESET}"
-    log "------------------------------------------------------------"
+    logc ""
+    logc "{{BOLD}}Executable {{RESET}}{{DIM}}paths detected{{RESET}}{{BOLD}}:{{RESET}}"
+    logc "------------------------------------------------------------"
     report_paths
 
-    log ""
-    log "${BOLD}Software:${RESET}"
-    log "------------------------------------------------------------"
+    logc ""
+    logc "{{BOLD}}Software:{{RESET}}"
+    logc "------------------------------------------------------------"
     source "${REPORTS}/sys.sh"
     editors
-    setup_colors # this must be re-established as editors() call will have removed it
 
     VERSIONING=()
     if has_command "git"; then
@@ -113,34 +111,30 @@ function report_about() {
     fi
 
     SSH="${SSH_AUTH_KEYS}, ${SSH_PUB_KEY}, ${SSH_KNOWN_HOSTS}"
-    log "${BOLD}SSH:${RESET}       ${SSH}"
+    logc "{{BOLD}}SSH:{{RESET}}       ${SSH}"
 
 
-    log ""
-    log "${BOLD}Functions:${RESET}"
-    log "------------------------------------------------------------"
-    log "- ${BLUE}${BOLD}sys${RESET}: storage, network, hardware info"
-    log "- ${BLUE}${BOLD}add${RESET}: function to install common programs setup a directory based on "
-    log "- ${BLUE}${BOLD}prep${RESET}: directory ${ITALIC}context-aware${RESET} for preparatory tasks"
-    log "- ${BLUE}${BOLD}init${RESET}: ensures core packages are installed on system (OS specific)"
-    log "- ${BLUE}${BOLD}installed${RESET}: list all globally installed packages grouped by package manager"
-    log "- ${BLUE}${BOLD}upgrade${RESET}: update and upgrade all globally installed packages across all package managers"
+    logc ""
+    logc "{{BOLD}}Functions:{{RESET}}"
+    logc "------------------------------------------------------------"
+    logc "- {{BLUE}}{{BOLD}}sys{{RESET}}: storage, network, hardware info"
+    logc "- {{BLUE}}{{BOLD}}add{{RESET}}: function to install common programs setup a directory based on "
+    logc "- {{BLUE}}{{BOLD}}prep{{RESET}}: directory ${ITALIC}context-aware{{RESET}} for preparatory tasks"
+    logc "- {{BLUE}}{{BOLD}}init{{RESET}}: ensures core packages are installed on system (OS specific)"
+    logc "- {{BLUE}}{{BOLD}}installed{{RESET}}: list all globally installed packages grouped by package manager"
+    logc "- {{BLUE}}{{BOLD}}upgrade{{RESET}}: update and upgrade all globally installed packages across all package managers"
 
     if is_pve_container; then
         :
     fi
 
     if is_pve_host; then
-        log ""
-        log "${BOLD}Proxmox:${RESET}"
-        log "------------------------------------------------------------"
+        logc ""
+        logc "{{BOLD}}Proxmox:{{RESET}}"
+        logc "------------------------------------------------------------"
         pct list
     fi
 
-    # mapfile -t FN < <(list_functions)
-    # log "$(filter_out FN "is_" "has_" "get_")"
-
-    remove_colors
 }
 
 
