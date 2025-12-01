@@ -171,12 +171,12 @@ function get_proxmox_node() {
         if curl -sk --max-time 2 --connect-timeout 2 "https://$candidate:${PROXMOX_API_PORT}/" &>/dev/null; then
             log_verbose "Found PVE node: $candidate"
             echo "$candidate"
+            # shellcheck disable=SC2086
             return ${EXIT_OK}
         fi
     done
 
-    log_error "No reachable Proxmox node found"
-    return ${EXIT_API}
+    error "No reachable Proxmox node found" "${EXIT_API}"
 }
 
 

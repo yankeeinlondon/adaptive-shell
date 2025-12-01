@@ -345,9 +345,28 @@ function install_on_fedora() {
     return 1
 }
 
+
+# installed_cargo <filter>
+#
+# TODO: implement this function
+function installed_cargo() {
+    :
+}
+
+# installed_brew <filter>
+#
+# TODO: implement this function
+function installed_brew() {
+    :
+}
+
+
+
 # installed <filter>
+#
+# TODO: implement this function
 function installed() {
-    # TODO
+    :
 }
 
 
