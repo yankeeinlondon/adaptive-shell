@@ -16,21 +16,30 @@ function error_handler() {
     local -r _line_number="${1:-}"
     local -r command="${2:-}"
 
+    # Use color defaults to avoid unbound variable errors
+    local -r _red="${RED:-}"
+    local -r _reset="${RESET:-}"
+    local -r _bold="${BOLD:-}"
+    local -r _dim="${DIM:-}"
+    local -r _italic="${ITALIC:-}"
+
     # shellcheck disable=SC2016
-    if is_bound command && [[ "$command" != 'return $code' ]]; then
-        log "  [${RED}x${RESET}] ${BOLD}ERROR ${DIM}${RED}$exit_code${RESET}${BOLD} → ${command}${RESET} "
+    if [[ -n "$command" && "$command" != 'return $code' ]]; then
+        printf "%b\\n" "  [${_red}x${_reset}] ${_bold}ERROR ${_dim}${_red}$exit_code${_reset}${_bold} → ${command}${_reset} " >&2
     fi
-    log ""
+    printf "\\n" >&2
 
     if [[ -n ${BASH_SOURCE+_} ]]; then
         local i
         for ((i = 0; i < ${#BASH_SOURCE[@]}; i++)); do
-            if ! contains "errors.sh" "${BASH_SOURCE[$i]:-unknown}"; then
-                log "    - ${FUNCNAME[$i]:-unknown}() ${ITALIC}${DIM}at line${RESET} ${BASH_LINENO[$((i-1))]:-unknown} ${ITALIC}${DIM}in${RESET} $(error_path "${BASH_SOURCE[$i]:-unknown}")"
+            local source_file="${BASH_SOURCE[$i]:-unknown}"
+            # Skip errors.sh itself in stack trace
+            if [[ "$source_file" != *"errors.sh"* ]]; then
+                printf "%b\\n" "    - ${FUNCNAME[$i]:-unknown}() ${_italic}${_dim}at line${_reset} ${BASH_LINENO[$((i-1))]:-unknown} ${_italic}${_dim}in${_reset} ${source_file}" >&2
             fi
         done
     fi
-    log ""
+    printf "\\n" >&2
 }
 
 

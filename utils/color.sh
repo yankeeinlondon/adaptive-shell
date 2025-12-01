@@ -19,6 +19,166 @@ fi
 # shellcheck source="./text.sh"
 source "${UTILS}/text.sh"
 
+# _query_terminal_osc <osc_code>
+#
+# Internal helper to send OSC query and read response.
+# Returns the response content or empty string on timeout/failure.
+_query_terminal_osc() {
+    local -r osc_code="${1:?OSC code required}"
+    local response=""
+
+    # Check if we have a terminal
+    [[ -t 0 ]] && [[ -t 1 ]] || return 1
+
+    # Skip in CI environments
+    [[ -n "${CI:-}" ]] && return 1
+
+    # Need /dev/tty for terminal communication
+    [[ -c /dev/tty ]] || return 1
+
+    # Save terminal state
+    local old_stty
+    old_stty=$(stty -g 2>/dev/null </dev/tty) || return 1
+
+    # Set raw mode for reading response with timeout
+    # min 0 = don't wait for chars, time 1 = 0.1 second timeout
+    stty raw -echo min 0 time 1 2>/dev/null </dev/tty || {
+        stty "$old_stty" 2>/dev/null </dev/tty
+        return 1
+    }
+
+    # Send query to terminal
+    printf '\033]%s;?\a' "$osc_code" >/dev/tty
+
+    # Read response with timeout
+    response=$(dd bs=100 count=1 2>/dev/null </dev/tty)
+
+    # Restore terminal
+    stty "$old_stty" 2>/dev/null </dev/tty
+
+    printf '%s' "$response"
+}
+
+# terminal_background_color
+#
+# Query the terminal for its default background color using OSC 11.
+# Returns RGB values as "R G B" (0-255 range) or empty string if unavailable.
+#
+# Environment variable overrides:
+# - TERMINAL_BG_COLOR: If set, returns this value directly (format: "R G B")
+terminal_background_color() {
+    # Check for override
+    if [[ -n "${TERMINAL_BG_COLOR:-}" ]]; then
+        printf '%s' "$TERMINAL_BG_COLOR"
+        return 0
+    fi
+
+    local response
+    response=$(_query_terminal_osc 11) || return 1
+
+    # Parse rgb:RRRR/GGGG/BBBB format
+    # Terminal returns 16-bit hex values (0000-ffff)
+    if [[ "$response" =~ rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+) ]]; then
+        local r_hex="${BASH_REMATCH[1]}"
+        local g_hex="${BASH_REMATCH[2]}"
+        local b_hex="${BASH_REMATCH[3]}"
+
+        # Convert to 8-bit (take first 2 hex digits if 4 digits)
+        local r g b
+        r=$((16#${r_hex:0:2}))
+        g=$((16#${g_hex:0:2}))
+        b=$((16#${b_hex:0:2}))
+
+        printf '%d %d %d' "$r" "$g" "$b"
+        return 0
+    fi
+
+    return 1
+}
+
+# is_dark_mode -> boolean
+#
+# Uses OSC 11 to query the terminal's background color and determines
+# if the terminal is in dark mode based on luminance calculation.
+#
+# Environment variable overrides:
+# - TERMINAL_THEME: If set to "dark" or "light", returns accordingly
+# - TERMINAL_BG_COLOR: If set, uses this RGB value for calculation
+#
+# Returns:
+# - 0 (true) if terminal background is dark (luminance < 128)
+# - 1 (false) if terminal background is light (luminance >= 128)
+# - Defaults to dark mode (0) if detection fails
+is_dark_mode() {
+    # Check for explicit override
+    if [[ "${TERMINAL_THEME:-}" == "dark" ]]; then
+        return 0
+    elif [[ "${TERMINAL_THEME:-}" == "light" ]]; then
+        return 1
+    fi
+
+    local bg_color
+    bg_color=$(terminal_background_color) || {
+        # Default to dark mode if detection fails
+        return 0
+    }
+
+    # Handle empty response
+    [[ -n "$bg_color" ]] || return 0
+
+    local r g b
+    read -r r g b <<< "$bg_color"
+
+    # Calculate luminance using ITU-R BT.709 formula:
+    # L = 0.2126*R + 0.7152*G + 0.0722*B
+    # Using integer math with scaling: L = (2126*R + 7152*G + 722*B) / 10000
+    local luminance=$(( (2126 * r + 7152 * g + 722 * b) / 10000 ))
+
+    # Dark mode if luminance < 128
+    [[ $luminance -lt 128 ]]
+}
+
+# is_light_mode -> boolean
+#
+# Uses OSC 11 to query the terminal's background color and determines
+# if the terminal is in light mode based on luminance calculation.
+#
+# Environment variable overrides:
+# - TERMINAL_THEME: If set to "dark" or "light", returns accordingly
+# - TERMINAL_BG_COLOR: If set, uses this RGB value for calculation
+#
+# Returns:
+# - 0 (true) if terminal background is light (luminance >= 128)
+# - 1 (false) if terminal background is dark (luminance < 128)
+# - Defaults to dark mode, so returns 1 (false) if detection fails
+is_light_mode() {
+    # Check for explicit override
+    if [[ "${TERMINAL_THEME:-}" == "light" ]]; then
+        return 0
+    elif [[ "${TERMINAL_THEME:-}" == "dark" ]]; then
+        return 1
+    fi
+
+    local bg_color
+    bg_color=$(terminal_background_color) || {
+        # Default to dark mode if detection fails, so light mode is false
+        return 1
+    }
+
+    # Handle empty response
+    [[ -n "$bg_color" ]] || return 1
+
+    local r g b
+    read -r r g b <<< "$bg_color"
+
+    # Calculate luminance using ITU-R BT.709 formula
+    local luminance=$(( (2126 * r + 7152 * g + 722 * b) / 10000 ))
+
+    # Light mode if luminance >= 128
+    [[ $luminance -ge 128 ]]
+}
+
+
 function colors_not_setup() {
     if [[ -z "${BRIGHT_BLACK}" ]]; then
         debug "colors_not_setup" "Colors are NOT setup"

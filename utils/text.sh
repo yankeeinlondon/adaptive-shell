@@ -510,6 +510,17 @@ function char_width() {
             continue
         fi
 
+        # Handle tab characters - expand to TAB_WIDTH columns (default 4)
+        if [[ "$char" == $'\t' ]]; then
+            local -i tab_width=${TAB_WIDTH:-4}
+            local i
+            for ((i = 0; i < tab_width; i++)); do
+                result="${result} "
+            done
+            pos=$((pos + 1))
+            continue
+        fi
+
         # Regular character - add to result
         result="${result}${char}"
         pos=$((pos + 1))

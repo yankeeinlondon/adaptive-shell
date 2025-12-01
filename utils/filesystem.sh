@@ -85,7 +85,7 @@ function find_in_file() {
     local -r key="${2:?find_in_file() called but key value passed in!}"
 
     source "${UTILS}/logging.sh"
-    source "${UTILS}/empty.sh"
+    source "${UTILS}/text.sh"
 
     if file_exists "${filepath}"; then
         debug "find_in_file(${filepath})" "file found"
@@ -94,7 +94,7 @@ function find_in_file() {
         while read -r line; do
             if not_empty "${line}" && contains "${key}" "${line}"; then
                 if starts_with "${key}=" "${line}"; then
-                    found="$(strip_leading "${key}=" "${line}")"
+                    found="$(strip_before "${key}=" "${line}")"
                 else
                     found="${line}"
                 fi

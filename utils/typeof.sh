@@ -265,56 +265,11 @@ function is_array() {
 }
 
 
-# is_empty() <test | ref:test>
-#
-# tests whether the <test> value passed in is an empty string (or is unset)
-# and returns 0 when it is empty and 1 when it is NOT.
-function is_empty() {
-    allow_errors
-    local -n __ref__=$1 2>/dev/null
-    catch_errors
+# NOTE: is_empty() is defined in empty.sh (simpler version without nameref issues)
+# The complex version was removed because it caused problems with set -e and namerefs.
+# The simple version handles string emptiness which is sufficient for most use cases.
+# For array emptiness checks, use is_array first then check ${#array[@]} -eq 0.
 
-    if is_bound __ref__; then
-        if is_array __ref__; then
-            if [[ ${#__ref__[@]} -eq 0 ]]; then
-                debug "is_empty" "found an array with no elements so returning true"
-                return 0
-            else
-                debug "is_empty" "found an array with some elements so returning false"
-                return 1
-            fi
-        elif is_assoc_array __ref__; then
-            if [[ ${#!__ref__[@]} -eq 0 ]]; then
-                debug "is_empty" "found an associative array with no keys so returning true"
-                return 0
-            else
-                debug "is_empty" "found an associative array with some key/values so returning false"
-                return 1
-            fi
-        else
-            allow_errors
-            local -r try_pass_by_val="$__ref__" 2>/dev/null
-            catch_errors
-            if [ -z "$try_pass_by_val" ] || [[ "$try_pass_by_val" == "" ]]; then
-                debug "is_empty" "was empty, returning 0/true"
-                return 0
-            else
-                debug "is_empty" "was NOT empty, returning 1/false"
-                return 1
-            fi
-        fi
-
-    else
-        if [ -z "$1" ] || [[ "$1" == "" ]]; then
-            debug "is_empty(${1})" "was empty, returning 0/true"
-            return 0
-        else
-            debug "is_empty(${1}))" "was NOT empty, returning 1/false"
-            return 1
-        fi
-    fi
-
-}
 
 # is_shell_alias() <candidate>
 #

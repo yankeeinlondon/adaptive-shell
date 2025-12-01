@@ -321,9 +321,6 @@ describe('detection utilities', () => {
         has_command uv && echo "FOUND" || echo "NOT_FOUND"
       `)
 
-      // This will tell us if the issue is PATH-related or function-related
-      console.log('ZSH uv test:', result)
-
       // If uv is installed in ~/.local/bin, this should find it
       if (existsSync(join(process.env.HOME || '', '.local/bin/uv'))) {
         expect(result.code).toBe(0)
@@ -359,7 +356,6 @@ describe('detection utilities', () => {
         fi
       `)
 
-      console.log('Full init test:', result)
       expect(result.code).toBe(0)
       expect(result.stdout).toContain('PASS')
     })
@@ -388,7 +384,6 @@ describe('detection utilities', () => {
         fi
       `)
 
-      console.log('Missing PATH test:', result)
       // When PATH doesn't include the binary location, wrapper SHOULD be created
       expect(result.code).toBe(0)
       expect(result.stdout).toContain('EXPECTED')

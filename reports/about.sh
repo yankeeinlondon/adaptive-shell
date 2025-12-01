@@ -34,8 +34,8 @@ function report_about() {
     # shellcheck source="./paths.sh"
     source "${REPORTS}/paths.sh"
 
-    # shellcheck source="../programs/versioning.sh"
-    source "${PROGRAMS}/versioning.sh"
+    # shellcheck source="../programs/git.sh"
+    source "${PROGRAMS}/git.sh"
     # shellcheck source="../programs/ssh.sh"
     source "${PROGRAMS}/ssh.sh"
 
@@ -86,7 +86,7 @@ function report_about() {
         INFO="$(git_identity)"
         VERSIONING+=( "${INFO}" )
     fi
-    log "${BOLD}GIT:${RESET}       ${VERSIONING[*]}"
+    logc "{{BOLD}}GIT:{{RESET}}       ${VERSIONING[*]}"
 
     if has_file "${HOME}/.ssh/authorized_keys"; then
         SSH_AUTH_KEYS="✅ Authorized Keys"
@@ -122,6 +122,13 @@ function report_about() {
     log "- ${BLUE}${BOLD}sys${RESET}: storage, network, hardware info"
     log "- ${BLUE}${BOLD}add${RESET}: function to install common programs setup a directory based on "
     log "- ${BLUE}${BOLD}prep${RESET}: directory ${ITALIC}context-aware${RESET} for preparatory tasks"
+    log "- ${BLUE}${BOLD}init${RESET}: ensures core packages are installed on system (OS specific)"
+    log "- ${BLUE}${BOLD}installed${RESET}: list all globally installed packages grouped by package manager"
+    log "- ${BLUE}${BOLD}upgrade${RESET}: update and upgrade all globally installed packages across all package managers"
+
+    if is_pve_container; then
+        :
+    fi
 
     if is_pve_host; then
         log ""
