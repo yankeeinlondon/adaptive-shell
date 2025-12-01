@@ -115,5 +115,5 @@ function error() {
     local -ri code=$(( "${2:-1}" ))
     local -r fn="${3:-${FUNCNAME[1]}}"
 
-    log "\n  [${RED}x${RESET}] ${BOLD}ERROR ${DIM}${RED}$code${RESET}${BOLD} →${RESET} ${msg}" && return $code
+    logc "\n  [{{RED}}x{{RESET}}] {{BOLD}}ERROR {{DIM}}{{RED}}${code}{{RESET}}{{BOLD}} →{{RESET}} ${msg}" && return $code
 }
