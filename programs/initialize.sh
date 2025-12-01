@@ -217,15 +217,21 @@ function main() {
     case "${OS}" in
 
         linux)
-            if is_debian; then
-                debian
-            else
-                log "- no initialization yet for the ${BOLD}$(distro)${RESET} distro."
+            if is_debian || is_ubuntu; then
+                install_nala
             fi
+            install_git
+            install_openssh
+
             ;;
         macos)
 
             install_git
+            install_openssh
+            install_gpg
+            install_gh
+            install_curl
+            install_wget
             install_neovim
             install_jq
             install_eza
@@ -236,6 +242,9 @@ function main() {
             install_claude_code
             install_gemini_cli
             install_btop
+            install_delta
+            install_fzf
+            install_just
             ;;
 
         windows)

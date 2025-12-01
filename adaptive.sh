@@ -35,7 +35,12 @@ COMPLETIONS="${HOME}/.completions"
 
 
 function completions() {
+    # Skip completion setup in non-interactive shells
+    if [[ "$-" == *i* ]]; then
+
     :
+
+    fi
 }
 
 function setup_env() {
@@ -48,6 +53,12 @@ function adaptive_setup() {
 
     # shellcheck source="./utils/text.sh"
     source "${UTILS}/logging.sh"
+    # shellcheck source="./utils/detection.sh"
+    source "${UTILS}/detection.sh"
+    # shellcheck source="./utils/filesystem.sh"
+    source "${UTILS}/filesystem.sh"
+    # shellcheck source="./utils/empty.sh"
+    source "${UTILS}/empty.sh"
     # shellcheck source="./utils.sh"
     source "${ROOT}/utils.sh"
     # shellcheck source="./reports/paths.sh"
@@ -58,6 +69,7 @@ function adaptive_setup() {
 
     # Set up aliases and PATH variables
     set_aliases
+    append_to_path  # Add detected paths (e.g., ~/.local/bin, ~/.cargo/bin) to PATH
 
     if is_zsh; then
         emulate zsh -R
@@ -114,7 +126,7 @@ function adaptive_setup() {
         # fi
     fi
 
-    if type pm2 &>/dev/null; then
+    if has_command "pm2"; then
         # shellcheck source="./resources/_pm2"
         source "${CONFIG_LOCATION}/resources/_pm2"
     fi
@@ -128,7 +140,7 @@ function adaptive_setup() {
         }
     fi
 
-    if type brew &>/dev/null; then
+    if has_command "brew"; then
         HOMEBREW_PREFIX=$(brew --prefix)
         if is_zsh; then
             fpath+=( "$HOMEBREW_PREFIX/share/zsh/site-functions" )
@@ -174,7 +186,7 @@ function adaptive_setup() {
         source "${UTILS}/proxmox.sh"
     fi
 
-    if type aws_completer &>/dev/null; then
+    if has_command "aws_completer"; then
         if ! is_zsh; then
             # Skip completion setup in non-interactive shells
             if [[ "$-" == *i* ]]; then
@@ -214,12 +226,11 @@ function adaptive_setup() {
 
     fi
 
-
     if not_empty "${WEZTERM_CONFIG_DIR}"; then
-    if file_exists "${UTILS}/wezterm.sh"; then
-        # shellcheck source="./utils/wezterm.sh"
-        source "${UTILS}/wezterm.sh"
-    fi
+        if file_exists "${UTILS}/wezterm.sh"; then
+            # shellcheck source="./utils/wezterm.sh"
+            source "${UTILS}/wezterm.sh"
+        fi
     fi
 
     # source user's `.env` in home directory

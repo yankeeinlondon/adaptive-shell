@@ -161,17 +161,6 @@ is_kvm_vm() {
     return 1
 }
 
-#
-is_pve_container() {
-    if is_lxc; then
-        return 0;
-    elif is_vm; then
-        return 0;
-    else
-        return 1;
-    fi
-}
-
 # using_bash_3
 #
 # tests whether the host OS has bash version 3 installed
@@ -201,15 +190,53 @@ function bash_version() {
 
 # has_command <cmd>
 #
-# checks whether a particular program passed in via $1 is installed
-# on the OS or not (at least within the $PATH)
+# Checks whether a particular program passed in via $1 is installed
+# on the OS or not (at least within the $PATH). This function explicitly
+# excludes shell functions from detection, allowing wrapper functions
+# to exist without being mistakenly identified as the real command.
 function has_command() {
     local -r cmd="${1:?cmd is missing}"
 
-    if command -v "${cmd}" &> /dev/null; then
-        return 0
+    # Check for actual executable in PATH (not functions or aliases)
+    # Use shell-specific methods since type -P is bash-only
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        # Zsh: use whence -p (finds executables in PATH only)
+        if whence -p "${cmd}" &> /dev/null; then
+            return 0
+        fi
+        # Also accept shell builtins
+        local cmd_type
+        cmd_type="$(whence -w "${cmd}" 2>/dev/null)"
+        if [[ "${cmd_type}" == *": builtin" ]]; then
+            return 0
+        fi
     else
-        return 1
+        # Bash: use type -P (finds executables in PATH only)
+        if type -P "${cmd}" &> /dev/null; then
+            return 0
+        fi
+        # Also accept shell builtins
+        if [[ "$(type -t "${cmd}" 2>/dev/null)" == "builtin" ]]; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# has_function <name>
+#
+# Checks whether a shell function with the given name is defined.
+# Returns true only for functions, not for executables, aliases, or builtins.
+function has_function() {
+    local -r name="${1:?function name is missing}"
+
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        # Zsh: whence -w outputs "name: function" for functions
+        [[ "$(whence -w "${name}" 2>/dev/null)" == *": function" ]]
+    else
+        # Bash: type -t outputs "function" for functions
+        [[ "$(type -t "${name}" 2>/dev/null)" == "function" ]]
     fi
 }
 
@@ -229,144 +256,300 @@ function is_keyword() {
 
 # is_git_repo <path || CWD>
 #
-# tests whether the current working directory is part of a git repo
+# Tests whether the given path is inside a git repository.
+# Returns 0 if inside a git repo, 1 otherwise.
 function is_git_repo() {
-    local -r path="${1}:-${CWD}"
-    local repo_root
+    local path="${1:-${PWD}}"
 
-    if is_git_repo "${path}"; then
-        repo_root="$(repo_root "${path}")"
-    else
-        repo_root="${path}"
+    # Handle non-existent paths
+    if [[ ! -e "${path}" ]]; then
+        return 1
     fi
-    # TODO
-    return 1
+
+    # If path is a file, use its directory
+    if [[ -f "${path}" ]]; then
+        path="$(dirname "${path}")"
+    fi
+
+    # Check if inside a git work tree
+    git -C "${path}" rev-parse --is-inside-work-tree &>/dev/null
 }
 
 # repo_is_dirty <path || CWD>
 #
-# tests whether the current git status has changes which have
-# not yet been committed
+# Tests whether the git repository has uncommitted changes.
+# Returns 0 if dirty (has changes), 1 if clean or not a git repo.
 function repo_is_dirty() {
-    local -r path="${1}:-${CWD}"
-    local repo_root
+    local path="${1:-${PWD}}"
 
-    if is_git_repo "${path}"; then
-        repo_root="$(repo_root "${path}")"
-    else
-        repo_root="${path}"
+    # Handle non-existent paths
+    if [[ ! -e "${path}" ]]; then
+        return 1
     fi
-    # TODO
-    return 1
+
+    # If path is a file, use its directory
+    if [[ -f "${path}" ]]; then
+        path="$(dirname "${path}")"
+    fi
+
+    # Must be a git repo
+    if ! is_git_repo "${path}"; then
+        return 1
+    fi
+
+    # Check for any changes (staged, unstaged, or untracked)
+    local status
+    status="$(git -C "${path}" status --porcelain 2>/dev/null)"
+
+    # If status output is non-empty, repo is dirty
+    [[ -n "${status}" ]]
 }
 
 # repo_root <path || CWD>
 #
-# if the current working directory is in a
-# git repository, find the root directory of
-# that repo.
-#
-# if the current working directory is NOT
-# a repo then return error code.
+# Finds the root directory of a git repository.
+# Outputs the absolute path to the repo root on success.
+# Returns 0 on success, 1 if not a git repo or path doesn't exist.
 function repo_root() {
-    local -r path="${1}:-${CWD}"
-    local repo_root
+    local path="${1:-${PWD}}"
 
-    if is_git_repo "${path}"; then
-        repo_root="$(repo_root "${path}")"
-    else
-        repo_root="${path}"
+    # Handle non-existent paths
+    if [[ ! -e "${path}" ]]; then
+        return 1
     fi
-    # TODO
-    return 1
+
+    # If path is a file, use its directory
+    if [[ -f "${path}" ]]; then
+        path="$(dirname "${path}")"
+    fi
+
+    # Must be a git repo
+    if ! is_git_repo "${path}"; then
+        return 1
+    fi
+
+    # Get the repo root
+    git -C "${path}" rev-parse --show-toplevel 2>/dev/null
 }
 
-# repo_root <path || $CWD>
+# is_monorepo <path || $CWD>
 #
-# Finds the root directory if the $path is a
-# git repo.
-#
-# - if it is NOT a git repo then return an
-#   error code
+# Tests whether the repository is a monorepo (contains multiple packages/workspaces).
+# Checks for: pnpm-workspace.yaml, lerna.json, or workspaces field in package.json.
+# Returns 0 if monorepo, 1 otherwise.
 function is_monorepo() {
-    local -r path="${1}:-${CWD}"
-    local repo_root
+    local path="${1:-${PWD}}"
+    local root
 
+    # Get repo root (or use path directly if not a git repo)
     if is_git_repo "${path}"; then
-        repo_root="$(repo_root "${path}")"
+        root="$(repo_root "${path}")"
     else
-        repo_root="${path}"
+        # Not a git repo - check the path directly
+        if [[ -d "${path}" ]]; then
+            root="${path}"
+        else
+            return 1
+        fi
     fi
-    # TODO
+
+    # Check for pnpm workspaces
+    if [[ -f "${root}/pnpm-workspace.yaml" ]]; then
+        return 0
+    fi
+
+    # Check for Lerna
+    if [[ -f "${root}/lerna.json" ]]; then
+        return 0
+    fi
+
+    # Check for npm/yarn workspaces in package.json
+    if [[ -f "${root}/package.json" ]]; then
+        if grep -q '"workspaces"' "${root}/package.json" 2>/dev/null; then
+            return 0
+        fi
+    fi
+
     return 1
 }
 
-# has_package_json()
+# has_package_json <path || CWD>
 #
-# checks if a `package.json` file can be found
-# in:
-#   - "${path}"
-#   - "${repo_root}"
+# Checks if a `package.json` file can be found in the path or repo root.
+# Returns 0 if found, 1 otherwise.
 function has_package_json() {
-    local -r path="${1}:-${CWD}"
-    local repo_root
+    local path="${1:-${PWD}}"
 
-    if is_git_repo "${path}"; then
-        repo_root="$(repo_root "${path}")"
-    else
-        repo_root="${path}"
+    # Handle non-existent paths
+    if [[ ! -e "${path}" ]]; then
+        return 1
     fi
-    # TODO
+
+    # If path is a file, use its directory
+    if [[ -f "${path}" ]]; then
+        path="$(dirname "${path}")"
+    fi
+
+    # Check directly in path
+    if [[ -f "${path}/package.json" ]]; then
+        return 0
+    fi
+
+    # Check in repo root if in a git repo
+    if is_git_repo "${path}"; then
+        local root
+        root="$(repo_root "${path}")"
+        if [[ -f "${root}/package.json" ]]; then
+            return 0
+        fi
+    fi
+
     return 1
 }
 
-# has_typescript_files <[path]>
+# has_typescript_files <path || CWD>
 #
-# Looks for typescript files in:
-#   - "${repo_root}/"
-#   - "${repo_root}/src"
-#   - "${path}"
-#
-# the `${path}` is whatever is passed into "$1" or will
-# fallback to `${CWD}`
+# Looks for TypeScript files (.ts, .tsx) in the path, repo root, and src/ subdirectory.
+# Returns 0 if found, 1 otherwise.
 function has_typescript_files() {
-    local -r path="${1}:-${CWD}"
-    local repo_root
+    local path="${1:-${PWD}}"
+    local root
+    local found
 
-    if is_git_repo "${path}"; then
-        repo_root="$(repo_root "${path}")"
-    else
-        repo_root="${path}"
+    # Handle non-existent paths
+    if [[ ! -e "${path}" ]]; then
+        return 1
     fi
 
-    # TODO
+    # If path is a file, use its directory
+    if [[ -f "${path}" ]]; then
+        path="$(dirname "${path}")"
+    fi
+
+    # Determine root directory to search
+    if is_git_repo "${path}"; then
+        root="$(repo_root "${path}")"
+    else
+        root="${path}"
+    fi
+
+    # Check in path directly (with limited depth for performance)
+    # Use -quit for efficiency and capture result to avoid pipefail issues
+    found="$(find "${path}" -maxdepth 3 \( -name '*.ts' -o -name '*.tsx' \) -print -quit 2>/dev/null || true)"
+    if [[ -n "${found}" ]]; then
+        return 0
+    fi
+
+    # Check in repo root if different from path
+    if [[ "${root}" != "${path}" ]]; then
+        found="$(find "${root}" -maxdepth 3 \( -name '*.ts' -o -name '*.tsx' \) -print -quit 2>/dev/null || true)"
+        if [[ -n "${found}" ]]; then
+            return 0
+        fi
+    fi
+
+    # Check in src/ subdirectory
+    if [[ -d "${root}/src" ]]; then
+        found="$(find "${root}/src" -maxdepth 3 \( -name '*.ts' -o -name '*.tsx' \) -print -quit 2>/dev/null || true)"
+        if [[ -n "${found}" ]]; then
+            return 0
+        fi
+    fi
+
     return 1
 }
 
-# looks_like_js_project()
+# looks_like_js_project
 #
-# looks for files in the current directory which indicate that
-# this is a Javascript/Typescript project.
+# Looks for files in the current directory which indicate
+# this is a JavaScript/TypeScript project.
+# Returns 0 if JS/TS project detected, 1 otherwise.
 function looks_like_js_project() {
-    # TODO: look for package.json
+    local found
+
+    # Primary indicator: package.json
+    if [[ -f "./package.json" ]]; then
+        return 0
+    fi
+
+    # Check repo root if in a git repo
+    if is_git_repo "."; then
+        local root
+        root="$(repo_root ".")"
+        if [[ -f "${root}/package.json" ]]; then
+            return 0
+        fi
+    fi
+
+    # Fallback: look for JS/TS files in current directory
+    found="$(find . -maxdepth 2 \( -name '*.js' -o -name '*.ts' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.jsx' -o -name '*.tsx' \) -print -quit 2>/dev/null || true)"
+    if [[ -n "${found}" ]]; then
+        return 0
+    fi
+
     return 1
 }
 
-# looks_like_rust_project()
+# looks_like_rust_project
 #
-# looks for files in the current directory which indicate
+# Looks for files in the current directory which indicate
 # this is a Rust project.
+# Returns 0 if Rust project detected, 1 otherwise.
 function looks_like_rust_project() {
-    # TODO
+    local found
+
+    # Primary indicator: Cargo.toml
+    if [[ -f "./Cargo.toml" ]]; then
+        return 0
+    fi
+
+    # Check repo root if in a git repo
+    if is_git_repo "."; then
+        local root
+        root="$(repo_root ".")"
+        if [[ -f "${root}/Cargo.toml" ]]; then
+            return 0
+        fi
+    fi
+
+    # Fallback: look for .rs files
+    found="$(find . -maxdepth 2 -name '*.rs' -print -quit 2>/dev/null || true)"
+    if [[ -n "${found}" ]]; then
+        return 0
+    fi
+
     return 1
 }
 
-# looks_like_python_project()
+# looks_like_python_project
 #
-# looks for files in the current directory which indicate
-# this is a Rust project.
+# Looks for files in the current directory which indicate
+# this is a Python project.
+# Returns 0 if Python project detected, 1 otherwise.
 function looks_like_python_project() {
-    # TODO
+    local root="."
+    local found
+
+    # Check repo root if in a git repo
+    if is_git_repo "."; then
+        root="$(repo_root ".")"
+    fi
+
+    # Primary indicators: Python project files
+    if [[ -f "${root}/pyproject.toml" ]] ||
+       [[ -f "${root}/requirements.txt" ]] ||
+       [[ -f "${root}/setup.py" ]] ||
+       [[ -f "${root}/setup.cfg" ]] ||
+       [[ -f "${root}/Pipfile" ]]; then
+        return 0
+    fi
+
+    # Fallback: look for .py files
+    found="$(find "${root}" -maxdepth 2 -name '*.py' -print -quit 2>/dev/null || true)"
+    if [[ -n "${found}" ]]; then
+        return 0
+    fi
+
     return 1
 }
 
@@ -375,6 +558,11 @@ function looks_like_python_project() {
 # tests whether a given string exists in the package.json file
 # located in the current directory.
 function in_package_json() {
+    # shellcheck source="./text.sh"
+    source "${UTILS}/text.sh"
+    # shellcheck source="./filesystem.sh"
+    source "${UTILS}/filesystem.sh"
+
     local find="${1:?find string missing in call to in_package_json}"
     local -r pkg="$(get_file "./package.json")"
 

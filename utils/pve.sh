@@ -218,30 +218,10 @@ function about_container() {
 function whereami() {
     set -euo pipefail
 
-    ENV_FILE="${PVE_API_ENV:-${HOME}/.config/pve/container/pve-api.env}"
-
-    # Node to IP mapping
-    declare -A NODE_IPS=(
-        ["pve"]="192.168.100.2"
-        ["shadow"]="192.168.100.4"
-        ["sidekick"]="192.168.100.5"
-        ["monster"]="192.168.100.14"
-    )
-
-    # Colors
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    BOLD='\033[1m'
-    NC='\033[0m'
-
-    usage() {
-        sed -n '3,10p' "$0" | sed 's/^#//' | sed 's/^ //'
-        exit 0
-    }
-
-    # Parse arguments
+    # Parse arguments (before colors are set up)
     QUIET=false
     JSON=false
+    VERBOSE=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -253,70 +233,96 @@ function whereami() {
                 JSON=true
                 shift
                 ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+
             -h|--help)
+                setup_colors
                 usage
                 ;;
             *)
-                echo -e "${RED}Unknown option: $1${NC}" >&2
+                setup_colors
+                log_error "Unknown option: $1"
                 usage
                 ;;
         esac
     done
 
-    # Load API token
-    if [[ ! -f "$ENV_FILE" ]]; then
-        echo -e "${RED}Error: API token file not found at $ENV_FILE${NC}" >&2
-        exit 1
+    # Check dependencies
+    if ! has_command "jq"; then
+        logc "{{BOLD}}{{BLUE}}jq{{RESET}} is required for Proxmox API calls."
+        if confirm "Install jq now?"; then
+            if ! install_jq; then
+                error "Failed to install {{BOLD}}{{BLUE}}jq{{RESET}}" "${EXIT_API}"
+            fi
+        else
+            logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"
+            # shellcheck disable=SC2086
+            return ${EXIT_CONFIG}
+        fi
     fi
 
-    source "${ENV_FILE}"
+    if ! has_command "curl"; then
+        logc "{{BOLD}}{{BLUE}}curl{{RESET}} is required for Proxmox API calls."
+        if confirm "Install curl now?"; then
+            if ! install_curl; then
+                error "Failed to install {{BOLD}}{{BLUE}}curl{{RESET}}" "${EXIT_API}"
+            fi
+        else
+            logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"
+            # shellcheck disable=SC2086
+            return ${EXIT_CONFIG}
+        fi
+    fi
+
+    # Load API token
+    if [[ ! -f "$ENV_FILE" ]]; then
+        error "API token file not found at $ENV_FILE" "${EXIT_CONFIG}"
+    fi
+
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
 
     if [[ -z "${PVE_API_TOKEN:-}" ]]; then
-        echo -e "${RED}Error: PVE_API_TOKEN not set in $ENV_FILE${NC}" >&2
-        exit 1
+        error "PVE_API_TOKEN not set in $ENV_FILE" "${EXIT_CONFIG}"
     fi
 
     HOSTNAME=$(hostname)
+    debug "whereami" "Looking for hostname: $HOSTNAME"
 
-    # Query each node to find this container
-    for node in "${!NODE_IPS[@]}"; do
-        host="${NODE_IPS[$node]}"
+    # Resolve seed node (dynamic discovery with fallbacks)
+    SEED_NODE=$(resolve_seed_node)
+    debug "whereami" "Using seed node: $SEED_NODE"
 
-        # Try LXC
-        result=$(curl -sk --max-time 5 \
-            -H "Authorization: PVEAPIToken=$PVE_API_TOKEN" \
-            "https://$host:8006/api2/json/nodes/$node/lxc" 2>/dev/null) || continue
+    # Single API call to get all VMs/LXCs across entire cluster
+    debug "whereami" "Querying cluster resources..."
+    RESULT=$(curl -sk --max-time 10 \
+        -H "Authorization: PVEAPIToken=$PVE_API_TOKEN" \
+        "https://$SEED_NODE:8006/api2/json/cluster/resources?type=vm" 2>/dev/null)
 
-        match=$(echo "$result" | jq -r --arg name "$HOSTNAME" \
-            '.data[] | select(.name == $name) | "\(.vmid)"' 2>/dev/null) || continue
-
-        if [[ -n "$match" ]]; then
-            VMID="$match"
-            NODE="$node"
-            TYPE="lxc"
-            break
-        fi
-
-        # Try QEMU
-        result=$(curl -sk --max-time 5 \
-            -H "Authorization: PVEAPIToken=$PVE_API_TOKEN" \
-            "https://$host:8006/api2/json/nodes/$node/qemu" 2>/dev/null) || continue
-
-        match=$(echo "$result" | jq -r --arg name "$HOSTNAME" \
-            '.data[] | select(.name == $name) | "\(.vmid)"' 2>/dev/null) || continue
-
-        if [[ -n "$match" ]]; then
-            VMID="$match"
-            NODE="$node"
-            TYPE="qemu"
-            break
-        fi
-    done
-
-    if [[ -z "${VMID:-}" ]]; then
-        echo -e "${RED}Error: Could not find container with hostname '$HOSTNAME'${NC}" >&2
-        exit 1
+    if [[ -z "$RESULT" ]] || ! echo "$RESULT" | jq -e '.data' &>/dev/null; then
+        log_error "Failed to query PVE cluster API"
+        exit $EXIT_API
     fi
+
+    # Find this container/VM by hostname in single pass
+    MATCH=$(echo "$RESULT" | jq -r --arg name "$HOSTNAME" \
+        '.data[] | select(.name == $name) | "\(.node):\(.vmid):\(.type)"' 2>/dev/null | head -1)
+
+    if [[ -z "$MATCH" ]]; then
+        log_error "Could not find container/VM with hostname '$HOSTNAME'"
+        [[ "$VERBOSE" == true ]] && {
+            echo -e "${YELLOW}Available VMs/LXCs:${NC}" >&2
+            echo "$RESULT" | jq -r '.data[] | "  \(.name) (\(.type)) on \(.node)"' >&2
+        }
+        exit $EXIT_NOTFOUND
+    fi
+
+    # Parse the match (format: node:vmid:type)
+    IFS=':' read -r NODE VMID TYPE <<< "$MATCH"
+    debug "whereami" "Found: $HOSTNAME is $TYPE $VMID on node $NODE"
 
     # Output
     if [[ "$JSON" == true ]]; then
@@ -334,4 +340,7 @@ function whereami() {
         echo -e "${BOLD}VMID:${NC}      $VMID"
         echo -e "${BOLD}Type:${NC}      $TYPE"
     fi
+
+    # shellcheck disable=SC2086
+    exit ${EXIT_OK}
 }

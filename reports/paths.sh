@@ -90,7 +90,8 @@ function report_paths() {
     fi
 
     # Process pipe-separated triplets
-    local name dup path
+    # NOTE: Cannot use 'path' as variable name - in zsh it's tied to PATH
+    local name dup dir_path
     local count=0
     local IFS='|'
 
@@ -99,12 +100,12 @@ function report_paths() {
             0) name="$item"; count=1 ;;
             1) dup="$item"; count=2 ;;
             2)
-                path="$item"
+                dir_path="$item"
                 count=0
                 if [[ "${dup}" == "true" ]]; then
-                    log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}"
+                    log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${dir_path}${RESET}"
                 else
-                    log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${path}${RESET}${YELLOW}*${RESET}"
+                    log "- ${BOLD}${GREEN}${name}${RESET} ${ITALIC}as${RESET} ${BLUE}${dir_path}${RESET}${YELLOW}*${RESET}"
                 fi
                 ;;
         esac
@@ -133,8 +134,10 @@ function append_to_path() {
         fi
     fi
 
-    # Process pipe-separated triplets: name, is_duplicate, path
-    local name dup path
+    # Process pipe-separated triplets: name, is_duplicate, dir_path
+    # NOTE: Cannot use 'path' as variable name - in zsh, 'path' is tied to 'PATH'
+    # and declaring 'local path' will empty PATH!
+    local name dup dir_path
     local count=0
     local IFS='|'
 
@@ -143,11 +146,11 @@ function append_to_path() {
             0) name="$item"; count=1 ;;
             1) dup="$item"; count=2 ;;
             2)
-                path="$item"
+                dir_path="$item"
                 count=0
                 # Only append if not already in PATH (dup != "true")
-                if [[ "${dup}" !=  "true" ]] && [[ -n "${path}" ]]; then
-                    export PATH="${PATH}:${path}"
+                if [[ "${dup}" != "true" ]] && [[ -n "${dir_path}" ]]; then
+                    export PATH="${PATH}:${dir_path}"
                 fi
                 ;;
         esac

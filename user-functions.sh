@@ -86,7 +86,6 @@ function installed() {
     source "${UTILS}/install.sh"
 
     show_installed "$@"
-
 }
 
 
@@ -228,5 +227,46 @@ else
         log "the ${BOLD}${BLUE}Yazi${RESET} CLI file explorer is not installed"
         log "> https://yazi-rs.github.io/docs/installation"
         log ""
+    }
+fi
+
+function upgrade() {
+    # shellcheck source="./utils/interactive.sh"
+    source "${UTILS}/interactive.sh"
+    # shellcheck source="./utils/install.sh"
+    source "${UTILS}/install.sh"
+
+    logc "\n{{BOLD}}{{GREEN}}upgrade{{RESET}} will update all package managers installed on the system. This would include the OS's primary package manager as well package managers like gem,npm, pip, and uv."
+    if confirm "Continue?"; then
+        update_packages
+        upgrade_packages
+    else
+        logc "\nOk.\n"
+    fi
+}
+
+if ! has_command "uv"; then
+    function uv() {
+        logc "{{BOLD}}{{BLUE}}uv{{RESET}} [{{DIM}}https://docs.astral.sh/uv{{RESET}}] is not currently installed on this system."
+        # shellcheck source="./utils/interactive.sh"
+        source "${UTILS}/interactive.sh"
+        if confirm "Install now?"; then
+            # shellcheck source="./utils/install.sh"
+            source "${UTILS}/install.sh"
+            install_uv && ( unset -f uv )
+        fi
+    }
+fi
+
+if ! has_command "cargo"; then
+    function cargo() {
+        logc "{{BOLD}}{{BLUE}}Rust{{RESET}} -- {{ITALIC}}and therefore {{BOLD}}cargo{{RESET}} -- are not installed on this system."
+        # shellcheck source="./utils/interactive.sh"
+        source "${UTILS}/interactive.sh"
+        if confirm "Install now?"; then
+            # shellcheck source="./utils/install.sh"
+            source "${UTILS}/install.sh"
+            install_rust && ( unset -f cargo )
+        fi
     }
 fi

@@ -97,8 +97,41 @@ The static analysis tool extracts:
 
 - Script directory references: `SCRIPT_DIR="${HOME}/.config/sh"`
 - Color variables from color.sh: `${BOLD}`, `${RESET}`, `${RED}`, etc.
-- Use `has_command` to check for command availability before use
 - Use utility functions like `is_empty`, `not_empty`, `contains`, `starts_with` for string operations
+
+### Command Detection
+
+The repository uses two functions for detecting commands and functions:
+
+- **`has_command <cmd>`** - Checks for actual executables in PATH or shell builtins. Explicitly excludes shell functions to support the "wrapper function" pattern where a function prompts to install a missing tool.
+- **`has_function <name>`** - Checks only for shell functions, ignoring executables, aliases, and builtins.
+
+| Function | Executables | Builtins | Functions |
+|----------|-------------|----------|-----------|
+| `has_command` | ✓ | ✓ | ✗ |
+| `has_function` | ✗ | ✗ | ✓ |
+
+**Shell Compatibility:** These functions use shell-specific detection methods:
+- Bash: `type -P` (executables) and `type -t` (type classification)
+- Zsh: `whence -p` (executables) and `whence -w` (type classification)
+
+**ZSH GOTCHA - `path` and `PATH` are tied:** In zsh, the lowercase `path` array is tied to the `PATH` scalar. Declaring `local path` creates a local empty array which also empties `PATH` in that scope! Always use alternative names like `dir_path` or `item_path`.
+
+**Wrapper Function Pattern:**
+
+```bash
+# Define a wrapper that prompts to install on first use
+if ! has_command "cargo"; then
+    function cargo() {
+        logc "Rust is not installed."
+        if confirm "Install now?"; then
+            install_rust && ( unset -f cargo )
+        fi
+    }
+fi
+```
+
+This pattern works because `has_command "cargo"` returns false for the wrapper function, so subsequent checks still correctly identify that cargo is not installed.
 
 ### Shell Compatibility
 

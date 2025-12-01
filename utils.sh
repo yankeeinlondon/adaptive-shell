@@ -43,31 +43,6 @@ source "${UTILS}/detection.sh"
 # shellcheck source="./utils/link.sh"
 source "${UTILS}/link.sh"
 
-# confirm(question, [default])
-#
-# Asks the user to confirm yes or no and returns TRUE when they answer yes
-function confirm() {
-    local -r question="${1:?confirm() missing question}"
-    local -r default="${2:-y}"
-    local response
-
-    # Display prompt with printf to avoid zsh/bash compatibility issues
-    if [[ $(lc "$default") == "y" ]]; then
-        printf "%s (Y/n) " "$question"
-    else
-        printf "%s (y/N) " "$question"
-    fi
-
-    # Read input without -p (compatible with all shells)
-    read -r response
-
-    # Rest of the logic remains the same...
-    if [[ $(lc "$default") == "y" ]]; then
-        [[ $(lc "$response") =~ ^n(no)?$ ]] && return 1 || return 0
-    else
-        [[ $(lc "$response") =~ ^y(es)?$ ]] && return 0 || return 1
-    fi
-}
 
 # is_numeric() <candidate>
 #

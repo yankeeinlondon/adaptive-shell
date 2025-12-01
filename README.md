@@ -28,4 +28,5 @@ To help you get your system up and running with a useful set of utilities you al
     the full list of auto aliases will be presented when you run the `about` function
 
 - **Auto Binary Paths** - if common folders for binaries exist on your system but are _not_ included in PATH then they will be automatically added.
--
+
+- **Install Prompts** - for common tools like `cargo`, `go`, etc., if the command is not installed, a wrapper function is defined that prompts you to install it on first use. Once installed, the wrapper is removed and the real binary takes over.
