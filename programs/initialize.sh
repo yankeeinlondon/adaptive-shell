@@ -43,9 +43,9 @@ function get_nala() {
 
     echo "sudo is required to install the archives, update apt, and install Nala"
 
-    sudo apt-get install /tmp/${archive} /tmp/${keyring} -y
-    sudo apt-get update
-    sudo apt-get install nala -y
+    ${SUDO} apt install /tmp/${archive} /tmp/${keyring} -y
+    ${SUDO} apt update
+    ${SUDO} apt install nala -y
 }
 
 # use_allowed_hosts_alias()
@@ -206,23 +206,35 @@ function debian() {
 function main() {
     # shellcheck source="../utils/install.sh"
     source "${UTILS}/install.sh"
+    # shellcheck source="../utils/os.sh"
+    source "${UTILS}/os.sh"
 
     OS="$(os)"
 
-    setup_colors
-    log "Initializing packages for ${BOLD}${YELLOW}${OS}${RESET}"
+    logc "\nInitializing packages for {{BOLD}}{{YELLOW}}${OS}{{RESET}}"
     log ""
-
 
     case "${OS}" in
 
         linux)
             if is_debian || is_ubuntu; then
-                install_nala
+                install_nala || error "Failed to install Nala!" 1
             fi
             install_git
             install_openssh
-
+            install_gpg
+            install_gh
+            install_curl
+            install_wget
+            install_neovim
+            install_jq
+            install_eza
+            install_dust
+            install_ripgrep
+            install_starship
+            install_btop
+            install_delta
+            install_fzf
             ;;
         macos)
 
@@ -249,17 +261,16 @@ function main() {
 
         windows)
 
-            log "- no initialization yet for ${BOLD}Windows${RESET}."
+            logc "- no initialization yet for {{BOLD}}Windows{{RESET}}."
             ;;
 
         *)
-            log "- unknown OS ${RED}${BOLD}${OS}${RESET}"
+            logc "- unknown OS {{RED}}{{BOLD}${OS}{{RESET}}"
             exit 1
             ;;
     esac
 
 
-    remove_colors
 }
 
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Source guard - prevents re-execution when sourced multiple times
+[[ -n "${__EMPTY_SH_LOADED:-}" ]] && return
+__EMPTY_SH_LOADED=1
+
 # not_empty() <test>
 # 
 # tests whether the <test> value passed in is an empty string (or is unset)

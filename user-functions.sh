@@ -270,3 +270,42 @@ if ! has_command "cargo"; then
         fi
     }
 fi
+
+if ! has_command "make"; then
+    function make() {
+        logc "The {{BOLD}}{{BLUE}}make{{RESET}} utility is not installed on this system."
+        # shellcheck source="./utils/interactive.sh"
+        source "${UTILS}/interactive.sh"
+        if confirm "Install make and other build tools now?"; then
+            # shellcheck source="./utils/install.sh"
+            source "${UTILS}/install.sh"
+            install_build_tools && ( unset -f make && unset -f cmake && unset -f gcc)
+        fi
+    }
+fi
+
+if ! has_command "cmake"; then
+    function cmake() {
+        logc "The {{BOLD}}{{BLUE}}cmake{{RESET}} utility is not installed on this system."
+        # shellcheck source="./utils/interactive.sh"
+        source "${UTILS}/interactive.sh"
+        if confirm "Install cmake and other build tools now?"; then
+            # shellcheck source="./utils/install.sh"
+            source "${UTILS}/install.sh"
+            install_build_tools && ( unset -f cmake && unset -f make && unset -f gcc)
+        fi
+    }
+fi
+
+if ! has_command "gcc"; then
+    function gcc() {
+        logc "The {{BOLD}}{{BLUE}}gcc{{RESET}} utility is not installed on this system."
+        # shellcheck source="./utils/interactive.sh"
+        source "${UTILS}/interactive.sh"
+        if confirm "Install gcc and other build tools now?"; then
+            # shellcheck source="./utils/install.sh"
+            source "${UTILS}/install.sh"
+            install_build_tools && ( unset -f cmake && unset -f make && unset -f gcc )
+        fi
+    }
+fi

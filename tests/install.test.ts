@@ -551,5 +551,57 @@ describe('installed package listing', () => {
     expect(result.exitCode).toBe(0)
     expect(result.output).toContain('RipGrep')
   })
+
+  describe('new package managers', () => {
+    it('installed_uv should list uv tools with PyPI links', () => {
+      const result = runWithMocks({
+        availableCommands: ['uv'],
+        existingPackages: [],
+        installedPackages: ['uv:ruff'],
+        script: 'installed_uv'
+      })
+      expect(result.exitCode).toBe(0)
+      expect(result.output).toContain('https://pypi.org/project/ruff')
+      expect(result.output).toContain('ruff')
+    })
+
+    it('installed_pnpm should list pnpm global packages with npm links', () => {
+      const result = runWithMocks({
+        availableCommands: ['pnpm'],
+        existingPackages: [],
+        installedPackages: ['pnpm:typescript'],
+        script: 'installed_pnpm'
+      })
+      expect(result.exitCode).toBe(0)
+      expect(result.output).toContain('https://www.npmjs.com/package/typescript')
+      expect(result.output).toContain('typescript')
+    })
+
+    it('installed_bun should list bun global packages with npm links', () => {
+      const result = runWithMocks({
+        availableCommands: ['bun'],
+        existingPackages: [],
+        installedPackages: ['bun:esbuild'],
+        script: 'installed_bun'
+      })
+      expect(result.exitCode).toBe(0)
+      expect(result.output).toContain('https://www.npmjs.com/package/esbuild')
+      expect(result.output).toContain('esbuild')
+    })
+
+    it('show_installed should include uv, pnpm, and bun packages', () => {
+      const result = runWithMocks({
+        availableCommands: ['uv', 'pnpm', 'bun'],
+        existingPackages: [],
+        installedPackages: ['uv:ruff', 'pnpm:eslint', 'bun:vite'],
+        script: 'show_installed'
+      })
+      expect(result.exitCode).toBe(0)
+      // Check all three package managers are represented
+      expect(result.output).toContain('ruff')
+      expect(result.output).toContain('eslint')
+      expect(result.output).toContain('vite')
+    })
+  })
 })
 

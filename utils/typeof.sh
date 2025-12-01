@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Source guard - prevents re-execution when sourced multiple times
+[[ -n "${__TYPEOF_SH_LOADED:-}" ]] && return
+__TYPEOF_SH_LOADED=1
+
 # Stub functions for not-yet-implemented features
 # TODO: Implement these properly
 is_list() { return 1; }

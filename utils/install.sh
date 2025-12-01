@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Source guard - must be BEFORE path setup to prevent re-execution
+[[ -n "${__INSTALL_SH_LOADED:-}" ]] && return
+__INSTALL_SH_LOADED=1
+
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
@@ -18,6 +22,10 @@ source "${UTILS}/logging.sh"
 source "${UTILS}/interactive.sh"
 # shellcheck source="./detection.sh"
 source "${UTILS}/detection.sh"
+# shellcheck source="./text.sh"
+source "${UTILS}/text.sh"
+# shellcheck source="./os.sh"
+source "${UTILS}/os.sh"
 
 # _try_cargo_install <pkg1> [<pkg2>] ...
 #
@@ -485,11 +493,47 @@ function installed_npm() {
         _filter_and_link "npm" "https://www.npmjs.com/package/{{PKG}}" "" "$@"
 }
 
+# installed_pnpm [filters...]
+function installed_pnpm() {
+    if ! has_command "pnpm"; then return; fi
+    # Extract package names from dependencies section (avoids transitive deps)
+    pnpm list -g --depth=0 2>/dev/null | \
+        sed -n '/^dependencies:/,/^devDependencies:/p' | \
+        grep -v '^dependencies:' | \
+        grep -v '^devDependencies:' | \
+        awk '{print $1}' | \
+        grep -v '^$' | \
+        _filter_and_link "pnpm" "https://www.npmjs.com/package/{{PKG}}" "" "$@"
+}
+
+# installed_bun [filters...]
+function installed_bun() {
+    if ! has_command "bun"; then return; fi
+    # bun pm ls -g outputs: └── package@version or ├── package@version
+    bun pm ls -g 2>/dev/null | \
+        grep -E '^[└├]' | \
+        sed 's/^[└├]── //' | \
+        sed 's/@[0-9].*//' | \
+        _filter_and_link "bun" "https://www.npmjs.com/package/{{PKG}}" "" "$@"
+}
+
 # installed_pip [filters...]
 function installed_pip() {
     if ! has_command "pip"; then return; fi
     pip list --format=columns 2>/dev/null | tail -n +3 | awk '{print $1}' | \
         _filter_and_link "pip" "https://pypi.org/project/{{PKG}}" "" "$@"
+}
+
+# installed_uv [filters...]
+function installed_uv() {
+    if ! has_command "uv"; then return; fi
+    # uv tool list outputs: package-name vX.Y.Z followed by - command lines
+    # We only want lines with versions (not starting with -)
+    uv tool list 2>/dev/null | \
+        grep -v '^-' | \
+        grep -v '^$' | \
+        awk '{print $1}' | \
+        _filter_and_link "uv" "https://pypi.org/project/{{PKG}}" "" "$@"
 }
 
 # installed_gem [filters...]
@@ -537,7 +581,7 @@ function installed_dnf() {
         _filter_and_link "dnf" "https://packages.fedoraproject.org/pkgs/{{PKG}}" "" "$@"
 }
 
-# installed [filters...]
+# show_installed [filters...]
 #
 # Lists installed packages from all detected package managers.
 # Accepts optional arguments as filters (OR condition).
@@ -547,7 +591,10 @@ function show_installed() {
     installed_brew "${filters[@]}"
     installed_cargo "${filters[@]}"
     installed_npm "${filters[@]}"
+    installed_pnpm "${filters[@]}"
+    installed_bun "${filters[@]}"
     installed_pip "${filters[@]}"
+    installed_uv "${filters[@]}"
     installed_gem "${filters[@]}"
     installed_nix "${filters[@]}"
     installed_apt "${filters[@]}"
@@ -839,8 +886,57 @@ function install_bat() {
     fi
 }
 
+# install_build_tools
+#
+# Installs essential build tools (compilers, make, cmake) on the current system.
+# Uses OS-appropriate meta-packages where available for comprehensive coverage.
 function install_build_tools() {
-    :
+    if has_command "make"; then
+        logc "- {{BOLD}}{{BLUE}}Build Tools{{RESET}} are already installed"
+        return 0
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}Build Tools{{RESET}}"
+
+    if is_mac; then
+        # xcode-select provides clang, make, git, and other dev tools
+        if ! xcode-select -p &>/dev/null; then
+            logc "- installing {{BOLD}}Xcode Command Line Tools{{RESET}}..."
+            xcode-select --install
+            # Wait for installation to complete (user interaction required)
+            logc "- {{DIM}}please complete the Xcode tools installation dialog{{RESET}}"
+        fi
+        # Additional build tools via Homebrew
+        install_on_macos "cmake"
+        install_just
+    elif is_debian || is_ubuntu; then
+        # build-essential includes gcc, g++, make, libc-dev
+        install_on_debian "build-essential"
+        install_on_debian "cmake"
+        install_on_debian "ninja-build"
+        install_just
+    elif is_alpine; then
+        # alpine-sdk is a meta-package with build essentials
+        install_on_alpine "alpine-sdk"
+        install_on_alpine "cmake"
+        install_just
+    elif is_fedora; then
+        # Individual packages for Fedora/RHEL
+        install_on_fedora "make"
+        install_on_fedora "cmake"
+        install_on_fedora "gcc"
+        install_on_fedora "gcc-c++"
+        install_just
+    elif is_arch; then
+        # base-devel is a meta-package with build essentials
+        install_on_arch "base-devel"
+        install_on_arch "cmake"
+        install_on_arch "ninja"
+        install_just
+    else
+        logc "{{RED}}ERROR:{{RESET}} Unable to automate the install of {{BOLD}}{{BLUE}}Build Tools{{RESET}} on this system"
+        return 1
+    fi
 }
 
 function install_delta() {
@@ -848,17 +944,18 @@ function install_delta() {
         logc "- {{BOLD}}{{BLUE}}delta{{RESET}} is already installed"
         return 0
     fi
+    # Note: The git-delta tool provides the "delta" command.
+    # Package names vary: "git-delta" on Debian/Ubuntu/Fedora/Arch, "delta" on macOS Homebrew
     if is_mac; then
-        install_on_macos "delta"
+        install_on_macos "git-delta"
     elif is_debian || is_ubuntu; then
-        install_on_debian "delta"
+        install_on_debian "git-delta"
     elif is_alpine; then
         install_on_alpine "delta"
     elif is_fedora; then
-        install_on_fedora "delta"
+        install_on_fedora "git-delta"
     elif is_arch; then
-        install_on_arch "delta"
-
+        install_on_arch "git-delta"
     else
         logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}delta{{RESET}}"
         return 1
@@ -949,8 +1046,103 @@ function install_atuin() {
     logc "- {{BOLD}}{{BLUE}}atuin{{RESET}} installed"
 }
 
+# _install_nala_from_volian
+#
+# Helper function to install nala from the Volian Scar third-party repository.
+# Used for older Debian/Ubuntu versions that don't have nala in official repos.
+function _install_nala_from_volian() {
+    # Ensure prerequisites are available
+    if ! has_command "curl"; then
+        logc "- {{BOLD}}curl{{RESET}} is required to install nala from Volian repository"
+        install_curl || return 1
+    fi
+
+    if ! has_command "gpg"; then
+        logc "- {{BOLD}}gpg{{RESET}} is required to install nala from Volian repository"
+        install_gpg || return 1
+    fi
+
+    logc "- adding {{BOLD}}Volian Scar{{RESET}} repository for nala..."
+
+    # Create keyrings directory if needed
+    ${SUDO} mkdir -p --mode=0755 /usr/share/keyrings
+
+    # Import GPG key
+    if ! curl -fSsL https://deb.volian.org/volian/scar.key | gpg --dearmor | \
+        ${SUDO} tee /usr/share/keyrings/volian.gpg > /dev/null; then
+        logc "{{RED}}ERROR{{RESET}}: failed to import Volian GPG key"
+        return 1
+    fi
+
+    # Add repository
+    echo "deb [signed-by=/usr/share/keyrings/volian.gpg] https://deb.volian.org/volian/ scar main" | \
+        ${SUDO} tee /etc/apt/sources.list.d/volian-archive-scar-unstable.list > /dev/null
+
+    # Update and install
+    logc "- updating package index..."
+    ${SUDO} apt update || return 1
+
+    logc "- installing {{GREEN}}nala{{RESET}} from Volian repository..."
+    ${SUDO} apt install -y nala || return 1
+
+    return 0
+}
+
+# install_nala
+#
+# Installs the nala package manager frontend for APT on Debian/Ubuntu systems.
+# Nala provides parallel downloads, cleaner output, and mirror selection.
+#
+# For Debian 11+ and Ubuntu 22.04+, nala is available in official repos.
+# For older versions, it installs from the Volian Scar third-party repository.
 function install_nala() {
-    :
+    if has_command "nala"; then
+        logc "- {{BOLD}}{{BLUE}}nala{{RESET}} is already installed"
+        return 0
+    fi
+
+    # Only supported on Debian/Ubuntu
+    if ! is_debian && ! is_ubuntu; then
+        logc "- {{DIM}}nala is only available on Debian/Ubuntu systems{{RESET}}"
+        return 1
+    fi
+
+    logc "- installing {{BOLD}}{{BLUE}}nala{{RESET}}"
+
+    local version
+    version=$(os_version)
+    local major_version="${version%%.*}"
+
+    # Determine installation method based on OS version
+    # Debian 11+ and Ubuntu 22.04+ have nala in official repos
+    local use_official_repo=false
+
+    if is_debian && [[ "$major_version" -ge 11 ]]; then
+        use_official_repo=true
+    elif is_ubuntu && [[ "$major_version" -ge 22 ]]; then
+        use_official_repo=true
+    fi
+
+    if [[ "$use_official_repo" == true ]]; then
+        # Install from official repos
+        install_on_debian "nala" || return 1
+    else
+        # Install from Volian Scar repository
+        logc "- {{DIM}}nala not in official repos for this version, using Volian Scar{{RESET}}"
+        _install_nala_from_volian || return 1
+    fi
+
+    logc "- {{BOLD}}{{BLUE}}nala{{RESET}} installed successfully"
+
+    # Offer to run nala fetch for mirror optimization
+    if has_command "nala"; then
+        if confirm "Run 'nala fetch' to select fastest mirrors?"; then
+            logc "- running {{BOLD}}nala fetch{{RESET}}..."
+            ${SUDO} nala fetch --auto
+        fi
+    fi
+
+    return 0
 }
 
 function install_stylua() {
@@ -1486,10 +1678,16 @@ function upgrade_packages() {
         bun upgrade || ((failed++))
     fi
 
-    # Ruby gems
+    # Ruby gems: skip system Ruby on macOS (protected by SIP)
     if has_command "gem"; then
-        logc "\n- upgrading {{BOLD}}gem{{RESET}} packages..."
-        gem update || ((failed++))
+        local gem_path
+        gem_path="$(command -v gem 2>/dev/null)"
+        if [[ "$gem_path" == "/usr/bin/gem" ]]; then
+            logc "- {{DIM}}skipping system Ruby gems (use rbenv/rvm/asdf for managed Ruby){{RESET}}"
+        else
+            logc "\n- upgrading {{BOLD}}gem{{RESET}} packages..."
+            gem update || ((failed++))
+        fi
     fi
 
     # Cargo: requires cargo-update crate (cargo install cargo-update)

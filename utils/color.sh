@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Source guard - must be BEFORE path setup to prevent re-execution
+[[ -n "${__COLOR_SH_LOADED:-}" ]] && return
+__COLOR_SH_LOADED=1
+
 if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
@@ -11,10 +15,6 @@ else
     ROOT="${ADAPTIVE_SHELL}"
     UTILS="${ROOT}/utils"
 fi
-
-# Source guard to prevent circular dependencies
-[[ -n "${__COLOR_SH_LOADED:-}" ]] && return
-__COLOR_SH_LOADED=1
 
 # shellcheck source="./text.sh"
 source "${UTILS}/text.sh"

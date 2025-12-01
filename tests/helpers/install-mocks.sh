@@ -138,6 +138,9 @@ _fmt_pip() { echo "$1 1.0.0"; }
 _fmt_gem() { echo "$1 (1.0.0)"; }
 _fmt_apt() { echo "$1/stable,now 1.0.0 amd64 [installed]"; }
 _fmt_dnf() { echo "$1.x86_64"; }
+_fmt_uv() { echo "$1 v1.0.0"; echo "- $1"; }
+_fmt_bun() { echo "└── $1@1.0.0"; }
+_fmt_pnpm() { echo "$1 1.0.0"; }
 
 
 # _mock_install_succeeds <manager> <package>
@@ -538,6 +541,44 @@ gem() {
     _mock_record "gem:$*"
     if [[ "$1" == "list" ]]; then
         _mock_list_installed "gem" _fmt_gem
+        return 0
+    fi
+    return 0
+}
+
+# Mock uv
+uv() {
+    _mock_record "uv:$*"
+    if [[ "$1" == "tool" && "$2" == "list" ]]; then
+        _mock_list_installed "uv" _fmt_uv
+        return 0
+    fi
+    return 0
+}
+
+# Mock pnpm
+pnpm() {
+    _mock_record "pnpm:$*"
+    if [[ "$1" == "list" ]]; then
+        # Args: list -g --depth=0
+        echo "Legend: production dependency"
+        echo ""
+        echo "/mock/pnpm/global"
+        echo ""
+        echo "dependencies:"
+        _mock_list_installed "pnpm" _fmt_pnpm
+        return 0
+    fi
+    return 0
+}
+
+# Mock bun
+bun() {
+    _mock_record "bun:$*"
+    if [[ "$1" == "pm" && "$2" == "ls" ]]; then
+        # Args: pm ls -g
+        echo "/mock/global node_modules"
+        _mock_list_installed "bun" _fmt_bun
         return 0
     fi
     return 0

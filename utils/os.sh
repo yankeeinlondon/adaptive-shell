@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Source guard - must be BEFORE path setup to prevent re-execution
+[[ -n "${__OS_SH_LOADED:-}" ]] && return
+__OS_SH_LOADED=1
+
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
@@ -139,7 +143,9 @@ function get_storage() {
 # gets the active shell program running inside of
 function get_shell() {
     local shell
+    # Get shell name, remove leading dash (login shell), extract basename
     shell=$(ps -p $$ -o comm= | sed 's/^-//')
+    shell="${shell##*/}"  # Extract basename (e.g., /bin/zsh -> zsh)
     [ "$shell" = "sh" ] && {
         # Check for POSIX-compliant modes of different shells
         [ -n "$BASH_VERSION" ] && shell=bash
@@ -544,77 +550,60 @@ function get_memory() {
 }
 
 function is_debian() {
-    source "${UTILS}/logging.sh"
-    source "${UTILS}/text.sh"
-
     if is_linux; then
-        DISTRO="$(distro)"
-        LC_DISTRO="$(lc "${DISTRO}")"
-        if contains "debian" "${LC_DISTRO}"; then
-            debug "is_debian" "is Debian OS [${LC_DISTRO}]"
+        local distro_name
+        distro_name="$(distro)"
+        local lc_distro
+        lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
+        if [[ "${lc_distro}" == *"debian"* ]]; then
             return 0
-        else
-            debug "is_debian" "is NOT Debian OS [${LC_DISTRO}]"
-            return 1
         fi
     fi
+    return 1
 }
 
 function is_ubuntu() {
-    source "${UTILS}/logging.sh"
-    source "${UTILS}/text.sh"
-
     if is_linux; then
-        DISTRO="$(distro)"
-        LC_DISTRO="$(lc "${DISTRO}")"
-        if contains "ubuntu" "${LC_DISTRO}"; then
-            debug "is_ubuntu" "is Ubuntu OS [${LC_DISTRO}]"
+        local distro_name
+        distro_name="$(distro)"
+        local lc_distro
+        lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
+        if [[ "${lc_distro}" == *"ubuntu"* ]]; then
             return 0
-        else
-            debug "is_ubuntu" "is NOT Ubuntu OS [${LC_DISTRO}]"
-            return 1
         fi
     fi
+    return 1
 }
 
 function is_alpine() {
-    source "${UTILS}/logging.sh"
-    source "${UTILS}/text.sh"
-
     if is_linux; then
-        DISTRO="$(distro)"
-        LC_DISTRO="$(lc "${DISTRO}")"
-        if contains "alpine" "${LC_DISTRO}"; then
-            debug "is_alpine" "is Alpine OS [${LC_DISTRO}]"
+        local distro_name
+        distro_name="$(distro)"
+        local lc_distro
+        lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
+        if [[ "${lc_distro}" == *"alpine"* ]]; then
             return 0
-        else
-            debug "is_alpine" "is NOT Alpine OS [${LC_DISTRO}]"
-            return 1
         fi
     fi
+    return 1
 }
 
 # is_fedora
 #
 # Returns true if running on Fedora, RHEL, CentOS, Rocky Linux, or AlmaLinux
 function is_fedora() {
-    source "${UTILS}/logging.sh"
-    source "${UTILS}/text.sh"
-
     if is_linux; then
-        DISTRO="$(distro)"
-        LC_DISTRO="$(lc "${DISTRO}")"
-        if contains "fedora" "${LC_DISTRO}" || \
-           contains "rhel" "${LC_DISTRO}" || \
-           contains "red hat" "${LC_DISTRO}" || \
-           contains "centos" "${LC_DISTRO}" || \
-           contains "rocky" "${LC_DISTRO}" || \
-           contains "alma" "${LC_DISTRO}"; then
-            debug "is_fedora" "is Fedora/RHEL-based OS [${LC_DISTRO}]"
+        local distro_name
+        distro_name="$(distro)"
+        local lc_distro
+        lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
+        if [[ "${lc_distro}" == *"fedora"* ]] || \
+           [[ "${lc_distro}" == *"rhel"* ]] || \
+           [[ "${lc_distro}" == *"red hat"* ]] || \
+           [[ "${lc_distro}" == *"centos"* ]] || \
+           [[ "${lc_distro}" == *"rocky"* ]] || \
+           [[ "${lc_distro}" == *"alma"* ]]; then
             return 0
-        else
-            debug "is_fedora" "is NOT Fedora/RHEL-based OS [${LC_DISTRO}]"
-            return 1
         fi
     fi
     return 1
@@ -624,21 +613,16 @@ function is_fedora() {
 #
 # Returns true if running on Arch Linux, Manjaro, or EndeavourOS
 function is_arch() {
-    source "${UTILS}/logging.sh"
-    source "${UTILS}/text.sh"
-
     if is_linux; then
-        DISTRO="$(distro)"
-        LC_DISTRO="$(lc "${DISTRO}")"
-        if contains "arch" "${LC_DISTRO}" || \
-           contains "manjaro" "${LC_DISTRO}" || \
-           contains "endeavouros" "${LC_DISTRO}" || \
-           contains "endeavour" "${LC_DISTRO}"; then
-            debug "is_arch" "is Arch-based OS [${LC_DISTRO}]"
+        local distro_name
+        distro_name="$(distro)"
+        local lc_distro
+        lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
+        if [[ "${lc_distro}" == *"arch"* ]] || \
+           [[ "${lc_distro}" == *"manjaro"* ]] || \
+           [[ "${lc_distro}" == *"endeavouros"* ]] || \
+           [[ "${lc_distro}" == *"endeavour"* ]]; then
             return 0
-        else
-            debug "is_arch" "is NOT Arch-based OS [${LC_DISTRO}]"
-            return 1
         fi
     fi
     return 1
