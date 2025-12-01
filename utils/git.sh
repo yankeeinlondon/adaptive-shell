@@ -39,3 +39,27 @@ function has_unpushed_commits() {
         return 1
     fi
 }
+
+
+function git_identity() {
+    local name email key origin
+
+    # shellcheck source="../utils/text.sh"
+    source "${UTILS}/text.sh"
+    # shellcheck source="../utils/link.sh"
+    source "${UTILS}/link.sh"
+
+    name="$(git config --get user.name 2>/dev/null || true)"
+    email="$(git config --get user.email 2>/dev/null || true)"
+    key="$(git config --get user.signingkey 2>/dev/null || true)"
+    origin="$(git config --get remote.origin.url 2>/dev/null || true)"
+
+    if is_empty_string "${origin}"; then
+        origin=""
+    else
+        origin=" -> $(link_repo "${origin}")"
+    fi
+
+
+    echo "${name}<$(link_email "${email}")>, ${key}${origin}"
+}

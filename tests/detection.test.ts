@@ -1,7 +1,40 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync } from 'fs'
 import { join } from 'path'
+import { execSync } from 'child_process'
 import { sourceScript, bashExitCode, runInShell, runInBothShells, isShellAvailable } from './helpers'
+
+/** Project root for absolute path references */
+const PROJECT_ROOT = process.cwd()
+
+/**
+ * Helper to initialize a git repo in a directory for testing
+ */
+function initGitRepo(dir: string): void {
+  execSync('git init', { cwd: dir, stdio: 'pipe' })
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' })
+  execSync('git config user.name "Test User"', { cwd: dir, stdio: 'pipe' })
+}
+
+/**
+ * Helper to create and commit a file in a git repo
+ */
+function commitFile(dir: string, filename: string, content: string, message: string): void {
+  writeFileSync(join(dir, filename), content)
+  execSync(`git add "${filename}"`, { cwd: dir, stdio: 'pipe' })
+  execSync(`git commit -m "${message}"`, { cwd: dir, stdio: 'pipe' })
+}
+
+/**
+ * Helper to run shell script in a test directory while sourcing scripts from project root
+ */
+function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
+  return runInShell(shell, `
+    export ADAPTIVE_SHELL="${PROJECT_ROOT}"
+    source "${PROJECT_ROOT}/utils/detection.sh"
+    ${script}
+  `, { cwd: testDir })
+}
 
 describe('detection utilities', () => {
   const testDir = join(process.cwd(), 'tests', '.tmp-detection-test')
@@ -488,41 +521,81 @@ describe('detection utilities', () => {
 
   describe('in_package_json()', () => {
     it('should return 0 when string exists in package.json', () => {
-      // This repo has a package.json with "vitest" in it
-      const api = sourceScript('./utils/detection.sh')('in_package_json')('vitest')
-      expect(api).toBeSuccessful()
+      const projectDir = join(testDir, 'pkg-json-search')
+      mkdirSync(projectDir, { recursive: true })
+      writeFileSync(join(projectDir, 'package.json'), JSON.stringify({
+        name: 'test-project',
+        dependencies: { 'some-dep': '^1.0.0' }
+      }))
+
+      const result = runInTestDir('bash', projectDir, `in_package_json 'some-dep'`)
+      expect(result.code).toBe(0)
     })
 
     it('should return 1 when string does not exist in package.json', () => {
-      const api = sourceScript('./utils/detection.sh')('in_package_json')('nonexistent-string-12345')
-      expect(api).toFail()
+      const projectDir = join(testDir, 'pkg-json-no-match')
+      mkdirSync(projectDir, { recursive: true })
+      writeFileSync(join(projectDir, 'package.json'), JSON.stringify({
+        name: 'test-project',
+        dependencies: { 'some-dep': '^1.0.0' }
+      }))
+
+      const result = runInTestDir('bash', projectDir, `in_package_json 'nonexistent-string-12345'`)
+      expect(result.code).toBe(1)
     })
 
     it('should error when no string provided', () => {
-      const api = sourceScript('./utils/detection.sh')('in_package_json')()
-      expect(api).toFail()
+      const projectDir = join(testDir, 'pkg-json-no-arg')
+      mkdirSync(projectDir, { recursive: true })
+      writeFileSync(join(projectDir, 'package.json'), '{"name": "test"}')
+
+      const result = runInTestDir('bash', projectDir, `in_package_json`)
+      expect(result.code).not.toBe(0)
+    })
+
+    it('should return 1 when no package.json exists', () => {
+      const emptyDir = join(testDir, 'no-pkg-json')
+      mkdirSync(emptyDir, { recursive: true })
+
+      const result = runInTestDir('bash', emptyDir, `in_package_json 'anything'`)
+      expect(result.code).not.toBe(0)
     })
   })
 
   describe('is_git_repo()', () => {
-    it('should return 0 for current directory (this is a git repo)', () => {
-      const api = sourceScript('./utils/detection.sh')('is_git_repo')(process.cwd())
-      expect(api).toBeSuccessful()
+    // Use /tmp for non-git tests to ensure we're outside any git repo
+    const tmpNonGitDir = `/tmp/detection-test-${Date.now()}`
+
+    afterEach(() => {
+      if (existsSync(tmpNonGitDir)) {
+        rmSync(tmpNonGitDir, { recursive: true, force: true })
+      }
     })
 
-    it('should return 0 when using relative path "."', () => {
-      const api = sourceScript('./utils/detection.sh')('is_git_repo')('.')
+    it('should return 0 for initialized git directory', () => {
+      const gitDir = join(testDir, 'git-repo-test')
+      mkdirSync(gitDir, { recursive: true })
+      initGitRepo(gitDir)
+
+      const api = sourceScript('./utils/detection.sh')('is_git_repo')(gitDir)
       expect(api).toBeSuccessful()
     })
 
     it('should return 0 for subdirectory of git repo', () => {
-      const testsDir = join(process.cwd(), 'tests')
-      const api = sourceScript('./utils/detection.sh')('is_git_repo')(testsDir)
+      const gitDir = join(testDir, 'git-subdir-test')
+      const subDir = join(gitDir, 'src', 'components')
+      mkdirSync(subDir, { recursive: true })
+      initGitRepo(gitDir)
+
+      const api = sourceScript('./utils/detection.sh')('is_git_repo')(subDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should return 1 for /tmp (not a git repo)', () => {
-      const api = sourceScript('./utils/detection.sh')('is_git_repo')('/tmp')
+    it('should return 1 for non-git directory', () => {
+      // Use /tmp to ensure we're outside any git repo
+      mkdirSync(tmpNonGitDir, { recursive: true })
+
+      const api = sourceScript('./utils/detection.sh')('is_git_repo')(tmpNonGitDir)
       expect(api).toFail()
     })
 
@@ -533,29 +606,52 @@ describe('detection utilities', () => {
   })
 
   describe('repo_root()', () => {
-    it('should output the repo root path for current directory', () => {
-      const api = sourceScript('./utils/detection.sh')('repo_root')(process.cwd())
+    // Use /tmp for non-git tests to ensure we're outside any git repo
+    const tmpNonGitDir = `/tmp/repo-root-test-${Date.now()}`
+
+    afterEach(() => {
+      if (existsSync(tmpNonGitDir)) {
+        rmSync(tmpNonGitDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should output the repo root path for git directory', () => {
+      const gitDir = join(testDir, 'repo-root-test')
+      mkdirSync(gitDir, { recursive: true })
+      initGitRepo(gitDir)
+
+      const api = sourceScript('./utils/detection.sh')('repo_root')(gitDir)
       expect(api).toBeSuccessful()
-      expect(api.result.stdout).toBe(process.cwd())
+      expect(api.result.stdout).toBe(gitDir)
     })
 
     it('should output the repo root when called from subdirectory', () => {
-      const testsDir = join(process.cwd(), 'tests')
-      const api = sourceScript('./utils/detection.sh')('repo_root')(testsDir)
+      const gitDir = join(testDir, 'repo-root-subdir')
+      const subDir = join(gitDir, 'src', 'utils')
+      mkdirSync(subDir, { recursive: true })
+      initGitRepo(gitDir)
+
+      const api = sourceScript('./utils/detection.sh')('repo_root')(subDir)
       expect(api).toBeSuccessful()
-      expect(api.result.stdout).toBe(process.cwd())
+      expect(api.result.stdout).toBe(gitDir)
     })
 
-    it('should output the repo root when using relative path', () => {
-      const api = sourceScript('./utils/detection.sh')('repo_root')('.')
+    it('should output an absolute path', () => {
+      const gitDir = join(testDir, 'repo-root-abs')
+      mkdirSync(gitDir, { recursive: true })
+      initGitRepo(gitDir)
+
+      const api = sourceScript('./utils/detection.sh')('repo_root')(gitDir)
       expect(api).toBeSuccessful()
-      // Should output an absolute path
       expect(api.result.stdout).toBeTruthy()
       expect(api.result.stdout).toContain('/')
     })
 
     it('should return error for non-git directory', () => {
-      const api = sourceScript('./utils/detection.sh')('repo_root')('/tmp')
+      // Use /tmp to ensure we're outside any git repo
+      mkdirSync(tmpNonGitDir, { recursive: true })
+
+      const api = sourceScript('./utils/detection.sh')('repo_root')(tmpNonGitDir)
       expect(api).toFail()
     })
 
@@ -566,26 +662,68 @@ describe('detection utilities', () => {
   })
 
   describe('repo_is_dirty()', () => {
-    it('should detect modified files in current repo', () => {
-      // According to gitStatus, this repo has modified files
-      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(process.cwd())
+    const gitTestDir = join(testDir, 'git-dirty-test')
+
+    beforeEach(() => {
+      mkdirSync(gitTestDir, { recursive: true })
+      initGitRepo(gitTestDir)
+    })
+
+    it('should return 0 (dirty) when repo has uncommitted changes', () => {
+      // Create initial commit, then modify the file
+      commitFile(gitTestDir, 'file.txt', 'initial content', 'initial commit')
+      writeFileSync(join(gitTestDir, 'file.txt'), 'modified content')
+
+      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(gitTestDir)
+      expect(api).toBeSuccessful()
+    })
+
+    it('should return 1 (clean) when repo has no uncommitted changes', () => {
+      // Create a commit and leave the repo clean
+      commitFile(gitTestDir, 'file.txt', 'content', 'initial commit')
+
+      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(gitTestDir)
+      expect(api).toFail()
+    })
+
+    it('should return 0 (dirty) for staged but uncommitted changes', () => {
+      commitFile(gitTestDir, 'file.txt', 'initial', 'initial commit')
+      writeFileSync(join(gitTestDir, 'new-file.txt'), 'new content')
+      execSync('git add new-file.txt', { cwd: gitTestDir, stdio: 'pipe' })
+
+      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(gitTestDir)
+      expect(api).toBeSuccessful()
+    })
+
+    it('should return 0 (dirty) for untracked files', () => {
+      commitFile(gitTestDir, 'file.txt', 'initial', 'initial commit')
+      writeFileSync(join(gitTestDir, 'untracked.txt'), 'untracked content')
+
+      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(gitTestDir)
       expect(api).toBeSuccessful()
     })
 
     it('should work when called from subdirectory', () => {
-      const testsDir = join(process.cwd(), 'tests')
-      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(testsDir)
-      expect(api).toBeSuccessful()
-    })
+      commitFile(gitTestDir, 'file.txt', 'initial', 'initial commit')
+      const subDir = join(gitTestDir, 'subdir')
+      mkdirSync(subDir, { recursive: true })
+      writeFileSync(join(gitTestDir, 'modified.txt'), 'dirty')
 
-    it('should work with relative path', () => {
-      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')('.')
+      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(subDir)
       expect(api).toBeSuccessful()
     })
 
     it('should return error for non-git directory', () => {
-      const api = sourceScript('./utils/detection.sh')('repo_is_dirty')('/tmp')
-      expect(api).toFail()
+      // Use /tmp to ensure we're outside any git repo
+      const tmpNonGitDir = `/tmp/dirty-test-nongit-${Date.now()}`
+      mkdirSync(tmpNonGitDir, { recursive: true })
+
+      try {
+        const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(tmpNonGitDir)
+        expect(api).toFail()
+      } finally {
+        rmSync(tmpNonGitDir, { recursive: true, force: true })
+      }
     })
 
     it('should handle non-existent paths gracefully', () => {
@@ -595,48 +733,116 @@ describe('detection utilities', () => {
   })
 
   describe('is_monorepo()', () => {
-    it('should return 0 for this repo (has pnpm-workspace.yaml)', () => {
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')(process.cwd())
+    it('should return 0 when pnpm-workspace.yaml exists', () => {
+      const monoDir = join(testDir, 'pnpm-mono')
+      mkdirSync(monoDir, { recursive: true })
+      initGitRepo(monoDir)
+      writeFileSync(join(monoDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
+
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(monoDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should work from subdirectory', () => {
-      const testsDir = join(process.cwd(), 'tests')
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')(testsDir)
+    it('should return 0 when lerna.json exists', () => {
+      const lernaDir = join(testDir, 'lerna-mono')
+      mkdirSync(lernaDir, { recursive: true })
+      initGitRepo(lernaDir)
+      writeFileSync(join(lernaDir, 'lerna.json'), '{"version": "1.0.0"}')
+
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(lernaDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should work with relative path', () => {
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')('.')
+    it('should return 0 when package.json has workspaces field', () => {
+      const npmWorkspaceDir = join(testDir, 'npm-workspace')
+      mkdirSync(npmWorkspaceDir, { recursive: true })
+      initGitRepo(npmWorkspaceDir)
+      writeFileSync(join(npmWorkspaceDir, 'package.json'), '{"name": "test", "workspaces": ["packages/*"]}')
+
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(npmWorkspaceDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should return 1 for non-monorepo directory', () => {
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')('/tmp')
+    it('should work from subdirectory of monorepo', () => {
+      const monoDir = join(testDir, 'mono-subdir-test')
+      const subDir = join(monoDir, 'packages', 'pkg-a')
+      mkdirSync(subDir, { recursive: true })
+      initGitRepo(monoDir)
+      writeFileSync(join(monoDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
+
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(subDir)
+      expect(api).toBeSuccessful()
+    })
+
+    it('should return 1 for regular repo without workspace config', () => {
+      const regularDir = join(testDir, 'regular-repo')
+      mkdirSync(regularDir, { recursive: true })
+      initGitRepo(regularDir)
+      writeFileSync(join(regularDir, 'package.json'), '{"name": "test"}')
+
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(regularDir)
       expect(api).toFail()
+    })
+
+    it('should return 1 for non-git directory without workspace config', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpPlainDir = `/tmp/monorepo-plain-${Date.now()}`
+      mkdirSync(tmpPlainDir, { recursive: true })
+
+      try {
+        const api = sourceScript('./utils/detection.sh')('is_monorepo')(tmpPlainDir)
+        expect(api).toFail()
+      } finally {
+        rmSync(tmpPlainDir, { recursive: true, force: true })
+      }
     })
   })
 
   describe('has_package_json()', () => {
-    it('should return 0 for this repo (has package.json)', () => {
-      const api = sourceScript('./utils/detection.sh')('has_package_json')(process.cwd())
+    it('should return 0 when package.json exists in directory', () => {
+      const projectDir = join(testDir, 'js-project')
+      mkdirSync(projectDir, { recursive: true })
+      writeFileSync(join(projectDir, 'package.json'), '{"name": "test"}')
+
+      const api = sourceScript('./utils/detection.sh')('has_package_json')(projectDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should return 0 from subdirectory (repo root has package.json)', () => {
-      const testsDir = join(process.cwd(), 'tests')
-      const api = sourceScript('./utils/detection.sh')('has_package_json')(testsDir)
+    it('should return 0 from subdirectory when repo root has package.json', () => {
+      const projectDir = join(testDir, 'js-project-with-subdir')
+      const subDir = join(projectDir, 'src', 'components')
+      mkdirSync(subDir, { recursive: true })
+      initGitRepo(projectDir)
+      writeFileSync(join(projectDir, 'package.json'), '{"name": "test"}')
+
+      const api = sourceScript('./utils/detection.sh')('has_package_json')(subDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should work with relative path', () => {
-      const api = sourceScript('./utils/detection.sh')('has_package_json')('.')
-      expect(api).toBeSuccessful()
+    it('should return 1 when no package.json exists', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpEmptyDir = `/tmp/pkgjson-empty-${Date.now()}`
+      mkdirSync(tmpEmptyDir, { recursive: true })
+
+      try {
+        const api = sourceScript('./utils/detection.sh')('has_package_json')(tmpEmptyDir)
+        expect(api).toFail()
+      } finally {
+        rmSync(tmpEmptyDir, { recursive: true, force: true })
+      }
     })
 
-    it('should return 1 for /tmp (no package.json)', () => {
-      const api = sourceScript('./utils/detection.sh')('has_package_json')('/tmp')
-      expect(api).toFail()
+    it('should return 1 for non-git directory without package.json', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpPlainDir = `/tmp/pkgjson-plain-${Date.now()}`
+      mkdirSync(tmpPlainDir, { recursive: true })
+
+      try {
+        const api = sourceScript('./utils/detection.sh')('has_package_json')(tmpPlainDir)
+        expect(api).toFail()
+      } finally {
+        rmSync(tmpPlainDir, { recursive: true, force: true })
+      }
     })
 
     it('should handle non-existent paths gracefully', () => {
@@ -646,25 +852,60 @@ describe('detection utilities', () => {
   })
 
   describe('has_typescript_files()', () => {
-    it('should return 0 for this repo (has .ts files in tests/)', () => {
-      const api = sourceScript('./utils/detection.sh')('has_typescript_files')(process.cwd())
+    it('should return 0 when .ts files exist in directory', () => {
+      const tsDir = join(testDir, 'ts-project')
+      mkdirSync(tsDir, { recursive: true })
+      writeFileSync(join(tsDir, 'index.ts'), 'const x: number = 1;')
+
+      const api = sourceScript('./utils/detection.sh')('has_typescript_files')(tsDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should return 0 when checking tests directory directly', () => {
-      const testsDir = join(process.cwd(), 'tests')
-      const api = sourceScript('./utils/detection.sh')('has_typescript_files')(testsDir)
+    it('should return 0 when .tsx files exist in directory', () => {
+      const tsxDir = join(testDir, 'tsx-project')
+      mkdirSync(tsxDir, { recursive: true })
+      writeFileSync(join(tsxDir, 'App.tsx'), 'export const App = () => <div />')
+
+      const api = sourceScript('./utils/detection.sh')('has_typescript_files')(tsxDir)
       expect(api).toBeSuccessful()
     })
 
-    it('should work with relative path', () => {
-      const api = sourceScript('./utils/detection.sh')('has_typescript_files')('.')
+    it('should return 0 when .ts files exist in src/ subdirectory', () => {
+      const projectDir = join(testDir, 'ts-src-project')
+      const srcDir = join(projectDir, 'src')
+      mkdirSync(srcDir, { recursive: true })
+      initGitRepo(projectDir)
+      writeFileSync(join(srcDir, 'main.ts'), 'console.log("hello")')
+
+      const api = sourceScript('./utils/detection.sh')('has_typescript_files')(projectDir)
       expect(api).toBeSuccessful()
     })
 
     it('should return 1 for directories without .ts files', () => {
-      const api = sourceScript('./utils/detection.sh')('has_typescript_files')('/tmp')
-      expect(api).toFail()
+      // Use /tmp to ensure we're outside any git repo
+      const tmpNoTsDir = `/tmp/ts-nots-${Date.now()}`
+      mkdirSync(tmpNoTsDir, { recursive: true })
+      writeFileSync(join(tmpNoTsDir, 'index.js'), 'const x = 1;')
+
+      try {
+        const api = sourceScript('./utils/detection.sh')('has_typescript_files')(tmpNoTsDir)
+        expect(api).toFail()
+      } finally {
+        rmSync(tmpNoTsDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should return 1 for empty directory', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpEmptyDir = `/tmp/ts-empty-${Date.now()}`
+      mkdirSync(tmpEmptyDir, { recursive: true })
+
+      try {
+        const api = sourceScript('./utils/detection.sh')('has_typescript_files')(tmpEmptyDir)
+        expect(api).toFail()
+      } finally {
+        rmSync(tmpEmptyDir, { recursive: true, force: true })
+      }
     })
 
     it('should handle non-existent paths gracefully', () => {
@@ -674,43 +915,162 @@ describe('detection utilities', () => {
   })
 
   describe('looks_like_js_project()', () => {
-    it('should return 0 for this repo (has package.json)', () => {
-      const api = sourceScript('./utils/detection.sh')('looks_like_js_project')()
-      expect(api).toBeSuccessful()
+    it('should return 0 when package.json exists in CWD', () => {
+      const jsDir = join(testDir, 'js-cwd-test')
+      mkdirSync(jsDir, { recursive: true })
+      writeFileSync(join(jsDir, 'package.json'), '{"name": "test"}')
+
+      const result = runInTestDir('bash', jsDir, 'looks_like_js_project')
+      expect(result.code).toBe(0)
     })
 
-    it('should return 1 when run from non-JS directory', () => {
-      // Note: This test might be challenging since we can't easily change CWD
-      // The function uses CWD, so we'll test it from current directory
-      // In actual implementation, this should check for package.json or .js/.ts files
-      const api = sourceScript('./utils/detection.sh')('looks_like_js_project')()
-      expect(api).toBeSuccessful()
+    it('should return 0 when .js files exist in CWD', () => {
+      const jsDir = join(testDir, 'js-files-test')
+      mkdirSync(jsDir, { recursive: true })
+      writeFileSync(join(jsDir, 'index.js'), 'console.log("hello")')
+
+      const result = runInTestDir('bash', jsDir, 'looks_like_js_project')
+      expect(result.code).toBe(0)
+    })
+
+    it('should return 0 when .ts files exist in CWD', () => {
+      const tsDir = join(testDir, 'ts-files-test')
+      mkdirSync(tsDir, { recursive: true })
+      writeFileSync(join(tsDir, 'index.ts'), 'const x: number = 1')
+
+      const result = runInTestDir('bash', tsDir, 'looks_like_js_project')
+      expect(result.code).toBe(0)
+    })
+
+    it('should return 1 when no JS/TS indicators exist', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpEmptyDir = `/tmp/js-empty-${Date.now()}`
+      mkdirSync(tmpEmptyDir, { recursive: true })
+      writeFileSync(join(tmpEmptyDir, 'readme.txt'), 'just a text file')
+
+      try {
+        const result = runInTestDir('bash', tmpEmptyDir, 'looks_like_js_project')
+        expect(result.code).toBe(1)
+      } finally {
+        rmSync(tmpEmptyDir, { recursive: true, force: true })
+      }
     })
   })
 
   describe('looks_like_rust_project()', () => {
-    it('should return 1 for this repo (no Cargo.toml)', () => {
-      const api = sourceScript('./utils/detection.sh')('looks_like_rust_project')()
-      expect(api).toFail()
+    it('should return 0 when Cargo.toml exists in CWD', () => {
+      const rustDir = join(testDir, 'rust-project')
+      mkdirSync(rustDir, { recursive: true })
+      writeFileSync(join(rustDir, 'Cargo.toml'), '[package]\nname = "test"')
+
+      const result = runInTestDir('bash', rustDir, 'looks_like_rust_project')
+      expect(result.code).toBe(0)
     })
 
-    it('should not produce errors', () => {
-      const api = sourceScript('./utils/detection.sh')('looks_like_rust_project')()
-      // Should return clean exit code (either 0 or 1, not error codes like 127)
-      expect([0, 1]).toContain(api.result.code)
+    it('should return 0 when .rs files exist in CWD', () => {
+      const rustDir = join(testDir, 'rust-files-test')
+      mkdirSync(rustDir, { recursive: true })
+      writeFileSync(join(rustDir, 'main.rs'), 'fn main() {}')
+
+      const result = runInTestDir('bash', rustDir, 'looks_like_rust_project')
+      expect(result.code).toBe(0)
+    })
+
+    it('should return 1 when no Rust indicators exist', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpEmptyDir = `/tmp/rust-empty-${Date.now()}`
+      mkdirSync(tmpEmptyDir, { recursive: true })
+      writeFileSync(join(tmpEmptyDir, 'readme.txt'), 'just a text file')
+
+      try {
+        const result = runInTestDir('bash', tmpEmptyDir, 'looks_like_rust_project')
+        expect(result.code).toBe(1)
+      } finally {
+        rmSync(tmpEmptyDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should not produce errors (exit code 0 or 1 only)', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpEmptyDir = `/tmp/rust-errorcheck-${Date.now()}`
+      mkdirSync(tmpEmptyDir, { recursive: true })
+
+      try {
+        const result = runInTestDir('bash', tmpEmptyDir, 'looks_like_rust_project')
+        expect([0, 1]).toContain(result.code)
+      } finally {
+        rmSync(tmpEmptyDir, { recursive: true, force: true })
+      }
     })
   })
 
   describe('looks_like_python_project()', () => {
-    it('should return 1 for this repo (no Python files)', () => {
-      const api = sourceScript('./utils/detection.sh')('looks_like_python_project')()
-      expect(api).toFail()
+    // Note: looks_like_python_project() checks repo root if in a git repo,
+    // so we need to use /tmp to test detection of Python projects properly
+    it('should return 0 when pyproject.toml exists', () => {
+      const tmpPyDir = `/tmp/python-pyproject-${Date.now()}`
+      mkdirSync(tmpPyDir, { recursive: true })
+      writeFileSync(join(tmpPyDir, 'pyproject.toml'), '[project]\nname = "test"')
+
+      try {
+        const result = runInTestDir('bash', tmpPyDir, 'looks_like_python_project')
+        expect(result.code).toBe(0)
+      } finally {
+        rmSync(tmpPyDir, { recursive: true, force: true })
+      }
     })
 
-    it('should not produce errors', () => {
-      const api = sourceScript('./utils/detection.sh')('looks_like_python_project')()
-      // Should return clean exit code (either 0 or 1, not error codes like 127)
-      expect([0, 1]).toContain(api.result.code)
+    it('should return 0 when requirements.txt exists', () => {
+      const tmpPyDir = `/tmp/python-requirements-${Date.now()}`
+      mkdirSync(tmpPyDir, { recursive: true })
+      writeFileSync(join(tmpPyDir, 'requirements.txt'), 'requests==2.28.0')
+
+      try {
+        const result = runInTestDir('bash', tmpPyDir, 'looks_like_python_project')
+        expect(result.code).toBe(0)
+      } finally {
+        rmSync(tmpPyDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should return 0 when .py files exist', () => {
+      const tmpPyDir = `/tmp/python-files-${Date.now()}`
+      mkdirSync(tmpPyDir, { recursive: true })
+      writeFileSync(join(tmpPyDir, 'main.py'), 'print("hello")')
+
+      try {
+        const result = runInTestDir('bash', tmpPyDir, 'looks_like_python_project')
+        expect(result.code).toBe(0)
+      } finally {
+        rmSync(tmpPyDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should return 1 when no Python indicators exist', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpEmptyDir = `/tmp/python-empty-${Date.now()}`
+      mkdirSync(tmpEmptyDir, { recursive: true })
+      writeFileSync(join(tmpEmptyDir, 'readme.txt'), 'just a text file')
+
+      try {
+        const result = runInTestDir('bash', tmpEmptyDir, 'looks_like_python_project')
+        expect(result.code).toBe(1)
+      } finally {
+        rmSync(tmpEmptyDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should not produce errors (exit code 0 or 1 only)', () => {
+      // Use /tmp to ensure we're outside any git repo
+      const tmpEmptyDir = `/tmp/python-errorcheck-${Date.now()}`
+      mkdirSync(tmpEmptyDir, { recursive: true })
+
+      try {
+        const result = runInTestDir('bash', tmpEmptyDir, 'looks_like_python_project')
+        expect([0, 1]).toContain(result.code)
+      } finally {
+        rmSync(tmpEmptyDir, { recursive: true, force: true })
+      }
     })
   })
 })

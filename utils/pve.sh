@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# FOR Proxmox containers (LXC and VM)
+# The `proxmox.sh` file is for Proxmox Hosts
+
 # Source guard - must be BEFORE path setup to prevent re-execution
 [[ -n "${__PVE_SH_LOADED:-}" ]] && return
 __PVE_SH_LOADED=1
