@@ -14,9 +14,9 @@ fi
 
 
 # os
-# 
+#
 # Will try to detect the operating system of the host computer
-# where options are: darwin, linux, windowsnt, 
+# where options are: darwin, linux, windowsnt,
 function os() {
     local -r os_type=$(lc "${OSTYPE}") || "$(lc "$(uname)")" || "unknown"
     case "$os_type" in
@@ -29,13 +29,13 @@ function os() {
         'windowsnt'*)
           echo "windows"
           ;;
-        'darwin'*) 
+        'darwin'*)
           echo "macos"
           ;;
         'sunos'*)
           echo "solaris"
           ;;
-        'aix'*) 
+        'aix'*)
           echo "aix"
           ;;
         *) echo "unknown/${os_type}"
@@ -45,20 +45,27 @@ function os() {
 function is_os() {
   local -r test="${1:?test value for is_os is missing}"
 
-  if [[ "$(os)" == "${test}" ]]; then 
+  if [[ "$(os)" == "${test}" ]]; then
     return 0;
-  else 
+  else
     return 1;
   fi
 }
 
 
-function is_mac() { 
-    [[ $(uname -s) == Darwin* ]]; 
+function is_mac() {
+    [[ $(uname -s) == Darwin* ]];
 }
 
-function is_windows() { 
-    [[ $(uname -s) == CYGWIN* || $(uname -s) == MINGW* ]] || command -v cmd.exe &>/dev/null; 
+function is_windows() {
+    [[ $(uname -s) == CYGWIN* || $(uname -s) == MINGW* ]] || command -v cmd.exe &>/dev/null;
+}
+
+# is_wsl
+#
+# Returns true if running inside Windows Subsystem for Linux
+function is_wsl() {
+    [[ -f /proc/version ]] && grep -qi microsoft /proc/version
 }
 
 function get_kernel_version() {
@@ -71,12 +78,12 @@ function get_storage() {
 
     elif is_mac; then
         df -P -h -a | grep -vE 'TimeMachine|backupdb|^(devfs|autofs|map|localhost:) ' | \
-        awk 'BEGIN {print "Filesystem\tType\tUse%\tAvail\tMounted on"} 
+        awk 'BEGIN {print "Filesystem\tType\tUse%\tAvail\tMounted on"}
             NR>1 {
                 # Reconstruct mount point
                 mount_point = $6
                 for(i=7; i<=NF; i++) mount_point = mount_point " " $i
-                
+
                 # Get filesystem type using stat (fast and reliable)
                 fstype = "unknown"
                 if (system("test -d \"" mount_point "\"") == 0) {
@@ -84,17 +91,17 @@ function get_storage() {
                     cmd | getline fstype
                     close(cmd)
                 }
-                
+
                 # Network filesystem detection
                 if ($1 ~ /^\/\//) fstype = "smb"
                 if ($1 ~ /^\/dev\//) fstype = "apfs"
                 if ($1 ~ /^\/Applications\//) fstype = "unknown"
                 if ($1 ~ /^[a-zA-Z0-9.]+:\//) fstype = "nfs"
-                
+
                 # Truncate fields
                 fs = length($1) > 30 ? substr($1,1,27) "..." : $1
                 mnt = length(mount_point) > 35 ? substr(mount_point,1,37) "..." : mount_point
-                
+
                 printf "%s\t%s\t%s\t%s\t%s\n", fs, fstype, $5, $4, mnt
             }' | \
         column -t -s $'\t'
@@ -115,7 +122,7 @@ function get_storage() {
                     'Use%' = \"\$pct%\"
                 }
             }" | \
-        awk 'BEGIN {print "Filesystem Type Use% Avail Mounted_on"} 
+        awk 'BEGIN {print "Filesystem Type Use% Avail Mounted_on"}
             NR>1 {
                 gsub(/\\r/,"");
                 printf "%s %s %s %.1fG %s\n", $3, $1, $5, $4, $2
@@ -129,7 +136,7 @@ function get_storage() {
 
 # get_shell()
 #
-# gets the active shell program running inside of 
+# gets the active shell program running inside of
 function get_shell() {
     local shell
     shell=$(ps -p $$ -o comm= | sed 's/^-//')
@@ -138,7 +145,7 @@ function get_shell() {
         [ -n "$BASH_VERSION" ] && shell=bash
         [ -n "$ZSH_VERSION" ] && shell=zsh
         [ -n "$FISH_VERSION" ] && shell=fish
-        [ -n "$NUSHELL_VERSION" ] && shell=nu 
+        [ -n "$NUSHELL_VERSION" ] && shell=nu
     }
     # Fallback to SHELL environment variable if detection fails
     [ "$shell" = "sh" ] && [ -n "$SHELL" ] && {
@@ -286,7 +293,7 @@ function os_version() {
             local distro_output
             distro_output=$(distro)
             local version="${distro_output##*/}"
-            
+
             # Handle Arch Linux's special case
             if [[ "$version" == "unknown" && "$distro_output" == *"Arch Linux/"* ]]; then
                 if [ -f /etc/arch-release ]; then
@@ -546,26 +553,93 @@ function is_debian() {
         if contains "debian" "${LC_DISTRO}"; then
             debug "is_debian" "is Debian OS [${LC_DISTRO}]"
             return 0
-        else 
+        else
             debug "is_debian" "is NOT Debian OS [${LC_DISTRO}]"
             return 1
-        fi 
+        fi
+    fi
+}
+
+function is_ubuntu() {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/text.sh"
+
+    if is_linux; then
+        DISTRO="$(distro)"
+        LC_DISTRO="$(lc "${DISTRO}")"
+        if contains "ubuntu" "${LC_DISTRO}"; then
+            debug "is_ubuntu" "is Ubuntu OS [${LC_DISTRO}]"
+            return 0
+        else
+            debug "is_ubuntu" "is NOT Ubuntu OS [${LC_DISTRO}]"
+            return 1
+        fi
     fi
 }
 
 function is_alpine() {
     source "${UTILS}/logging.sh"
     source "${UTILS}/text.sh"
-    
+
     if is_linux; then
         DISTRO="$(distro)"
         LC_DISTRO="$(lc "${DISTRO}")"
         if contains "alpine" "${LC_DISTRO}"; then
             debug "is_alpine" "is Alpine OS [${LC_DISTRO}]"
             return 0
-        else 
+        else
             debug "is_alpine" "is NOT Alpine OS [${LC_DISTRO}]"
             return 1
-        fi 
+        fi
     fi
+}
+
+# is_fedora
+#
+# Returns true if running on Fedora, RHEL, CentOS, Rocky Linux, or AlmaLinux
+function is_fedora() {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/text.sh"
+
+    if is_linux; then
+        DISTRO="$(distro)"
+        LC_DISTRO="$(lc "${DISTRO}")"
+        if contains "fedora" "${LC_DISTRO}" || \
+           contains "rhel" "${LC_DISTRO}" || \
+           contains "red hat" "${LC_DISTRO}" || \
+           contains "centos" "${LC_DISTRO}" || \
+           contains "rocky" "${LC_DISTRO}" || \
+           contains "alma" "${LC_DISTRO}"; then
+            debug "is_fedora" "is Fedora/RHEL-based OS [${LC_DISTRO}]"
+            return 0
+        else
+            debug "is_fedora" "is NOT Fedora/RHEL-based OS [${LC_DISTRO}]"
+            return 1
+        fi
+    fi
+    return 1
+}
+
+# is_arch
+#
+# Returns true if running on Arch Linux, Manjaro, or EndeavourOS
+function is_arch() {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/text.sh"
+
+    if is_linux; then
+        DISTRO="$(distro)"
+        LC_DISTRO="$(lc "${DISTRO}")"
+        if contains "arch" "${LC_DISTRO}" || \
+           contains "manjaro" "${LC_DISTRO}" || \
+           contains "endeavouros" "${LC_DISTRO}" || \
+           contains "endeavour" "${LC_DISTRO}"; then
+            debug "is_arch" "is Arch-based OS [${LC_DISTRO}]"
+            return 0
+        else
+            debug "is_arch" "is NOT Arch-based OS [${LC_DISTRO}]"
+            return 1
+        fi
+    fi
+    return 1
 }
