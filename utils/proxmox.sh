@@ -16,10 +16,96 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="../color.sh"
-source "${ROOT}/color.sh"
-# shellcheck source="../utils.sh"
-source "${ROOT}/utils.sh"
+source "${UTILS}/logging.sh"
+source "${UTILS}/detection.sh"
+
+# Proxmox API Port
+PVE_API_PORT="${PVE_API_PORT:-8006}"
+PVE_API_BASE="/api2/json/"
+
+# Exit codes
+EXIT_OK=0
+EXIT_CONFIG=1
+EXIT_API=2
+EXIT_MISSING_PREREQ=3
+EXIT_JQ_PARSING=4
+EXIT_INVALID_NODE=5
+
+CLUSTER_ENV_FILE="${HOME}/.pve-cluster.env"
+
+# pve_ensure_prerequisites()
+#
+# Ensures that curl and jq are installed before making an API call
+function pve_ensure_prerequisites() {
+    if ! has_command "jq"; then
+        logc "{{BOLD}}{{BLUE}}jq{{RESET}} is required for Proxmox API calls."
+        if confirm "Install jq now?"; then
+            if ! install_jq; then
+                error "Failed to install {{BOLD}}{{BLUE}}jq{{RESET}}" "${EXIT_API}"
+            fi
+        else
+            logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"
+
+            return ${EXIT_CONFIG}
+        fi
+    fi
+
+    if ! has_command "curl"; then
+        logc "{{BOLD}}{{BLUE}}curl{{RESET}} is required for Proxmox API calls."
+        if confirm "Install curl now?"; then
+            if ! install_curl; then
+                error "Failed to install {{BOLD}}{{BLUE}}curl{{RESET}}" "${EXIT_API}"
+            fi
+        else
+            logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"
+            return ${EXIT_CONFIG}
+        fi
+    fi
+
+    return ${EXIT_OK}
+}
+
+# pve_api_get <path>
+#
+# Makes a GET request to the Proxmox VE API.
+#   - on success, results are passed back on STDOUT
+#   - on failure, error message is returned on STDERR
+function pve_api_get() {
+    local -r api_path="${1}"
+    local -r host="$(get_proxmox_node)"
+    local -r fq_path="${API_BASE}${api_path}"
+    local -r token="$(get_pve_api_key)"
+    local -r url="https://${host}:${PVE_API_PORT}${fq_path}"
+
+    if is_pve_host; then
+        logc "pve host"
+        # TODO: use CLI
+    fi
+
+    if is_empty "${host}"; then
+        error "No Proxmox host found. Set PROXMOX_HOST environment variable." ${EXIT_API}
+    fi
+
+    if pve_ensure_prerequisites; then
+        local result
+        result=$(curl -sk --max-time 10 \
+            -H "Authorization: PVEAPIToken=${PVE_API_TOKEN}" \
+            "https://${host}:${PROXMOX_API_PORT}${fq_path}" 2>/dev/null
+        )
+
+        if [[ -z "${result}" ]] || ! echo "${result}" | jq -e '.data' &>/dev/null; then
+            error "Proxmox API call failed: GET https://${host}:${PROXMOX_API_PORT}${fq_path}" ${EXIT_API}
+        fi
+
+        # Return the result
+        echo "${result}"
+    else
+        logc "\nAPI call to {{BLUE}}${url}{{RESET}} was cancelled because package requirements (e.g., {{BOLD}}curl{{RESET}} and {{BOLD}}jq{{RESET}}) were not installed on the system.\n"
+
+        return ${EXIT_MISSING_PREREQ}
+    fi
+
+}
 
 
 function call_api() {
@@ -37,25 +123,6 @@ function call_api() {
     fi
 }
 
-# get_pve_url <host> <path>
-#
-# Combines the base URL, the host and the path
-function get_pve_url() {
-    local -r host=${1:?$(config_property "DEFAULT_NODE")}
-
-    if is_empty host; then
-        panic "Call to get_pve_url() provided no Host information and we were unable to get this from DEFAULT_NODE in your configuration file: ${DIM}${MOXY_CONFIG_FILE}${RESET}"
-    fi
-
-    local -r path=${2:-/}
-    local -r base="https://${host}:8006/api2/json"
-
-    if starts_with "/" "${path}"; then
-        echo "${base}${path}"
-    else
-        echo "${base}/${path}"
-    fi
-}
 
 # validate_api_key() <api_key>
 #
@@ -63,12 +130,6 @@ function get_pve_url() {
 # returns a 200 status code.
 function validate_api_key() {
     local -r key="${1:?no URL was passed to fetch_get()}"
-
-    # local -rA req=(
-    #     [url]="$(get_pve "/version")"
-    #     [auth]="${key}"
-    # )
-
     local -r code=$(validate_api_key "${key}")
 
     if [[ "$code" == "200" ]]; then
@@ -86,89 +147,144 @@ function set_default_token() {
     replace_line_in_file "${MOXY_CONFIG_FILE}" "DEFAULT_API" "DEFAULT_API=${token}"
 }
 
-# configuration_missing <key>
+# save_pve_cluster
 #
-# boolean flag which indicates whether the <key> passed in is present
-# in the configuration in the explicit form of ^KEY=...
-function configuration_missing() {
-    local -r key="${1}"
+# Takes a validated PVE node and get's the cluster
+# information so that the file ${CLUSTER_ENV_FILE}
+function save_pve_cluster() {
+    local -r node="${1}"
 
-    if is_empty "${key}"; then
-        panic "call to configuration_missing(key) was called with no KEY!"
+    if not_empty "${node}"; then
+        get_pve_cluster
     fi
+}
 
-    if config_file_exists; then
-
-        if not_empty "$(find_key_in_file "$MOXY_CONFIG_FILE" "${key}")"; then
-            return 1; # found it, so not missing
+# match_known_cluster
+#
+# Checks:
+#   1. if there is a requested cluster then:
+#      - we will see if `PVE_CLUSTER_${match}` is defined and return it if it is
+#      - where "${match}" is the upper-cased version of
+#   2. if no requested cluster but we have a `DEFAULT_PVE_CLUSTER` assigned
+#
+function match_known_cluster() {
+    local -r requested="${1}"
+    local match
+    # the ENV variables starting with PVE_CLUSTER_
+    local -a candidates
+    if is_empty "${requested}"; then
+        if is_empty "${DEFAULT_PVE_CLUSTER}"; then
+            :
         else
-            return 0;
+            :
         fi
     else
-        return 0; # always missing config element when config file is missing
+        match="PVE_CLUSTER_$(uc "${requested}")"
+        # TODO: iterate over candidates to see where $match _starts with_
+        # one of the candidates.
     fi
 }
 
-
-# config_property <property>
+# pve_node_up
 #
-# returns the property asked for, where:
-#   - if name starts with DEFAULT_ it is presumed to be a string value
-#   - if it starts with PREFERS_ it is expected to be a boolean (aka,  0 / 1 in bash)
-#     - note that in config file you can use "true"/"false" nominclature as it's clearer
-#   - in all other cases it is presumed to be an array
+# Receives an array of candidate nodes and returns
+# the first URL which is actively listening on the expected API port.
 #
-# in cases where the property is not found, it returns the "identity"
-# for the expected type (e.g., "" for string, () for arrays)
-function config_property() {
-    local -r property="${1}"
+# If no candidates are found to be a valid API endpoint then
+# an empty string is returned.
+function pve_node_up() {
+    local -na candidates=${1}
 
-    if is_empty "$property"; then
-        panic "Call to config_property(property) did NOT supply a property name!" 1
-    fi
+    # TODO iterate over candidates; below code is just representative
+    # for candidate in ${@candidates}; do
+    #     if curl -sk --max-time 2 --connect-timeout 2 "https://$candidate:${PROXMOX_API_PORT}/" &>/dev/null; then
+    #         echo "$candidate"
+    #         return ${EXIT_OK};
+    #     fi
+    # end
 
-    if starts_with "DEFAULT_" "$property"; then
-        # shellcheck disable=SC2178
-        local -r found=$(find_in_file "${MOXY_CONFIG_FILE}" "$property")
-
-        # shellcheck disable=SC2128
-        echo "${found}"
-    else
-        # shellcheck disable=SC2207
-        local -ra found_all=( $(findall_in_file "${MOXY_CONFIG_FILE}" "$property") )
-        printf "%s" "${found_all[@]}"
-    fi
 }
 
-
-
-# get_default_node()
+# get_proxmox_node
 #
-# Gets the ip address for the PVE "default host".
-function get_default_node() {
-    local -r def_node=$(config_property "DEFAULT_NODE")
+# Attempts to find a reachable Proxmox VE node.
+#
+# The PVE Node is resolved by:
+#   - if the host machine has set `PVE_CLUSTER_XXX` set
+#     then this will be used to determine the PVE Node
+#   - if it isn't yet set then we'll instead:
+#     1. PROXMOX_HOST (or pve.home if not set)
+#     2. PROXMOX_FALLBACK (or pve.local if not set)
+#     3. pve
+function get_proxmox_node() {
+    source "${UTILS}/network.sh"
+    source "${UTILS}/filesystem.sh"
 
-    if not_empty "$def_node"; then
-        echo "${def_node}"
-        return 0
-    else
-        # shellcheck disable=SC2207
-        local -ra all_nodes=($(findall_in_file "${MOXY_CONFIG_FILE}" "API_TOKEN"))
+    local -r requested="${1}"
+    local node
+    local -a candidates
 
-        if  [[ $(length "${all_nodes[@]}") -gt 0 ]]; then
-            echo "${all_nodes[0]}"
-            return 0
-        else
-            return 1
+    if file_exists "${CLUSTER_ENV_FILE}"; then
+        source "${CLUSTER_ENV_FILE}"
+    fi
+
+    candidates=( "$(match_known_cluster "${requested}")" )
+    if [[ "$#candidates" > 0 ]]; then
+        node=$(pve_node_up candidates)
+    elif is_ip4_address "${requested}"; then
+        candidates=( "${requested}" )
+        node=$(pve_node_up candidates)
+        if is_empty "${node}"; then
+            error "The IPv4 address {{BLUE}}${requested}{{RESET}} did not resolve to an active PVE node" ${EXIT_INVALID_NODE}
+        fi
+    elif is_ip6_address "${requested}"; then
+        candidates=( "${requested}" )
+        node=$(pve_node_up candidates)
+        if is_empty "${node}"; then
+            error "The IPv6 address {{BLUE}}${requested}{{RESET}} did not resolve to an active PVE node" ${EXIT_INVALID_NODE}
+        fi
+    elif is_dns_name "${requested}"; then
+        candidates=( "${requested}" )
+        node=$(pve_node_up candidates)
+        if is_empty "${node}"; then
+            error "The DNS name {{BLUE}}${requested}{{RESET}} did not resolve to an active PVE node" ${EXIT_INVALID_NODE}
+        fi
+    elif
+        local -r primary="${PROXMOX_HOST:-pve.home}"
+        local -r fallback="${PROXMOX_FALLBACK:-pve.local}"
+        local candidates=(
+            "${primary}"
+            "${fallback}"
+            "pve"
+        )
+        node=$(pve_node_up candidates)
+        if is_empty "${node}"; then
+            error "None of the default candidates: -- [ ${candidates[*]} ] -- were an active PVE Node." ${EXIT_INVALID_NODE}
         fi
     fi
+
+    # Success
+    save_pve_cluster "${node}"
+
+    echo "${node}"
 }
+
+function get_pve_api_key() {
+    # Check for mounted config in containers/VMs
+    if is_lxc || is_vm; then
+        if file_exists "${HOME}/.config/pve/api-key.env"; then
+            source "${HOME}/.config/pve/api-key.env";
+            echo "${PVE_API_KEY}"
+        fi
+    elif ! is_pve_host; then
+        echo "${PVE_API_KEY}"
+    fi
+}
+
 
 # pve_version
 #
-# Provides the PVE version of the current node (if a PVE node)
-# or the DEFAULT_NODE setting in the configuration if a remote
-# node.
+# Provides the PVE version of the PVE node.
 function pve_version() {
     if is_pve_host; then
         local version
@@ -197,27 +313,27 @@ function get_next_container_id() {
     local -r url=$(get_pve_url "${host}" "/cluster/nextid")
     local -r resp=$(fetch_get "${url}" "$(pve_auth_header)")
     local -r id="$(echo "${resp}" | jq --raw-output '.data')"
-    
+
     printf "%s" "${id}"
 }
 
 
-# get_pve_version() <host::default_host>
+# get_pve_version()
 #
 # Gets the PVE version information via the Proxmox API.
 # You may optionally pass in a PVE HOST but if not
 # then the "default host" will be used.
 # shellcheck disable=SC2120
 function get_pve_version() {
-    local -r host="${1:-"$(config_property "DEFAULT_NODE")"}"
-    local -r url=$(get_pve_url "${host}" "/version")
-    if is_empty host; then
-        panic "Failed to get a PVE host, including the default node. Please make sure your configuration file has a DEFAULT_NODE set!"
+    local result;
+    if is_pve_host; then
+        result="$(pveversion)"
+    else
+        result="$(pve_api_get '/')"
     fi
 
-    local -r resp=$(fetch_get "${url}" "$(pve_auth_header)")
-    local -r version="$(echo "${resp}" | jq --raw-output '.data.version')"
-    
+    local -r version="$(echo "${result}" | jq --raw-output '.data.version')"
+
     printf "%s" "${version}"
 }
 
@@ -226,18 +342,22 @@ function get_pve_version() {
 # Gets the nodes by querying either the <host> passed in
 # or the default host otherwise.
 function get_pve_nodes() {
-    local -r host=${1:?no PVE host passed to get_pve_url()}
-    local -r url="$(get_pve_url "${host}" "/nodes")"
-    local -r token=""
-    local -r outcome=$(curl -X GET -H \"Authorization=PVEAPIToken="${token}"\" "${url}")
+    local result;
+    if is_pve_host; then
+        result=$(get_pvesh "/nodes")
+    else
+        result=$(pve_api_get "/nodes")
+    fi
 
-    echo "${outcome}"
+    result="$(pve_parse "/nodes" "${result}")"
+
+    echo "${result}"
 }
 
 # pve_version_check()
-# 
+#
 # Validates that the PVE version is the minimum required.
-# It uses `pveversion` command when directly no a host 
+# It uses `pveversion` command when directly no a host
 # but otherwise relies on the API.
 function pve_version_check() {
     local -r version="$(pve_version)"
@@ -252,12 +372,6 @@ function pve_version_check() {
         exit
     fi
 
-}
-
-
-
-function has_proxmox_api_key() {
-    log ""
 }
 
 # next_container_id
@@ -301,21 +415,39 @@ function get_pvesh() {
     printf "%s" "${filtered}"
 }
 
+# pve_parse
+#
+# Parses an API response with jq.
+function pve_parse() {
+    local -r request_path="${1}"
+    local -r response="${2}"
+    local -r query="${3:-.data}"
+    local -r url="$(get_pve_url "${request_path}")"
+    local processed
+
+    processed="$(printf "%s" "${response}" | jq --raw-output "${filter}")" || error "Problems parsing {{BLUE}}${url}{{RESET}}" ${EXIT_JQ_PARSING}
+
+    stdout "${processed}"
+
+}
+
 function get_pve() {
     local -r path=${1:?no path passed to get_pve()}
     local -r filter=${2:-}
     local -r host=${3:-"$(get_default_node)"}
-    local -r url="$(get_pve_url "${host}" "${path}")"
+    local result
+
+    result=$(pve_api_get "${path}")
 
     local response
     response="$(fetch_get "${url}" "$(pve_auth_header)")"
 
     if not_empty "${response}" && not_empty "${filter}"; then
-        debug "get_pve(${path})" "got a response, now filtering with: ${filter}" 
-        
+        debug "get_pve(${path})" "got a response, now filtering with: ${filter}"
+
         response="$(printf "%s" "${response}" | jq --raw-output "${filter}")" || error "Problem using jq with filter '${filter}' on a response [${#response} chars] from the URL ${url}"
         printf "%s" "${response}"
-    else 
+    else
         echo "${response}"
     fi
 }
@@ -324,7 +456,7 @@ function pve_resources() {
     local resources
     if is_pve_host; then
         resources="$(get_pvesh "/cluster/resources" ".data")"
-    else 
+    else
         resources="$(get_pve "/cluster/resources" ".data")"
     fi
 
@@ -336,7 +468,7 @@ function pve_lxc_containers() {
     local resources
     if is_pve_host; then
         resources="$(get_pvesh "${path}" '. | map(select(.type == "lxc"))')"
-    else 
+    else
         resources="$(get_pve "${path}" '.data | map(select(.type == "lxc"))')"
     fi
 
@@ -349,7 +481,7 @@ function pve_vm_containers() {
     local resources
     if is_pve_host; then
         resources=$(get_pvesh "${path}" '. | map(select(.type == "qemu"))')
-    else 
+    else
         resources=$(get_pve "${path}" '.data | map(select(.type == "qemu"))')
     fi
 
@@ -360,7 +492,7 @@ function pve_storage() {
     local resources
     if is_pve_host; then
         resources="$(get_pvesh "/storage" '. | map(.)')"
-    else 
+    else
         resources="$(get_pve "/storage" '.data | map(.)')"
     fi
 
@@ -373,7 +505,7 @@ function pve_sdn() {
     local resources
     if is_pve_host; then
         resources="$(get_pvesh "${path}" "${filter}")"
-    else 
+    else
         resources="$(get_pve "${path}" "${filter}")"
     fi
 
@@ -578,7 +710,7 @@ function lxc_status() {
             # shellcheck disable=SC2207
             local -a tags=( $(split_on ";" "${record["tags"]}") )
             local display_tags=""
-            
+
             for t in "${tags[@]}"; do
                 local color
                 allow_errors
@@ -595,7 +727,7 @@ function lxc_status() {
                 display_tags="${display_tags} ${color}${t}${RESET}"
             done
 
-            log "- ${record[name]} [${DIM}${record[vmid]}${RESET}]: ${ITALIC}${DIM}running on ${RESET}${record[node]}; ${display_tags}"; 
+            log "- ${record[name]} [${DIM}${record[vmid]}${RESET}]: ${ITALIC}${DIM}running on ${RESET}${record[node]}; ${display_tags}";
         fi
     done
 
@@ -608,7 +740,7 @@ function lxc_status() {
             # shellcheck disable=SC2207
             local -a tags=( $(split_on ";" "${record["tags"]:-}") )
             local display_tags=""
-            
+
             for t in "${tags[@]}"; do
                 local color
                 if not_empty "${tag_color["$t"]:-}"; then
@@ -632,7 +764,36 @@ function lxc_status() {
 
             local locked_icon=""
 
-            log "- ${template_icon}${locked_icon}${record["name"]} [${DIM}${record["vmid"]}${RESET}]: ${ITALIC}${DIM}residing on ${RESET}${record["node"]}; ${display_tags}"; 
+            log "- ${template_icon}${locked_icon}${record["name"]} [${DIM}${record["vmid"]}${RESET}]: ${ITALIC}${DIM}residing on ${RESET}${record["node"]}; ${display_tags}";
         fi
     done
 }
+
+# CLI invocation handler - allows running script directly with a function name
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Set up paths for sourcing dependencies
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ROOT="${UTILS%"/utils"}"
+
+    cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    if [[ -z "$cmd" || "$cmd" == "--help" || "$cmd" == "-h" ]]; then
+        script_name="$(basename "${BASH_SOURCE[0]}")"
+        echo "Usage: $script_name <function> [args...]"
+        echo ""
+        echo "Available functions:"
+        # List all functions that don't start with _
+        declare -F | awk '{print $3}' | grep -v '^_' | sort | sed 's/^/  /'
+        exit 0
+    fi
+
+    # Check if function exists and call it
+    if declare -f "$cmd" > /dev/null 2>&1; then
+        "$cmd" "$@"
+    else
+        echo "Error: Unknown function '$cmd'" >&2
+        echo "Run '$(basename "${BASH_SOURCE[0]}") --help' for available functions" >&2
+        exit 1
+    fi
+fi
