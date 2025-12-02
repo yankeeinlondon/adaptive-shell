@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Source guard - must be BEFORE path setup to prevent re-execution
+[[ -n "${__SYS_SH_LOADED:-}" ]] && return
+__SYS_SH_LOADED=1
+
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
@@ -12,26 +16,24 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="../color.sh"
-source "${ROOT}/color.sh"
-# shellcheck source="../utils.sh"
-source "${ROOT}/utils.sh"
-
-
-function net() {
-    if [[ "$(os)" == "macos" ]]; then
-        ifconfig | grep "inet "
-    elif [[ "$(os)" == "linux" ]]; then
-        ip addr show | grep "inet "
-    fi
-}
-
-function sys() {
+function report_sys() {
+    # shellcheck source="../utils/color.sh"
+    source "${UTILS}/color.sh"
+    # shellcheck source="../utils/logging.sh"
+    source "${UTILS}/logging.sh"
+    # shellcheck source="../utils/programs.sh"
+    source "${UTILS}/programs.sh"
+    # shellcheck source="../utils/detection.sh"
+    source "${UTILS}/detection.sh"
+    # shellcheck source="../utils/os.sh"
+    source "${UTILS}/os.sh"
+    # shellcheck source="../utils/network.sh"
+    source "${UTILS}/network.sh"
 
     if is_linux; then
-        OS="{{BOLD}}${YELLOW}$(os) {{RESET}}{{BOLD}}$(distro){{RESET}}"
+        OS="{{BOLD}}{{YELLOW}}$(os) {{RESET}}{{BOLD}}$(distro){{RESET}}"
     else
-        OS="{{BOLD}}${YELLOW}$(os) {{RESET}}{{BOLD}}$(os_version){{RESET}}"
+        OS="{{BOLD}}{{YELLOW}}$(os) {{RESET}}{{BOLD}}$(os_version){{RESET}}"
     fi
 
     MEM="$(get_memory)"
@@ -80,7 +82,7 @@ function sys() {
     FIRM="$(get_firmware)"
 
     logc ""
-    logc "{{BOLD}}${BLUE}$(hostname){{RESET}}"
+    logc "{{BOLD}}{{BLUE}}$(hostname){{RESET}}"
     logc "${OS}"
     logc "{{DIM}}---------------------------{{RESET}}"
     logc "{{BOLD}}Memory:{{RESET}}    ${MEM} {{DIM}}{{ITALIC}}gb{{RESET}}"
@@ -105,7 +107,7 @@ function sys() {
         logc "{{BOLD}}Container:{{RESET}} VM"
     fi
     if is_docker; then
-        logc "{{BOLD}}Container:{{RESET}} ${BLUE}Docker{{RESET}}"
+        logc "{{BOLD}}Container:{{RESET}} {{BLUE}}Docker{{RESET}}"
     fi
     if get_ssh_connection &>/dev/null; then
         logc "{{BOLD}}SSH:{{RESET}}       $(get_ssh_connection)"
@@ -130,37 +132,48 @@ function sys() {
     fi
 
     logc "{{BOLD}}Network:{{RESET}}"
-    net
+    network_interfaces
 
     STORAGE="$(get_storage)"
     STORAGE="$(find_replace "dev" "{{DIM}}dev{{RESET}}" "${STORAGE}")"
-    STORAGE="$(find_replace "zfs" "${GREEN}{{BOLD}}zfs{{RESET}}" "${STORAGE}")"
-    STORAGE="$(find_replace "smb" "${BLUE}{{BOLD}}smb{{RESET}}" "${STORAGE}")"
-    STORAGE="$(find_replace "cifs" "${BLUE}{{BOLD}}cifs{{RESET}}" "${STORAGE}")"
-    STORAGE="$(find_replace "nfs" "${BRIGHT_BLUE}{{BOLD}}nfs{{RESET}}" "${STORAGE}")"
-    STORAGE="$(find_replace "apfs" "${YELLOW}{{BOLD}}apfs{{RESET}}" "${STORAGE}")"
-    STORAGE="$(find_replace "unknown" "${RED}{{BOLD}}unknown{{RESET}}" "${STORAGE}")"
+    STORAGE="$(find_replace "zfs" "{{GREEN}}{{BOLD}}zfs{{RESET}}" "${STORAGE}")"
+    STORAGE="$(find_replace "smb" "{{BLUE}}{{BOLD}}smb{{RESET}}" "${STORAGE}")"
+    STORAGE="$(find_replace "cifs" "{{BLUE}}{{BOLD}}cifs{{RESET}}" "${STORAGE}")"
+    STORAGE="$(find_replace "nfs" "{{BRIGHT_BLUE}}{{BOLD}}nfs{{RESET}}" "${STORAGE}")"
+    STORAGE="$(find_replace "apfs" "{{YELLOW}}{{BOLD}}apfs{{RESET}}" "${STORAGE}")"
+    STORAGE="$(find_replace "unknown" "{{RED}}{{BOLD}}unknown{{RESET}}" "${STORAGE}")"
     STORAGE="$(find_replace "Applications" "{{DIM}}Applications{{RESET}}" "${STORAGE}")"
 
     logc "{{BOLD}}Storage:{{RESET}}"
     logc "$(indent "    " "${STORAGE}")"
 
-    remove_colors
 }
 
+# CLI invocation handler - allows running script directly with a function name
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    command="${1:-sys}"
+    # Set up paths for sourcing dependencies
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ROOT="${UTILS%"/utils"}"
 
-    case "${command}" in
-        net)
-            net
-            ;;
-        sys)
-            sys
-            ;;
-        *)
-            logc "- unknown command ${RED}{{BOLD}}${command}{{RESET}} for sys module"
-            exit 1
-            ;;
-    esac
+    cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    if [[ -z "$cmd" || "$cmd" == "--help" || "$cmd" == "-h" ]]; then
+        script_name="$(basename "${BASH_SOURCE[0]}")"
+        echo "Usage: $script_name <function> [args...]"
+        echo ""
+        echo "Available functions:"
+        # List all functions that don't start with _
+        declare -F | awk '{print $3}' | grep -v '^_' | sort | sed 's/^/  /'
+        exit 0
+    fi
+
+    # Check if function exists and call it
+    if declare -f "$cmd" > /dev/null 2>&1; then
+        "$cmd" "$@"
+    else
+        echo "Error: Unknown function '$cmd'" >&2
+        echo "Run '$(basename "${BASH_SOURCE[0]}") --help' for available functions" >&2
+        exit 1
+    fi
 fi

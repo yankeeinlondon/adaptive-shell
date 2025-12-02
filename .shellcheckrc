@@ -1,2 +1,3 @@
-external-sources=true
-
+external-sources=false
+extended-analysis=false
+disable=SC1091,SC2086

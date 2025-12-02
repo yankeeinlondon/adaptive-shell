@@ -12,6 +12,8 @@ else
     UTILS="${ROOT}/utils"
 fi
 
+source "${UTILS}/logging.sh"
+source "${UTILS}/detection.sh"
 
 # use "dust" over base "du" if available
 function du() {
@@ -181,16 +183,14 @@ EOF
 
 # unset login_message
 
+# net()
+#
+# Proxies the `network_interfaces()` function through as a
+# command for the interactive console.
 function net() {
-    local -r file="${REPORTS}/sys.sh"
+    local -r file="${UTILS}/network.sh"
 
-    bash "${file}" "net"
-}
-
-function sys() {
-    local -r file="${REPORTS}/sys.sh"
-
-    bash "${file}" "sys"
+    bash "${file}" "network_interfaces"
 }
 
 function track() {
@@ -209,6 +209,12 @@ function about() {
     local -r file="${REPORTS}/about.sh"
 
     bash "${file}" "report_about"
+}
+
+function sys() {
+    local -r file="${REPORTS}/sys.sh"
+
+    bash "${file}" "report_sys"
 }
 
 if has_command "yazi"; then
@@ -244,6 +250,13 @@ function upgrade() {
         logc "\nOk.\n"
     fi
 }
+
+if has_function is_pve_host && { is_pve_host || is_pve_container || is_pve_aware; }; then
+    function nodes() {
+        source "${UTILS}/proxmox.sh"
+        logc "$(get_pve_nodes)"
+    }
+fi
 
 if ! has_command "uv"; then
     function uv() {

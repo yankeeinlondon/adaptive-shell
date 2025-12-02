@@ -19,15 +19,11 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="./typeof.sh"
+
 source "${UTILS}/typeof.sh"
-# shellcheck source="./detection.sh"
 source "${UTILS}/detection.sh"
-# shellcheck source="./filesystem.sh"
 source "${UTILS}/filesystem.sh"
-# shellcheck source="./network.sh"
 source "${UTILS}/network.sh"
-# shellcheck source="./logging.sh"
 source "${UTILS}/logging.sh"
 
 # Exit codes
@@ -54,136 +50,25 @@ API_BASE="/api2/json/"
 function has_pve_api_key() {
     # Check environment variable first (fastest)
     if not_empty "${PVE_API_KEY}"; then
-        # shellcheck disable=SC2086
         return ${EXIT_OK}
     fi
 
     # Check for mounted config in containers/VMs
     if is_lxc || is_vm; then
         if file_exists "${HOME}/.config/pve/api-key"; then
-            # shellcheck disable=SC2086
             return ${EXIT_OK}
         fi
     fi
 
-    # shellcheck disable=SC2086
     return ${EXIT_FALSE}
 }
 
-# is_pve_container
-#
-# Test whether current host is an LXC container or VM
-# running on Proxmox VE with API access available.
-# Returns 0 if true, 1 if false.
-function is_pve_container() {
-    # Must be running in a container or VM
-    if ! is_lxc && ! is_vm; then
-        # shellcheck disable=SC2086
-        return ${EXIT_FALSE}
-    fi
-
-    # Must have API key access
-    has_pve_api_key
-}
-
-# pve_api_get <path>
-#
-# Makes a GET request to the Proxmox VE API.
-# Echoes the JSON response on success, or returns error code on failure.
-#
-# Requires:
-#   - PVE_API_TOKEN environment variable
-#   - jq command available
-#   - Reachable Proxmox node
-function pve_api_get() {
-    local -r path="${1:?pve_api_get requires an API path}"
-    local -r host="$(get_proxmox_node)"
-    local -r fq_path="${API_BASE}${path}"
-
-    if ! has_command "jq"; then
-        logc "{{BOLD}}{{BLUE}}jq{{RESET}} is required for Proxmox API calls."
-        if confirm "Install jq now?"; then
-            if ! install_jq; then
-                error "Failed to install {{BOLD}}{{BLUE}}jq{{RESET}}" "${EXIT_API}"
-            fi
-        else
-            logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"
-            # shellcheck disable=SC2086
-            return ${EXIT_CONFIG}
-        fi
-    fi
-
-    if ! has_command "curl"; then
-        logc "{{BOLD}}{{BLUE}}curl{{RESET}} is required for Proxmox API calls."
-        if confirm "Install curl now?"; then
-            if ! install_curl; then
-                error "Failed to install {{BOLD}}{{BLUE}}curl{{RESET}}" "${EXIT_API}"
-            fi
-        else
-            logc "Ok. Quitting for now, you can install {{BOLD}}{{BLUE}}jq{{RESET}} and then run this command again.\n"
-            # shellcheck disable=SC2086
-            return ${EXIT_CONFIG}
-        fi
-    fi
-
-    if is_empty "${host}"; then
-        log_error "No Proxmox host found. Set PROXMOX_HOST environment variable."
-        # shellcheck disable=SC2086
-        return ${EXIT_API}
-    fi
-
-    local result
-    result=$(curl -sk --max-time 10 \
-        -H "Authorization: PVEAPIToken=$PVE_API_TOKEN" \
-        "https://${host}:${PROXMOX_API_PORT}${fq_path}" 2>/dev/null
-    )
-
-    if [[ -z "${result}" ]] || ! echo "${result}" | jq -e '.data' &>/dev/null; then
-        log_error "Proxmox API call failed: GET https://${host}:${PROXMOX_API_PORT}${fq_path}"
-        # shellcheck disable=SC2086
-        return ${EXIT_API}
-    fi
-
-    # Return the result
-    echo "${result}"
-}
 
 
 
 
 
-# get_proxmox_node
-#
-# Attempts to find a reachable Proxmox VE node.
-# Checks PROXMOX_HOST first, then common local names.
-# Echoes the hostname on success, returns error code on failure.
-#
-# Candidates checked in order:
-# 1. PROXMOX_HOST (or pve.home if not set)
-# 2. PROXMOX_FALLBACK (or pve.local if not set)
-# 3. pve
-function get_proxmox_node() {
-    local -r primary="${PROXMOX_HOST:-pve.home}"
-    local -r fallback="${PROXMOX_FALLBACK:-pve.local}"
-    local candidates=(
-        "${primary}"
-        "${fallback}"
-        "pve"
-    )
 
-    for candidate in "${candidates[@]}"; do
-        [[ -z "$candidate" ]] && continue
-        log_verbose "Trying PVE node: $candidate"
-        if curl -sk --max-time 2 --connect-timeout 2 "https://$candidate:${PROXMOX_API_PORT}/" &>/dev/null; then
-            log_verbose "Found PVE node: $candidate"
-            echo "$candidate"
-            # shellcheck disable=SC2086
-            return ${EXIT_OK}
-        fi
-    done
-
-    error "No reachable Proxmox node found" "${EXIT_API}"
-}
 
 
 
@@ -351,3 +236,32 @@ function whereami() {
     # shellcheck disable=SC2086
     exit ${EXIT_OK}
 }
+
+# CLI invocation handler - allows running script directly with a function name
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Set up paths for sourcing dependencies
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ROOT="${UTILS%"/utils"}"
+
+    cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    if [[ -z "$cmd" || "$cmd" == "--help" || "$cmd" == "-h" ]]; then
+        script_name="$(basename "${BASH_SOURCE[0]}")"
+        echo "Usage: $script_name <function> [args...]"
+        echo ""
+        echo "Available functions:"
+        # List all functions that don't start with _
+        declare -F | awk '{print $3}' | grep -v '^_' | sort | sed 's/^/  /'
+        exit 0
+    fi
+
+    # Check if function exists and call it
+    if declare -f "$cmd" > /dev/null 2>&1; then
+        "$cmd" "$@"
+    else
+        echo "Error: Unknown function '$cmd'" >&2
+        echo "Run '$(basename "${BASH_SOURCE[0]}") --help' for available functions" >&2
+        exit 1
+    fi
+fi

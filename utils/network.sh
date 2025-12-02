@@ -231,3 +231,157 @@ function is_ip6_address() {
 
     return 0
 }
+
+# highlight_ip_addresses [format]
+#
+# Reads text from stdin and highlights any IPv4 or IPv6 addresses
+# with the specified format tag. The format defaults to {{BOLD}}.
+#
+# Usage:
+#   echo "Server at 192.168.1.1" | highlight_ip_addresses
+#   echo "Gateway: 10.0.0.1" | highlight_ip_addresses "{{RED}}"
+#
+# The output contains format tags (e.g., {{BOLD}}192.168.1.1{{RESET}})
+# which can be processed by colorize() to produce ANSI escape codes.
+function highlight_ip_addresses() {
+    local format="${1:-}"
+    local line
+
+    # Use default if empty string passed or not provided
+    [[ -z "$format" ]] && format='{{BOLD}}'
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Handle empty lines
+        if [[ -z "$line" ]]; then
+            printf '\n'
+            continue
+        fi
+
+        local result=""
+        local i=0
+        local len=${#line}
+
+        while [[ $i -lt $len ]]; do
+            local char="${line:$i:1}"
+            local found=0
+
+            # Check if this could be the start of an IP address
+            # IPv4 starts with digit, IPv6 starts with hex digit or :
+            if [[ "$char" =~ [0-9a-fA-F:] ]]; then
+                # Try to extract a potential IP address token
+                # Get everything up to the next whitespace or certain punctuation
+                local token=""
+                local j=$i
+
+                # Build token: include hex digits, dots, colons, and % + alphanumeric for zone IDs
+                local in_zone_id=0
+                while [[ $j -lt $len ]]; do
+                    local c="${line:$j:1}"
+                    if [[ "$c" == "%" ]]; then
+                        # Start of zone identifier
+                        in_zone_id=1
+                        token+="$c"
+                        ((j++))
+                    elif [[ $in_zone_id -eq 1 && "$c" =~ [a-zA-Z0-9] ]]; then
+                        # Inside zone identifier - allow alphanumeric
+                        token+="$c"
+                        ((j++))
+                    elif [[ $in_zone_id -eq 0 && "$c" =~ [0-9a-fA-F.:] ]]; then
+                        # Normal IP characters
+                        token+="$c"
+                        ((j++))
+                    else
+                        break
+                    fi
+                done
+
+                # Try IPv6 first (if contains colon)
+                if [[ "$token" == *":"* ]]; then
+                    if is_ip6_address "$token"; then
+                        result+="${format}${token}{{RESET}}"
+                        i=$j
+                        found=1
+                    fi
+                fi
+
+                # Try IPv4 (if contains dots and no colons, or IPv6 didn't match)
+                if [[ $found -eq 0 && "$token" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    if is_ip4_address "$token"; then
+                        result+="${format}${token}{{RESET}}"
+                        i=$j
+                        found=1
+                    fi
+                fi
+            fi
+
+            # No IP found at this position, just copy the character
+            if [[ $found -eq 0 ]]; then
+                result+="$char"
+                ((i++))
+            fi
+        done
+
+        printf '%s\n' "$result"
+    done
+}
+
+
+# network_interfaces
+#
+# Reports all the network interfaces found on the host computer.
+# Supports macOS, Linux, and Windows (via WSL/Git Bash).
+# Output includes highlighted IP addresses using bold formatting.
+function network_interfaces() {
+    # shellcheck source="../utils/os.sh"
+    source "${UTILS}/os.sh"
+    # shellcheck source="../utils/color.sh"
+    source "${UTILS}/color.sh"
+    setup_colors
+
+    local output=""
+
+    if [[ "$(os)" == "macos" ]]; then
+        output=$(ifconfig | grep "inet ")
+    elif [[ "$(os)" == "linux" ]]; then
+        output=$(ip addr show | grep "inet ")
+    elif [[ "$(os)" == "windows" ]]; then
+        # Use PowerShell to get IPv4 addresses in a format similar to Unix
+        output=$(powershell.exe -Command "Get-NetIPAddress -AddressFamily IPv4 | ForEach-Object { Write-Output (\"    inet \" + \$_.IPAddress + \" interface \" + \$_.InterfaceAlias) }" 2>/dev/null | tr -d '\r')
+    fi
+
+    # Highlight IP addresses and colorize if we have output
+    if [[ -n "$output" ]]; then
+        local highlighted
+        highlighted=$(echo "$output" | highlight_ip_addresses)
+        printf '%s\n' "$(colorize "$highlighted")"
+    fi
+}
+
+# CLI invocation handler - allows running script directly with a function name
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Set up paths for sourcing dependencies
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ROOT="${UTILS%"/utils"}"
+
+    cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    if [[ -z "$cmd" || "$cmd" == "--help" || "$cmd" == "-h" ]]; then
+        script_name="$(basename "${BASH_SOURCE[0]}")"
+        echo "Usage: $script_name <function> [args...]"
+        echo ""
+        echo "Available functions:"
+        # List all functions that don't start with _
+        declare -F | awk '{print $3}' | grep -v '^_' | sort | sed 's/^/  /'
+        exit 0
+    fi
+
+    # Check if function exists and call it
+    if declare -f "$cmd" > /dev/null 2>&1; then
+        "$cmd" "$@"
+    else
+        echo "Error: Unknown function '$cmd'" >&2
+        echo "Run '$(basename "${BASH_SOURCE[0]}") --help' for available functions" >&2
+        exit 1
+    fi
+fi

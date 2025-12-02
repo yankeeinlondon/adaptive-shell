@@ -196,45 +196,6 @@ function set_env() {
     fi
 }
 
-
-
-# get_arch()
-#
-# Gets the system architecture in standardized format
-function get_arch() {
-    case $(os) in
-        linux|macos)
-            local arch
-            arch=$(uname -m)
-            # Normalize architecture names
-            case $arch in
-                x86_64)    echo "x86_64" ;;
-                aarch64)   echo "arm64" ;;
-                armv7l)    echo "armv7" ;;
-                armv6l)    echo "armv6" ;;
-                *)         echo "$arch" ;;
-            esac
-            ;;
-        windows)
-            # Check environment variables first
-            if [ -n "$PROCESSOR_ARCHITECTURE" ]; then
-                case "$PROCESSOR_ARCHITECTURE" in
-                    AMD64) echo "x86_64" ;;
-                    ARM64) echo "arm64" ;;
-                    *)     echo "$PROCESSOR_ARCHITECTURE" ;;
-                esac
-            else
-                # Fallback to PowerShell command
-                powershell.exe -Command "[System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLower()"
-            fi
-            ;;
-        *)
-            echo "unknown"
-            return 1
-            ;;
-    esac
-}
-
 function get_filename_starting_with() {
     local -r file_pattern="${1:?No file pattern provided to get_filename_starting_with()!}"
     local -r dir="${2-${PWD}}"

@@ -16,8 +16,14 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="./logging.sh"
+# shellcheck source="./logging.sh" extended-analysis=false
 source "${UTILS}/logging.sh"
+# shellcheck source="./os.sh" extended-analysis=false
+source "${UTILS}/os.sh"
+# shellcheck source="./text.sh" extended-analysis=false
+source "${UTILS}/text.sh"
+# shellcheck source="./empty.sh" extended-analysis=false
+source "${UTILS}/empty.sh"
 
 # get_shell
 #
@@ -52,6 +58,38 @@ function is_pve_host() {
         return 0
     else
         debug "is_pve_host" "is NOT a pve node"
+        return 1
+    fi
+}
+
+# is_pve_container
+#
+# Test whether current host is an LXC container or VM
+# running on Proxmox VE with API access available.
+# Returns 0 if true, 1 if false.
+function is_pve_container() {
+    # Must be running in a container or VM
+    if ! is_lxc && ! is_vm; then
+        # shellcheck disable=SC2086
+        return ${EXIT_FALSE}
+    fi
+
+    # Must have API key access
+    has_pve_api_key
+}
+
+# is_pve_aware
+#
+# returns true when a non PVE host or container has set the
+# PVE_API_TOKEN
+function is_pve_aware() {
+    if ! is_pve_container && ! is_pve_host; then
+        if is_empty "${PVE_API_TOKEN:-}"; then
+            return 1
+        else
+            return 0
+        fi
+    else
         return 1
     fi
 }
@@ -192,6 +230,45 @@ function bash_version() {
     echo "$version"
 }
 
+
+# get_arch()
+#
+# Gets the system architecture in standardized format
+function get_arch() {
+    case $(os) in
+        linux|macos)
+            local arch
+            arch=$(uname -m)
+            # Normalize architecture names
+            case $arch in
+                x86_64)    echo "x86_64" ;;
+                aarch64)   echo "arm64" ;;
+                armv7l)    echo "armv7" ;;
+                armv6l)    echo "armv6" ;;
+                *)         echo "$arch" ;;
+            esac
+            ;;
+        windows)
+            # Check environment variables first
+            if [ -n "$PROCESSOR_ARCHITECTURE" ]; then
+                case "$PROCESSOR_ARCHITECTURE" in
+                    AMD64) echo "x86_64" ;;
+                    ARM64) echo "arm64" ;;
+                    *)     echo "$PROCESSOR_ARCHITECTURE" ;;
+                esac
+            else
+                # Fallback to PowerShell command
+                powershell.exe -Command "[System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLower()"
+            fi
+            ;;
+        *)
+            echo "unknown"
+            return 1
+            ;;
+    esac
+}
+
+
 # has_command <cmd>
 #
 # Checks whether a particular program passed in via $1 is installed
@@ -243,7 +320,6 @@ function has_function() {
         [[ "$(type -t "${name}" 2>/dev/null)" == "function" ]]
     fi
 }
-
 
 function is_keyword() {
     local _var=${1:?no parameter passed into is_array}
@@ -577,17 +653,31 @@ function in_package_json() {
     fi
 }
 
+# CLI invocation handler - allows running script directly with a function name
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    logc ""
-    logc "{{BOLD}}    detection.sh"
-    logc "--------------------"
-    logc ""
-    logc "{{ITALIC}}This script file is part of the {{BLUE}}adaptive{{DEF_COLOR}} shell"
-    logc "{{ITALIC}}setup and provides both {{BOLD}}OS{{NORMAL}} and {{BOLD}}Project{{NORMAL}} level"
-    logc "{{ITALIC}}initialization based on what it detects for OS"
-    logc "{{ITALIC}}and/or the Project/Repo."
-    logc ""
-    logc "This file should be {{ITALIC}}sourced{{NO_ITALIC}} by another script"
-    logc "file so that the functions this file exposes can"
-    logc "be used."
+    # Set up paths for sourcing dependencies
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ROOT="${UTILS%"/utils"}"
+
+    cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    if [[ -z "$cmd" || "$cmd" == "--help" || "$cmd" == "-h" ]]; then
+        script_name="$(basename "${BASH_SOURCE[0]}")"
+        echo "Usage: $script_name <function> [args...]"
+        echo ""
+        echo "Available functions:"
+        # List all functions that don't start with _
+        declare -F | awk '{print $3}' | grep -v '^_' | sort | sed 's/^/  /'
+        exit 0
+    fi
+
+    # Check if function exists and call it
+    if declare -f "$cmd" > /dev/null 2>&1; then
+        "$cmd" "$@"
+    else
+        echo "Error: Unknown function '$cmd'" >&2
+        echo "Run '$(basename "${BASH_SOURCE[0]}") --help' for available functions" >&2
+        exit 1
+    fi
 fi

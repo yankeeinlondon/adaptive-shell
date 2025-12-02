@@ -16,8 +16,7 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="../color.sh"
-source "${UTILS}/color.sh"
+
 
 # log
 #
@@ -37,6 +36,9 @@ function log() {
 #   - parameters through `colorize()` to that
 #   the caller doesn't need to bother with the
 function logc() {
+    # shellcheck source="../color.sh"
+    source "${UTILS}/color.sh"
+
     local -r colors_missing=$(colors_not_setup)
     local content
 
@@ -56,6 +58,15 @@ function logc() {
     fi
 }
 
+# hr()
+#
+# Creates a horizontal rule across width of the console
+function hr() {
+    # shellcheck source="./detection.sh"
+    source "${UTILS}/detection.sh"
+    
+}
+
 # stdout <content>
 #
 # Logs to **stdout** and will also identify color template codes
@@ -63,6 +74,9 @@ function logc() {
 function stdout() {
     local -r colors_missing=$(colors_not_setup)
     local content
+
+    # shellcheck source="../color.sh"
+    source "${UTILS}/color.sh"
 
     # Check if colors are not set up and set them up if needed
     if [[ "$colors_missing" == "0" ]]; then
@@ -84,6 +98,9 @@ function panic() {
     local -r msg="${1:?no message passed to error()!}"
     local -ri code=$(( "${2:-1}" ))
     local -r fn="${3:-${FUNCNAME[1]}}" || echo "unknown"
+
+    # shellcheck source="../color.sh"
+    source "${UTILS}/color.sh"
 
     log "\n  [${RED}x${RESET}] ${BOLD}ERROR ${DIM}${RED}$code${RESET}${BOLD} →${RESET} ${msg}"
     log ""
@@ -114,10 +131,10 @@ function debug() {
             regex="(.*[^a-z]+|^)$lower_fn($|[^a-z]+.*)"
 
             if [[ "${DEBUG}" == "true" || "${DEBUG}" =~ $regex ]]; then
-                log "       ${GREEN}◦${RESET} ${BOLD}${fn}()${RESET} → ${*}"
+                logc "       {{GREEN}}◦{{RESET}} {{BOLD}}${fn}(){{RESET}} → ${*}"
             fi
         else
-            log "       ${GREEN}DEBUG: ${RESET} → ${*}"
+            logc "       {{GREEN}}DEBUG: {{RESET}} → ${*}"
         fi
     fi
 }
@@ -130,5 +147,37 @@ function error() {
     local -ri code=$(( "${2:-1}" ))
     local -r fn="${3:-${FUNCNAME[1]}}"
 
+    # shellcheck source="../color.sh"
+    source "${UTILS}/color.sh"
+
     logc "\n  [{{RED}}x{{RESET}}] {{BOLD}}ERROR {{DIM}}{{RED}}${code}{{RESET}}{{BOLD}} →{{RESET}} ${msg}" && return $code
 }
+
+# CLI invocation handler - allows running script directly with a function name
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Set up paths for sourcing dependencies
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ROOT="${UTILS%"/utils"}"
+
+    cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    if [[ -z "$cmd" || "$cmd" == "--help" || "$cmd" == "-h" ]]; then
+        script_name="$(basename "${BASH_SOURCE[0]}")"
+        echo "Usage: $script_name <function> [args...]"
+        echo ""
+        echo "Available functions:"
+        # List all functions that don't start with _
+        declare -F | awk '{print $3}' | grep -v '^_' | sort | sed 's/^/  /'
+        exit 0
+    fi
+
+    # Check if function exists and call it
+    if declare -f "$cmd" > /dev/null 2>&1; then
+        "$cmd" "$@"
+    else
+        echo "Error: Unknown function '$cmd'" >&2
+        echo "Run '$(basename "${BASH_SOURCE[0]}") --help' for available functions" >&2
+        exit 1
+    fi
+fi
