@@ -85,7 +85,7 @@ expect(api).not.toFail(); // should succeed
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { sourceScript } from './helpers';
+import { sourceScript } from "../helpers";
 
 describe('text utilities', () => {
   it('should convert to lowercase', () => {
@@ -188,7 +188,7 @@ it('should return success exit code', () => {
 ### After (with custom matchers)
 
 ```typescript
-import { sourceScript } from './helpers';
+import { sourceScript } from "../helpers";
 
 it('should convert to lowercase', () => {
   const api = sourceScript('./utils.sh')('lc')('HELLO');

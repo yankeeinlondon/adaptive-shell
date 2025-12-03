@@ -203,9 +203,13 @@ EOF
 # Proxies the `network_interfaces()` function through as a
 # command for the interactive console.
 function net() {
-    local -r file="${UTILS}/network.sh"
+    source "${UTILS}/detection.sh"
 
+    local -r file="${UTILS}/network.sh"
+    logc "Network Interfaces"
     bash "${file}" "network_interfaces"
+    logc "Network Routes"
+    bash "${file}" "get_routes"
 }
 
 function track() {

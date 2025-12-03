@@ -183,7 +183,7 @@ pnpm test tests/text.test.ts  # Run specific test file
 The repository uses a custom test framework with `sourceScript()` and Vitest custom matchers:
 
 ```typescript
-import { sourceScript } from './helpers'
+import { sourceScript } from "../helpers"
 
 // Test a function with parameters
 const api = sourceScript('./utils/text.sh')('lc')('HELLO')
@@ -224,7 +224,7 @@ It cannot handle:
 
 For tests requiring these capabilities, use the deprecated helpers:
 ```typescript
-import { bashExitCode, sourcedBash } from './helpers'
+import { bashExitCode, sourcedBash } from "../helpers"
 
 const exitCode = bashExitCode('source ./utils.sh && arr=("a" "b") && func arr')
 ```

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { AssertEqual, Expect } from 'inferred-types';
-import {  sourceScript, SourcedTestUtil } from './helpers'
-import type { TestApi, TestOptions, TestUtil } from './helpers';
+import {  sourceScript, SourcedTestUtil } from "../helpers"
+import type { TestApi, TestOptions, TestUtil } from "../helpers";
 
 const mod = sourceScript("test.sh");
 

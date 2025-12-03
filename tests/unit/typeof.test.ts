@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { sourcedBash, bashExitCode } from './helpers'
-import { sourceScript } from './helpers'
+import { sourcedBash, bashExitCode } from "../helpers"
+import { sourceScript } from "../helpers"
 
 /**
  * NOTE: Many tests in this file cannot be converted to use sourceScript() because they require:

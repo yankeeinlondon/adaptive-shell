@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { sourcedBash, sourcedBashNoTrimStart, bashExitCode, sourceScript } from './helpers'
-import { urlLink } from './helpers/link';
+import { sourcedBash, sourcedBashNoTrimStart, bashExitCode, sourceScript } from "../helpers"
+import { urlLink } from "../helpers/link";
 
 const mod = sourceScript("test.sh");
 

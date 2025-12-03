@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sourceScript } from './helpers'
+import { sourceScript } from "../helpers"
 
 describe('color utilities', () => {
   describe('setup_colors()', () => {

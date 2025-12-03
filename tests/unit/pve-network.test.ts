@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sourceScript } from './helpers'
+import { sourceScript } from "../helpers"
 
 describe('Proxmox VE utilities - Network Validation', () => {
     describe('is_dns_name()', () => {

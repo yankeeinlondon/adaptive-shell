@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync } from 'fs'
 import { join } from 'path'
 import { execSync } from 'child_process'
-import { sourceScript, bashExitCode, runInShell, runInBothShells, isShellAvailable } from './helpers'
+import { sourceScript, bashExitCode, runInShell, runInBothShells, isShellAvailable } from "../helpers"
 
 /** Project root for absolute path references */
 const PROJECT_ROOT = process.cwd()

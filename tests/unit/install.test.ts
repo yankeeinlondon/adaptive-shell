@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sourceScript, bashExitCode } from './helpers'
+import { sourceScript, bashExitCode } from "../helpers"
 import { execSync } from 'child_process'
 
 /**

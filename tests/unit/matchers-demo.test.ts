@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { sourceScript } from './helpers';
+import { sourceScript } from "../helpers";
 
 describe('Custom Bash Matchers Demo', () => {
   describe('Success/Failure Assertions', () => {

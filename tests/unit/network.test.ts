@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sourcedBash } from './helpers'
+import { sourcedBash } from "../helpers"
 
 describe('Network utilities - highlight_ip_addresses()', () => {
     describe('IPv4 highlighting', () => {
