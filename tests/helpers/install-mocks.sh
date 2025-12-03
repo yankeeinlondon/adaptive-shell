@@ -451,7 +451,21 @@ yay() {
     local subcmd="$1"
     shift
     _mock_record "yay:$subcmd:$*"
-    # ... (existing)
+
+    if [[ "$subcmd" == "-Si" ]]; then
+        local pkg="$1"
+        if _mock_has_package "yay" "$pkg"; then
+            return 0
+        fi
+        return 1
+    elif [[ "$subcmd" == "-S" ]]; then
+        # Install command
+        local pkg="${*##* }" # Get last argument (package name)
+        if _mock_install_succeeds "yay" "$pkg"; then
+            return 0
+        fi
+        return 1
+    fi
     return 0
 }
 
@@ -460,7 +474,21 @@ paru() {
     local subcmd="$1"
     shift
     _mock_record "paru:$subcmd:$*"
-    # ... (existing)
+
+    if [[ "$subcmd" == "-Si" ]]; then
+        local pkg="$1"
+        if _mock_has_package "paru" "$pkg"; then
+            return 0
+        fi
+        return 1
+    elif [[ "$subcmd" == "-S" ]]; then
+        # Install command
+        local pkg="${*##* }" # Get last argument (package name)
+        if _mock_install_succeeds "paru" "$pkg"; then
+            return 0
+        fi
+        return 1
+    fi
     return 0
 }
 
@@ -582,6 +610,36 @@ bun() {
         return 0
     fi
     return 0
+}
+
+# Mock snap
+snap() {
+    local subcmd="$1"
+    shift
+    _mock_record "snap:$subcmd:$*"
+
+    case "$subcmd" in
+        find)
+            if _mock_has_package "snap" "$1"; then
+                echo "$1 1.0 developer (summary)"
+                return 0
+            fi
+            return 0
+            ;;
+        install)
+            if _mock_install_succeeds "snap" "$1"; then
+                return 0
+            fi
+            return 1
+            ;;
+        list)
+            _mock_list_installed "snap" _fmt_simple
+            return 0
+            ;;
+        *)
+            return 0
+            ;;
+    esac
 }
 
 # Disable SUDO during tests

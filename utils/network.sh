@@ -232,6 +232,17 @@ function is_ip6_address() {
     return 0
 }
 
+
+# get_wan_ip
+#
+# Get's the host's WAN IP address.
+function get_wan_ip {
+    local -r wan=$(curl ifconfig.me)
+
+    echo "${wan}"
+}
+
+
 # highlight_ip_addresses [format]
 #
 # Reads text from stdin and highlights any IPv4 or IPv6 addresses
@@ -332,9 +343,7 @@ function highlight_ip_addresses() {
 # Supports macOS, Linux, and Windows (via WSL/Git Bash).
 # Output includes highlighted IP addresses using bold formatting.
 function network_interfaces() {
-    # shellcheck source="../utils/os.sh"
     source "${UTILS}/os.sh"
-    # shellcheck source="../utils/color.sh"
     source "${UTILS}/color.sh"
     setup_colors
 
@@ -361,7 +370,6 @@ function network_interfaces() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Set up paths for sourcing dependencies
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    ROOT="${UTILS%"/utils"}"
 
     cmd="${1:-}"
     shift 2>/dev/null || true
@@ -385,3 +393,44 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         exit 1
     fi
 fi
+
+function get_ip4_routes() {
+    case $(os) in
+        linux)
+            ip route show
+            ;;
+        macos)
+            netstat -rn -f inet
+            ;;
+        windows)
+            route print -4
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+function get_ip6_routes() {
+    case $(os) in
+        linux)
+            ip -6 route show
+            ;;
+        macos)
+            netstat -rn -f inet6
+            ;;
+        windows)
+            route print -6
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+function get_routes() {
+    logc "{{BOLD}}IPv4 Routes"
+    get_ip4_routes
+    logc "{{BOLD}}IPv6 Routes"
+    get_ip6_routes
+}

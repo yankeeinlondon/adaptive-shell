@@ -77,7 +77,32 @@ function _try_nix_install() {
     return 1
 }
 
+# _try_snap_install <pkg1> [<pkg2>] ...
+#
+# Attempts to install packages using snap. Returns 0 on success, 1 on failure.
+# Note: snap provides universal Linux packages with sandboxing and auto-updates.
+function _try_snap_install() {
+    local -r pkg_names=("$@")
 
+    if ! has_command "snap"; then
+        return 1
+    fi
+
+    for pkg in "${pkg_names[@]}"; do
+        # Check if package exists in snap store by trying to find it
+        # Note: snap find outputs package info if found, empty if not
+        if snap find "${pkg}" 2>/dev/null | head -1 | grep -q "^${pkg} "; then
+            logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}snap{{RESET}}"
+            ${SUDO} snap install "${pkg}" && return 0
+            logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+            return 1
+        else
+            logc "- {{BOLD}}snap{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+        fi
+    done
+
+    return 1
+}
 
 # install_on_macos [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
 #
@@ -179,14 +204,15 @@ function install_on_macos() {
     return 1
 }
 
-# install_on_debian [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
+# install_on_debian [--prefer-nix] [--prefer-cargo] [--prefer-snap] <pkg> [<pkg2>] [<pkg3>] ...
 #
 # Attempts to install a named package on Debian/Ubuntu. Accepts multiple package name
 # variants which are tried in order with each package manager until one succeeds.
-# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first, --prefer-snap to try snap first.
 function install_on_debian() {
     local prefer_nix=false
     local prefer_cargo=false
+    local prefer_snap=false
     local pkg_names=()
 
     # Parse flags from arguments
@@ -198,6 +224,10 @@ function install_on_debian() {
                 ;;
             --prefer-cargo)
                 prefer_cargo=true
+                shift
+                ;;
+            --prefer-snap)
+                prefer_snap=true
                 shift
                 ;;
             *)
@@ -220,6 +250,11 @@ function install_on_debian() {
     # Try nix first if preferred
     if [[ "$prefer_nix" == true ]]; then
         _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try snap first if preferred
+    if [[ "$prefer_snap" == true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
     fi
 
     # Try nala (preferred over apt) with each package name variant
@@ -250,6 +285,11 @@ function install_on_debian() {
         done
     fi
 
+    # Try snap (if not already tried as preferred)
+    if [[ "$prefer_snap" != true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
+    fi
+
     # Try nix-env (if not already tried as preferred)
     if [[ "$prefer_nix" != true ]]; then
         _try_nix_install "${pkg_names[@]}" && return 0
@@ -265,14 +305,15 @@ function install_on_debian() {
     return 1
 }
 
-# install_on_fedora [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
+# install_on_fedora [--prefer-nix] [--prefer-cargo] [--prefer-snap] <pkg> [<pkg2>] [<pkg3>] ...
 #
 # Attempts to install a named package on Fedora/RHEL/CentOS. Accepts multiple package name
 # variants which are tried in order with each package manager until one succeeds.
-# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first, --prefer-snap to try snap first.
 function install_on_fedora() {
     local prefer_nix=false
     local prefer_cargo=false
+    local prefer_snap=false
     local pkg_names=()
 
     # Parse flags from arguments
@@ -284,6 +325,10 @@ function install_on_fedora() {
                 ;;
             --prefer-cargo)
                 prefer_cargo=true
+                shift
+                ;;
+            --prefer-snap)
+                prefer_snap=true
                 shift
                 ;;
             *)
@@ -306,6 +351,11 @@ function install_on_fedora() {
     # Try nix first if preferred
     if [[ "$prefer_nix" == true ]]; then
         _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try snap first if preferred
+    if [[ "$prefer_snap" == true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
     fi
 
     # Try dnf with each package name variant
@@ -334,6 +384,11 @@ function install_on_fedora() {
                 logc "- {{BOLD}}yum{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
             fi
         done
+    fi
+
+    # Try snap (if not already tried as preferred)
+    if [[ "$prefer_snap" != true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
     fi
 
     # Try nix-env (if not already tried as preferred)
@@ -604,14 +659,15 @@ function show_installed() {
 }
 
 
-# install_on_alpine [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
+# install_on_alpine [--prefer-nix] [--prefer-cargo] [--prefer-snap] <pkg> [<pkg2>] [<pkg3>] ...
 #
 # Attempts to install a named package on Alpine Linux. Accepts multiple package name
 # variants which are tried in order with each package manager until one succeeds.
-# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first, --prefer-snap to try snap first.
 function install_on_alpine() {
     local prefer_nix=false
     local prefer_cargo=false
+    local prefer_snap=false
     local pkg_names=()
 
     # Parse flags from arguments
@@ -623,6 +679,10 @@ function install_on_alpine() {
                 ;;
             --prefer-cargo)
                 prefer_cargo=true
+                shift
+                ;;
+            --prefer-snap)
+                prefer_snap=true
                 shift
                 ;;
             *)
@@ -647,6 +707,11 @@ function install_on_alpine() {
         _try_nix_install "${pkg_names[@]}" && return 0
     fi
 
+    # Try snap first if preferred
+    if [[ "$prefer_snap" == true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
+    fi
+
     # Try apk with each package name variant
     if has_command "apk"; then
         for pkg in "${pkg_names[@]}"; do
@@ -659,6 +724,11 @@ function install_on_alpine() {
                 logc "- {{BOLD}}apk{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
             fi
         done
+    fi
+
+    # Try snap (if not already tried as preferred)
+    if [[ "$prefer_snap" != true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
     fi
 
     # Try nix-env (if not already tried as preferred)
@@ -676,14 +746,15 @@ function install_on_alpine() {
     return 1
 }
 
-# install_on_arch [--prefer-nix] [--prefer-cargo] <pkg> [<pkg2>] [<pkg3>] ...
+# install_on_arch [--prefer-nix] [--prefer-cargo] [--prefer-snap] <pkg> [<pkg2>] [<pkg3>] ...
 #
 # Attempts to install a named package on Arch Linux. Accepts multiple package name
 # variants which are tried in order with each package manager until one succeeds.
-# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first.
+# Use --prefer-nix to try nix-env first, --prefer-cargo to try cargo first, --prefer-snap to try snap first.
 function install_on_arch() {
     local prefer_nix=false
     local prefer_cargo=false
+    local prefer_snap=false
     local pkg_names=()
 
     # Parse flags from arguments
@@ -695,6 +766,10 @@ function install_on_arch() {
                 ;;
             --prefer-cargo)
                 prefer_cargo=true
+                shift
+                ;;
+            --prefer-snap)
+                prefer_snap=true
                 shift
                 ;;
             *)
@@ -717,6 +792,11 @@ function install_on_arch() {
     # Try nix first if preferred
     if [[ "$prefer_nix" == true ]]; then
         _try_nix_install "${pkg_names[@]}" && return 0
+    fi
+
+    # Try snap first if preferred
+    if [[ "$prefer_snap" == true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
     fi
 
     # Try pacman (official repos) with each package name variant
@@ -761,6 +841,11 @@ function install_on_arch() {
         done
     fi
 
+    # Try snap (if not already tried as preferred)
+    if [[ "$prefer_snap" != true ]]; then
+        _try_snap_install "${pkg_names[@]}" && return 0
+    fi
+
     # Try nix-env (if not already tried as preferred)
     if [[ "$prefer_nix" != true ]]; then
         _try_nix_install "${pkg_names[@]}" && return 0
@@ -794,6 +879,29 @@ function install_openssh() {
 
     else
         logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}jq{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
+        return 1
+    fi
+}
+
+# a rust variant on **curl** with much more compact ways to post data
+function install_xh() {
+    if has_command "xh"; then
+        logc "- {{BOLD}}{{BLUE}}xh{{RESET}} is already installed"
+        return 0
+    fi
+    if is_mac; then
+        install_on_macos "xh"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "xh"
+    elif is_alpine; then
+        install_on_alpine "xh"
+    elif is_fedora; then
+        install_on_fedora "xh"
+    elif is_arch; then
+        install_on_arch "xh"
+
+    else
+        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}xh{{RESET}}"
         return 1
     fi
 }
@@ -1179,6 +1287,94 @@ function install_jq() {
 
     else
         logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}jq{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
+        return 1
+    fi
+}
+
+# a TUI for jq
+# available on brew, port, yay and snap
+function install_jqp() {
+    if has_command "jqp"; then
+        logc "- {{BOLD}}{{BLUE}}jqp{{RESET}} is already installed"
+        return 0
+    fi
+    if is_mac; then
+        install_on_macos "jqp"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "jqp"
+    elif is_alpine; then
+        install_on_alpine "jqp"
+    elif is_fedora; then
+        install_on_fedora "jqp"
+    elif is_arch; then
+        install_on_arch "jqp-bin" "jqp"
+
+    else
+        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}jqp{{RESET}}."
+        return 1
+    fi
+}
+
+# parser for JSON, YAML, and TOML
+function install_yq() {
+    if has_command "yq"; then
+        logc "- {{BOLD}}{{BLUE}}yq{{RESET}} is already installed"
+        return 0
+    fi
+    if is_mac; then
+        install_on_macos "yq"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "yq"
+    elif is_alpine; then
+        install_on_alpine "yq"
+    elif is_fedora; then
+        install_on_fedora "yq"
+    elif is_arch; then
+        install_on_arch "yq"
+
+    else
+        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}yq{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
+        return 1
+    fi
+}
+
+
+
+# a golang implementation of jq (with better error messages)
+# can also output as YAML
+function install_gojq() {
+    if has_command "gojq"; then
+        logc "- {{BOLD}}{{BLUE}}gojq{{RESET}} is already installed"
+        return 0
+    fi
+    if is_mac; then
+        install_on_macos "gojq"
+    elif is_debian || is_ubuntu; then
+        install_on_debian "gojq"
+    elif is_alpine; then
+        install_on_alpine "gojq"
+    elif is_fedora; then
+        install_on_fedora "gojq"
+    elif is_arch; then
+        install_on_arch "gojq"
+
+    else
+        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}gojq{{RESET}}; please do this manually if you want it installed on your platform."
+        return 1
+    fi
+}
+
+# https://github.com/01mf02/jaq - a RUST implementation of `jq` with lower latency
+function install_jaq() {
+    if has_command "jq"; then
+        logc "- {{BOLD}}{{BLUE}}jq{{RESET}} is already installed"
+        return 0
+    fi
+    if is_mac; then
+        install_on_macos "jaq"
+        return 0
+    else
+        logc "The {{BOLD}}{{BLUE}}jaq{{RESET}} program is available on brew for macOS users but is available on any platform which has Rust installed by compiling it locally."
         return 1
     fi
 }

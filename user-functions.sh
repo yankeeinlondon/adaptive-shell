@@ -92,12 +92,27 @@ function installed() {
 
 
 function vitesse() {
-  if [ -z "$1" ]; then
-    log "Syntax: ${BOLD}vitesse${NO_BOLD} ${ITALIC}\${1}${NO_ITALIC}, ${DIM}where ${NO_DIM}${ITALIC}\${1}${NO_ITALIC} ${DIM}indicates the directory to install to  ${NO_DIM}\n"
-    return
-  fi
+    if [ -z "$1" ]; then
+        log "Syntax: ${BOLD}vitesse${NO_BOLD} ${ITALIC}\${1}${NO_ITALIC}, ${DIM}where ${NO_DIM}${ITALIC}\${1}${NO_ITALIC} ${DIM}indicates the directory to install to  ${NO_DIM}\n"
+        return
+    fi
 
-  npx degit antfu/vitesse "$1" --force
+    if ! has_command "node"; then
+        if confirm "The host system does not have NodeJS installed; install now?"; then
+            install_node
+        else
+            logc "We need node -- ((ITALIC}}and {{BOLD}}npx{{RESET}} -- to pull down the vitesse starter template. Exiting."
+            return 1
+        fi
+    fi
+
+    if ! has_command "pnpm"; then
+        if confirm "The Vitesse starter template expect {{BOLD}}{{BLUE}}pnpm{{RESET}} to be used as the package manager but this isn't install on this host doesn't have it installed. Install now?"; then
+            install_pnpm
+        fi
+    fi
+
+    npx degit antfu/vitesse "$1" --force
 }
 
 

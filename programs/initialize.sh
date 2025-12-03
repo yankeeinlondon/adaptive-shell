@@ -246,6 +246,7 @@ function main() {
             install_wget
             install_neovim
             install_jq
+            install_jqp
             install_eza
             install_dust
             install_ripgrep

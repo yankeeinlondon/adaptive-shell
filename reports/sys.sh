@@ -4,15 +4,18 @@
 [[ -n "${__SYS_SH_LOADED:-}" ]] && return
 __SYS_SH_LOADED=1
 
-if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
-    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ "${UTILS}" == *"/utils" ]];then
-        ROOT="${UTILS%"/utils"}"
+if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
+    REPORTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${REPORTS}" == *"/utils" ]];then
+        ROOT="${REPORTS%"/utils"}"
+        UTILS="${ROOT}/utils"
     else
-        ROOT="$UTILS"
+        ROOT="${REPORTS}/.."
+        UTILS="${ROOT}/utils"
     fi
 else
     ROOT="${ADAPTIVE_SHELL}"
+    REPORTS="${ROOT}/reports"
     UTILS="${ROOT}/utils"
 fi
 
@@ -131,7 +134,7 @@ function report_sys() {
         logc "{{BOLD}}Services:{{RESET}}  ${SYSD[*]}"
     fi
 
-    logc "{{BOLD}}Network:{{RESET}}"
+    logc "{{BOLD}}Network Interfaces:{{RESET}}"
     network_interfaces
 
     STORAGE="$(get_storage)"
@@ -146,14 +149,15 @@ function report_sys() {
 
     logc "{{BOLD}}Storage:{{RESET}}"
     logc "$(indent "    " "${STORAGE}")"
-
+    logc ""
 }
 
 # CLI invocation handler - allows running script directly with a function name
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Set up paths for sourcing dependencies
-    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    ROOT="${UTILS%"/utils"}"
+    REPORTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    ROOT="${REPORTS}/.."
+    UTILS="${ROOT}/utils"
 
     cmd="${1:-}"
     shift 2>/dev/null || true

@@ -31,6 +31,15 @@ function lc() {
     echo "${str}" | tr '[:upper:]' '[:lower:]'
 }
 
+# uc <string>
+#
+# converts the passed in <string> to uppercase
+function uc() {
+    local -r str="${*}"
+    debug "uc(${str})" "$(echo "${str}" | tr '[:lower:]' '[:upper:]')"
+    echo "${str}" | tr '[:lower:]' '[:upper:]'
+}
+
 # contains <find> <content>
 #
 # given the "content" string, all other parameters passed in
