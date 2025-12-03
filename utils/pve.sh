@@ -25,6 +25,7 @@ source "${UTILS}/detection.sh"
 source "${UTILS}/filesystem.sh"
 source "${UTILS}/network.sh"
 source "${UTILS}/logging.sh"
+source "${UTILS}/proxmox-api.sh"
 
 # Exit codes
 EXIT_OK=0
@@ -38,6 +39,17 @@ EXIT_NOTFOUND=3
 # Proxmox API Port
 PROXMOX_API_PORT="${PROXMOX_API_PORT:-8006}"
 API_BASE="/api2/json/"
+
+# pve_api_get <path> [filter] [host]
+#
+# Wrapper for pve_endpoint for backward compatibility.
+function pve_api_get() {
+    local -r path="${1:?pve_api_get requires an API path}"
+    local -r filter="${2:-none}"
+    local -r host="${3:-}"
+
+    pve_endpoint "${path}" "${filter}" "${host}"
+}
 
 # has_pve_api_key
 #
