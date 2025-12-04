@@ -2,6 +2,7 @@ import { ensureLeading, isString, isUndefined, narrow, stripLeading } from "infe
 import type { EnsureLeading } from "inferred-types/types";
 import { resolve } from "pathe";
 import { exit } from "node:process";
+import { existsSync } from "node:fs";
 
 export const CONSOLE_LINK_PREAMBLE = narrow(`\x1B]8;;`);
 export const CONSOLE_LINK_DELIMITER = narrow(`\x1B\\`);
@@ -74,7 +75,7 @@ export function fileLink<
     }
     else {
         console.log(`Call to fileLink(text, path) is invalid because the FULL PATH (which is required for a valid OSC8 terminal link) does not point to a valid path!`)
-        exit
+        exit(1)
     }
 }
 

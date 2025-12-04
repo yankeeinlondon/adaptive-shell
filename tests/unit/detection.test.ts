@@ -39,16 +39,16 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
 describe('detection utilities', () => {
   const testDir = join(process.cwd(), 'tests', '.tmp-detection-test')
 
-  beforeEach(() => {
-    // Clean up and create fresh test directory
+  beforeAll(() => {
+    // Clean up from previous runs and create test directory
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true })
     }
     mkdirSync(testDir, { recursive: true })
   })
 
-  afterEach(() => {
-    // Clean up test directory
+  afterAll(() => {
+    // Clean up test directory once at the end
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true })
     }
@@ -565,6 +565,20 @@ describe('detection utilities', () => {
   describe('is_git_repo()', () => {
     // Use /tmp for non-git tests to ensure we're outside any git repo
     const tmpNonGitDir = `/tmp/detection-test-${Date.now()}`
+    // Lazy init: create git repo once, reuse for multiple tests
+    let cachedGitDir: string | null = null
+    let cachedGitSubdir: string | null = null
+
+    function getOrCreateGitRepo() {
+      if (!cachedGitDir) {
+        cachedGitDir = join(testDir, 'cached-git-repo')
+        const subDir = join(cachedGitDir, 'src', 'components')
+        mkdirSync(subDir, { recursive: true })
+        initGitRepo(cachedGitDir)
+        cachedGitSubdir = subDir
+      }
+      return { gitDir: cachedGitDir, subDir: cachedGitSubdir! }
+    }
 
     afterEach(() => {
       if (existsSync(tmpNonGitDir)) {
@@ -573,20 +587,13 @@ describe('detection utilities', () => {
     })
 
     it('should return 0 for initialized git directory', () => {
-      const gitDir = join(testDir, 'git-repo-test')
-      mkdirSync(gitDir, { recursive: true })
-      initGitRepo(gitDir)
-
+      const { gitDir } = getOrCreateGitRepo()
       const api = sourceScript('./utils/detection.sh')('is_git_repo')(gitDir)
       expect(api).toBeSuccessful()
     })
 
     it('should return 0 for subdirectory of git repo', () => {
-      const gitDir = join(testDir, 'git-subdir-test')
-      const subDir = join(gitDir, 'src', 'components')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(gitDir)
-
+      const { subDir } = getOrCreateGitRepo()
       const api = sourceScript('./utils/detection.sh')('is_git_repo')(subDir)
       expect(api).toBeSuccessful()
     })
@@ -608,6 +615,18 @@ describe('detection utilities', () => {
   describe('repo_root()', () => {
     // Use /tmp for non-git tests to ensure we're outside any git repo
     const tmpNonGitDir = `/tmp/repo-root-test-${Date.now()}`
+    let cachedRepoRoot: string | null = null
+    let cachedRepoSubdir: string | null = null
+
+    function getOrCreateRepoRoot() {
+      if (!cachedRepoRoot) {
+        cachedRepoRoot = join(testDir, 'cached-repo-root')
+        cachedRepoSubdir = join(cachedRepoRoot, 'src', 'utils')
+        mkdirSync(cachedRepoSubdir, { recursive: true })
+        initGitRepo(cachedRepoRoot)
+      }
+      return { gitDir: cachedRepoRoot, subDir: cachedRepoSubdir! }
+    }
 
     afterEach(() => {
       if (existsSync(tmpNonGitDir)) {
@@ -616,31 +635,21 @@ describe('detection utilities', () => {
     })
 
     it('should output the repo root path for git directory', () => {
-      const gitDir = join(testDir, 'repo-root-test')
-      mkdirSync(gitDir, { recursive: true })
-      initGitRepo(gitDir)
-
+      const { gitDir } = getOrCreateRepoRoot()
       const api = sourceScript('./utils/detection.sh')('repo_root')(gitDir)
       expect(api).toBeSuccessful()
       expect(api.result.stdout).toBe(gitDir)
     })
 
     it('should output the repo root when called from subdirectory', () => {
-      const gitDir = join(testDir, 'repo-root-subdir')
-      const subDir = join(gitDir, 'src', 'utils')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(gitDir)
-
+      const { gitDir, subDir } = getOrCreateRepoRoot()
       const api = sourceScript('./utils/detection.sh')('repo_root')(subDir)
       expect(api).toBeSuccessful()
       expect(api.result.stdout).toBe(gitDir)
     })
 
     it('should output an absolute path', () => {
-      const gitDir = join(testDir, 'repo-root-abs')
-      mkdirSync(gitDir, { recursive: true })
-      initGitRepo(gitDir)
-
+      const { gitDir } = getOrCreateRepoRoot()
       const api = sourceScript('./utils/detection.sh')('repo_root')(gitDir)
       expect(api).toBeSuccessful()
       expect(api.result.stdout).toBeTruthy()
@@ -665,6 +674,10 @@ describe('detection utilities', () => {
     const gitTestDir = join(testDir, 'git-dirty-test')
 
     beforeEach(() => {
+      // Clean up from previous test in this describe block
+      if (existsSync(gitTestDir)) {
+        rmSync(gitTestDir, { recursive: true, force: true })
+      }
       mkdirSync(gitTestDir, { recursive: true })
       initGitRepo(gitTestDir)
     })
@@ -733,54 +746,66 @@ describe('detection utilities', () => {
   })
 
   describe('is_monorepo()', () => {
-    it('should return 0 when pnpm-workspace.yaml exists', () => {
-      const monoDir = join(testDir, 'pnpm-mono')
-      mkdirSync(monoDir, { recursive: true })
-      initGitRepo(monoDir)
-      writeFileSync(join(monoDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
+    let cachedPnpmMono: string | null = null
+    let cachedLernaMono: string | null = null
+    let cachedNpmWorkspace: string | null = null
+    let cachedRegularRepo: string | null = null
 
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')(monoDir)
+    it('should return 0 when pnpm-workspace.yaml exists', () => {
+      if (!cachedPnpmMono) {
+        cachedPnpmMono = join(testDir, 'cached-pnpm-mono')
+        const subDir = join(cachedPnpmMono, 'packages', 'pkg-a')
+        mkdirSync(subDir, { recursive: true })
+        initGitRepo(cachedPnpmMono)
+        writeFileSync(join(cachedPnpmMono, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
+      }
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(cachedPnpmMono)
       expect(api).toBeSuccessful()
     })
 
     it('should return 0 when lerna.json exists', () => {
-      const lernaDir = join(testDir, 'lerna-mono')
-      mkdirSync(lernaDir, { recursive: true })
-      initGitRepo(lernaDir)
-      writeFileSync(join(lernaDir, 'lerna.json'), '{"version": "1.0.0"}')
-
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')(lernaDir)
+      if (!cachedLernaMono) {
+        cachedLernaMono = join(testDir, 'cached-lerna-mono')
+        mkdirSync(cachedLernaMono, { recursive: true })
+        initGitRepo(cachedLernaMono)
+        writeFileSync(join(cachedLernaMono, 'lerna.json'), '{"version": "1.0.0"}')
+      }
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(cachedLernaMono)
       expect(api).toBeSuccessful()
     })
 
     it('should return 0 when package.json has workspaces field', () => {
-      const npmWorkspaceDir = join(testDir, 'npm-workspace')
-      mkdirSync(npmWorkspaceDir, { recursive: true })
-      initGitRepo(npmWorkspaceDir)
-      writeFileSync(join(npmWorkspaceDir, 'package.json'), '{"name": "test", "workspaces": ["packages/*"]}')
-
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')(npmWorkspaceDir)
+      if (!cachedNpmWorkspace) {
+        cachedNpmWorkspace = join(testDir, 'cached-npm-workspace')
+        mkdirSync(cachedNpmWorkspace, { recursive: true })
+        initGitRepo(cachedNpmWorkspace)
+        writeFileSync(join(cachedNpmWorkspace, 'package.json'), '{"name": "test", "workspaces": ["packages/*"]}')
+      }
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(cachedNpmWorkspace)
       expect(api).toBeSuccessful()
     })
 
     it('should work from subdirectory of monorepo', () => {
-      const monoDir = join(testDir, 'mono-subdir-test')
-      const subDir = join(monoDir, 'packages', 'pkg-a')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(monoDir)
-      writeFileSync(join(monoDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
-
+      if (!cachedPnpmMono) {
+        cachedPnpmMono = join(testDir, 'cached-pnpm-mono')
+        const subDir = join(cachedPnpmMono, 'packages', 'pkg-a')
+        mkdirSync(subDir, { recursive: true })
+        initGitRepo(cachedPnpmMono)
+        writeFileSync(join(cachedPnpmMono, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
+      }
+      const subDir = join(cachedPnpmMono, 'packages', 'pkg-a')
       const api = sourceScript('./utils/detection.sh')('is_monorepo')(subDir)
       expect(api).toBeSuccessful()
     })
 
     it('should return 1 for regular repo without workspace config', () => {
-      const regularDir = join(testDir, 'regular-repo')
-      mkdirSync(regularDir, { recursive: true })
-      initGitRepo(regularDir)
-      writeFileSync(join(regularDir, 'package.json'), '{"name": "test"}')
-
-      const api = sourceScript('./utils/detection.sh')('is_monorepo')(regularDir)
+      if (!cachedRegularRepo) {
+        cachedRegularRepo = join(testDir, 'cached-regular-repo')
+        mkdirSync(cachedRegularRepo, { recursive: true })
+        initGitRepo(cachedRegularRepo)
+        writeFileSync(join(cachedRegularRepo, 'package.json'), '{"name": "test"}')
+      }
+      const api = sourceScript('./utils/detection.sh')('is_monorepo')(cachedRegularRepo)
       expect(api).toFail()
     })
 
@@ -799,23 +824,30 @@ describe('detection utilities', () => {
   })
 
   describe('has_package_json()', () => {
-    it('should return 0 when package.json exists in directory', () => {
-      const projectDir = join(testDir, 'js-project')
-      mkdirSync(projectDir, { recursive: true })
-      writeFileSync(join(projectDir, 'package.json'), '{"name": "test"}')
+    let cachedJsProject: string | null = null
+    let cachedJsSubdir: string | null = null
 
-      const api = sourceScript('./utils/detection.sh')('has_package_json')(projectDir)
+    it('should return 0 when package.json exists in directory', () => {
+      if (!cachedJsProject) {
+        cachedJsProject = join(testDir, 'cached-js-project')
+        cachedJsSubdir = join(cachedJsProject, 'src', 'components')
+        mkdirSync(cachedJsSubdir, { recursive: true })
+        initGitRepo(cachedJsProject)
+        writeFileSync(join(cachedJsProject, 'package.json'), '{"name": "test"}')
+      }
+      const api = sourceScript('./utils/detection.sh')('has_package_json')(cachedJsProject)
       expect(api).toBeSuccessful()
     })
 
     it('should return 0 from subdirectory when repo root has package.json', () => {
-      const projectDir = join(testDir, 'js-project-with-subdir')
-      const subDir = join(projectDir, 'src', 'components')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(projectDir)
-      writeFileSync(join(projectDir, 'package.json'), '{"name": "test"}')
-
-      const api = sourceScript('./utils/detection.sh')('has_package_json')(subDir)
+      if (!cachedJsProject) {
+        cachedJsProject = join(testDir, 'cached-js-project')
+        cachedJsSubdir = join(cachedJsProject, 'src', 'components')
+        mkdirSync(cachedJsSubdir, { recursive: true })
+        initGitRepo(cachedJsProject)
+        writeFileSync(join(cachedJsProject, 'package.json'), '{"name": "test"}')
+      }
+      const api = sourceScript('./utils/detection.sh')('has_package_json')(cachedJsSubdir!)
       expect(api).toBeSuccessful()
     })
 

@@ -26,14 +26,22 @@ trim "  test  "
 rgb_text "255 0 0" "red text"
 `)
 
-    // Run all operations in a SINGLE bash process to cache the function registry
-    // The registry is built once on first file_dependencies call, then reused
-    // This reduces test time from ~5s to ~1.7s by running bash only 1 time instead of 3
+    // Create a minimal mock function registry
+    // This avoids the expensive ~2s bash_functions_summary scan of the entire codebase
+    const mockRegistry = JSON.stringify({
+      "setup_colors": "${ROOT}/utils/color.sh",
+      "log": "${ROOT}/utils/logging.sh",
+      "trim": "${ROOT}/utils/text.sh",
+      "rgb_text": "${ROOT}/utils/color.sh"
+    })
+
+    // Run all operations in a SINGLE bash process with mock registry
+    // Using __FUNCTION_REGISTRY_CACHE skips the expensive registry build (~2s -> ~100ms)
     const DELIMITER = '___SPLIT_MARKER___'
     const script = `
       source ./reports/file-deps.sh
 
-      # First call - builds and caches the registry
+      # First call - uses pre-set mock registry (no expensive build)
       file_dependencies "${tempTestFile}"
       echo "${DELIMITER}"
 
@@ -49,7 +57,11 @@ rgb_text "255 0 0" "red text"
       shell: 'bash',
       encoding: 'utf-8',
       cwd: process.cwd(),
-      env: { ...process.env, ROOT: process.cwd() }
+      env: {
+        ...process.env,
+        ROOT: process.cwd(),
+        __FUNCTION_REGISTRY_CACHE: mockRegistry
+      }
     })
 
     const [fileDepsJson, consoleOutput, reportJson] = result.split(DELIMITER).map(s => s.trim())

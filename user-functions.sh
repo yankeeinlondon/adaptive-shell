@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-[[ -n "${__USER_FUNCTIONS_SH_LOADED:-}" ]] && declare -f "du" > /dev/null && return
-__USER_FUNCTIONS_SH_LOADED=1
+
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,15 +16,18 @@ fi
 
 source "${UTILS}/logging.sh"
 source "${UTILS}/detection.sh"
+source "${UTILS}/install.sh"
 
 # use "dust" over base "du" if available
 function du() {
-    setup_colors
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
+
     if has_command "dust"; then
         dust -X ".git" -X "node_modules" "$@"
-        log ""
-        log "${DIM:-}- excluded ${BLUE}.git${RESET}${DIM} and ${BLUE}node_modules${RESET}${DIM} directory from results${RESET:-}"
-        log "${DIM}- use ${GREEN}${BOLD}dust${RESET}${DIM} to not exclude${RESET}"
+        logc ""
+        logc "{{DIM}}- excluded {{BLUE}}.git{{RESET}}{{DIM}} and {{BLUE}}node_modules{{RESET}}{{DIM}} directory from results{{RESET}}"
+        logc "{{DIM}}- use {{GREEN}}{{BOLD}}dust{{RESET}}{{DIM}} to not exclude{{RESET}}"
     else
         if [ -z "$*" ]; then
             $(which du) "."
@@ -39,13 +41,14 @@ function du() {
 #
 # history convenience utility
 function h () {
-    setup_colors
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
 
     local -r filter_by="${1:-}"
     local numeric_re='^[0-9]+$'
 
     if [[ ${filter_by} =~ ${numeric_re} ]]; then
-        log "${BOLD}History${RESET} (${ITALIC}last ${filter_by}${RESET}):\n"
+        logc "{{BOLD}}History{{RESET}} ({{ITALIC}}last ${filter_by}{{RESET}}):\n"
         if is_zsh; then
             builtin fc -l -- "-${filter_by}"
         elif is_bash; then
@@ -54,7 +57,7 @@ function h () {
             history "${filter_by}"
         fi
     elif [[ -z ${filter_by} ]]; then
-        log "${BOLD}History${RESET} (${ITALIC}all${RESET}):\n"
+        logc "{{BOLD}}History{{RESET}} ({{ITALIC}}all{{RESET}}):\n"
         if is_zsh; then
             builtin fc -l 1
         elif is_bash; then
@@ -63,7 +66,7 @@ function h () {
             history
         fi
     else
-        log "${BOLD}History${RESET} (${ITALIC}filtered by '${filter_by}'${RESET}):\n"
+        logc "{{BOLD}}History{{RESET}} ({{ITALIC}}filtered by '${filter_by}'{{RESET}}):\n"
         local -a history_cmd
         if is_zsh; then
             history_cmd=(builtin fc -l 1)
@@ -79,7 +82,6 @@ function h () {
         fi
     fi
 
-    remove_colors
 }
 
 function init() {
@@ -96,7 +98,7 @@ function installed() {
 
 function vitesse() {
     if [ -z "$1" ]; then
-        log "Syntax: ${BOLD}vitesse${NO_BOLD} ${ITALIC}\${1}${NO_ITALIC}, ${DIM}where ${NO_DIM}${ITALIC}\${1}${NO_ITALIC} ${DIM}indicates the directory to install to  ${NO_DIM}\n"
+        logc "Syntax: ${BOLD}vitesse${NO_BOLD} ${ITALIC}\${1}${NO_ITALIC}, ${DIM}where ${NO_DIM}${ITALIC}\${1}${NO_ITALIC} ${DIM}indicates the directory to install to  ${NO_DIM}\n"
         return
     fi
 
@@ -121,7 +123,7 @@ function vitesse() {
 
 function vitesse_ext() {
   if [ -z "$1" ]; then
-    log "Syntax: ${BOLD}vitesse-ext${NO_BOLD} ${ITALIC}\${1}${NO_ITALIC}, ${DIM}where ${NO_DIM}${ITALIC}\${1}${NO_ITALIC} ${DIM}indicates the directory to install to  ${NO_DIM}\n"
+    logc "Syntax: ${BOLD}vitesse-ext${NO_BOLD} ${ITALIC}\${1}${NO_ITALIC}, ${DIM}where ${NO_DIM}${ITALIC}\${1}${NO_ITALIC} ${DIM}indicates the directory to install to  ${NO_DIM}\n"
     return
   fi
 
@@ -130,9 +132,12 @@ function vitesse_ext() {
 
 
 function gitignore() {
+    source "${UTILS}/color.sh"
+    source "${UTILS}/logging.sh"
+
   if [ ! -f "./.gitignore" ]; then
-    log "- creating ${BLUE}.gitignore${RESET} file"
-    log ""
+    logc "- creating {{BLUE}}.gitignore{{RESET}} file"
+    logc ""
     cat <<'EOF' > "./.gitignore"
 # Logs
 *.log
@@ -193,7 +198,7 @@ trace/*
 .trace/*
 EOF
   else
-    log "- the ${BLUE}.gitignore${RESET} file already exists, ${ITALIC}skipping${RESET}"
+    logc "- the ${BLUE}.gitignore${RESET} file already exists, ${ITALIC}skipping${RESET}"
   fi
 }
 
@@ -260,10 +265,10 @@ if has_command "yazi"; then
     }
 else
     function y() {
-        log ""
-        log "the ${BOLD}${BLUE}Yazi${RESET} CLI file explorer is not installed"
-        log "> https://yazi-rs.github.io/docs/installation"
-        log ""
+        logc ""
+        logc "the ${BOLD}${BLUE}Yazi${RESET} CLI file explorer is not installed"
+        logc "> https://yazi-rs.github.io/docs/installation"
+        logc ""
     }
 fi
 
@@ -284,7 +289,8 @@ function upgrade() {
 
 if has_function is_pve_host && { is_pve_host || is_pve_container || is_pve_aware; }; then
     function nodes() {
-        source "${UTILS}/proxmox.sh"
+        source "${UTILS}/proxmox-utils.sh"
+        source "${UTILS}/proxmox-api.sh"
         logc "$(get_pve_nodes)"
     }
 fi
@@ -350,6 +356,24 @@ if ! has_command "gcc"; then
             # shellcheck source="./utils/install.sh"
             source "${UTILS}/install.sh"
             install_build_tools && ( unset -f cmake && unset -f make && unset -f gcc )
+        fi
+    }
+fi
+
+if ! has_command "claude"; then
+    function claude() {
+        logc "{{BOLD}}{{BLUE}}Claude Code{{RESET}} is not installed on this machine."
+        if confirm "Install now?"; then
+            if install_claude_code; then
+                unset -f claude
+                claude
+            else
+                logc "Ok.\n"
+                return 0
+            fi
+        else
+            logc "Ok.\n"
+            return 1
         fi
     }
 fi

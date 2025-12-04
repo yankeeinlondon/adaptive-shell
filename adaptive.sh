@@ -182,8 +182,7 @@ function adaptive_setup() {
     fi
 
     if is_pve_host; then
-        # shellcheck source="./utils/proxmox.sh"
-        source "${UTILS}/proxmox.sh"
+        source "${UTILS}/proxmox-api.sh"
     fi
 
     if has_command "aws_completer"; then

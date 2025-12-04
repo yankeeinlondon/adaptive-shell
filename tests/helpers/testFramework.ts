@@ -2,7 +2,10 @@ import { isString, contains,  createFnWithProps, ensureLeading, startsWith, stri
 import type { EmptyObject } from "inferred-types/types"
 import { IOType, spawnSync, SpawnSyncOptions, SpawnSyncReturns } from 'node:child_process';
 import { cwd } from 'node:process';
-import { TestResult, TestOptions, asArray, SourcedTestUtil, TestUtil, TestApi, ToSpawnOptions, AsCommand, Quoted } from './index';
+import type { TestResult } from './TestResult';
+import type { TestOptions, ToSpawnOptions, AsCommand, Quoted } from './TestOptions';
+import { asArray } from './asArray';
+import type { SourcedTestUtil, TestUtil, TestApi } from './TestUtil';
 import { DidNotFail, DidNotPass, StdErrReturn, StdOutReturn, StdOutReturnTrimmed } from './errors';
 import { fallback } from './fallback';
 
