@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - prevents re-execution when sourced multiple times
-[[ -n "${__NETWORK_SH_LOADED:-}" ]] && return
+[[ -n "${__NETWORK_SH_LOADED:-}" ]] && declare -f "list_network_interfaces" > /dev/null && return
 __NETWORK_SH_LOADED=1
 
 # is_dns_name <name>
@@ -337,31 +337,69 @@ function highlight_ip_addresses() {
 }
 
 
+function list_network_interfaces() {
+    source "${UTILS}/os.sh"
+
+    if is_mac; then
+        ifconfig -l
+    elif is_linux; then
+        ip -o link show | awk -F': ' '{print $2}'
+    elif is_windows; then
+        Get-NetIPConfiguration | Select-Object -ExpandProperty InterfaceAlias
+    fi
+
+}
+
 # network_interfaces
 #
 # Reports all the network interfaces found on the host computer.
 # Supports macOS, Linux, and Windows (via WSL/Git Bash).
 # Output includes highlighted IP addresses using bold formatting.
 function network_interfaces() {
+    local -ra params=( "$@" )
     source "${UTILS}/os.sh"
     source "${UTILS}/color.sh"
+    source "${UTILS}/text.sh"
+    source "${UTILS}/cli.sh"
     setup_colors
 
     local output=""
+    local show_ipv6=false
+
+    # Check if -6 flag is present
+    if has_cli_switch params "-6"; then
+        show_ipv6=true
+    fi
 
     if [[ "$(os)" == "macos" ]]; then
-        output=$(ifconfig | grep "inet ")
+        if [[ "$show_ipv6" == "true" ]]; then
+
+            output=$(ifconfig | grep "inet ")
+            output="${output}\n$(ifconfig | grep "inet6")}"
+        else
+            output=$(ifconfig | grep "inet ")
+        fi
     elif [[ "$(os)" == "linux" ]]; then
-        output=$(ip addr show | grep "inet ")
+        if [[ "$show_ipv6" == "true" ]]; then
+            output=$(ip addr show | grep "inet")
+        else
+            output=$(ip addr show | grep "inet ")
+        fi
     elif [[ "$(os)" == "windows" ]]; then
-        # Use PowerShell to get IPv4 addresses in a format similar to Unix
-        output=$(powershell.exe -Command "Get-NetIPAddress -AddressFamily IPv4 | ForEach-Object { Write-Output (\"    inet \" + \$_.IPAddress + \" interface \" + \$_.InterfaceAlias) }" 2>/dev/null | tr -d '\r')
+        if [[ "$show_ipv6" == "true" ]]; then
+            # Use PowerShell to get both IPv4 and IPv6 addresses
+            output=$(powershell.exe -Command "Get-NetIPAddress | ForEach-Object { Write-Output (\"    inet \" + \$_.IPAddress + \" interface \" + \$_.InterfaceAlias) }" 2>/dev/null | tr -d '\r')
+        else
+            # Use PowerShell to get IPv4 addresses in a format similar to Unix
+            output=$(powershell.exe -Command "Get-NetIPAddress -AddressFamily IPv4 | ForEach-Object { Write-Output (\"    inet \" + \$_.IPAddress + \" interface \" + \$_.InterfaceAlias) }" 2>/dev/null | tr -d '\r')
+        fi
     fi
 
     # Highlight IP addresses and colorize if we have output
     if [[ -n "$output" ]]; then
         local highlighted
         highlighted=$(echo "$output" | highlight_ip_addresses)
+        trim_ref highlighted
         printf '%s\n' "$(colorize "$highlighted")"
     fi
 }
@@ -383,6 +421,10 @@ function get_ip4_routes() {
     esac
 }
 
+function get_ip4_default_routes() {
+    get_ip4_routes | grep "default"
+}
+
 function get_ip6_routes() {
     case $(os) in
         linux)
@@ -400,11 +442,24 @@ function get_ip6_routes() {
     esac
 }
 
+function get_ip6_default_routes() {
+    get_ip6_routes | grep "default"
+}
+
 function get_routes() {
-    logc "{{BOLD}}IPv4 Routes"
-    get_ip4_routes
-    logc "{{BOLD}}IPv6 Routes"
-    get_ip6_routes
+    # shellcheck disable=SC2034
+    local -ra params=( "$@" )
+    source "${UTILS}/cli.sh";
+
+    if has_cli_switch params "-6"; then
+        logc "  {{BOLD}}IPv4 Routes"
+        indent "    " "$(get_ip4_default_routes)"
+        logc "  {{BOLD}}IPv6 Routes"
+        indent "    " "$(get_ip6_default_routes)"
+    else
+        logc "  {{BOLD}}IPv4 Routes"
+        indent "    " "$(get_ip4_default_routes)"
+    fi
 }
 
 
