@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__PROXMOX_UTILS_SH_LOADED:-}" ]] && return
+[[ -n "${__PROXMOX_UTILS_SH_LOADED:-}" ]] && declare -f "pve_endpoint" > /dev/null && return
 __PROXMOX_UTILS_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then

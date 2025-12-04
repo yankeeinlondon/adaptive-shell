@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__LINK_SH_LOADED:-}" ]] && return
+[[ -n "${__LINK_SH_LOADED:-}" ]] && declare -f "link" > /dev/null && return
 __LINK_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then

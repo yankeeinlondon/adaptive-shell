@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - prevents re-execution when sourced multiple times
-[[ -n "${__EMPTY_SH_LOADED:-}" ]] && return
+[[ -n "${__EMPTY_SH_LOADED:-}" ]] && declare -f "is_empty" > /dev/null && return
 __EMPTY_SH_LOADED=1
 
 # not_empty() <test>

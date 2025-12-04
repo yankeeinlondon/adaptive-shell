@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__SSH_SH_LOADED:-}" ]] && return
+[[ -n "${__SSH_SH_LOADED:-}" ]] && declare -f "get_ssh_hosts" > /dev/null && return
 __SSH_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then

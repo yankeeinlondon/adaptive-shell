@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__PROXMOX_OTHER_SH_LOADED:-}" ]] && return
+[[ -n "${__PROXMOX_OTHER_SH_LOADED:-}" ]] && declare -f "pve_version" > /dev/null && return
 __PROXMOX_OTHER_SH_LOADED=1
 
 # pve_version

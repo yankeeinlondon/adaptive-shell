@@ -203,13 +203,22 @@ EOF
 # Proxies the `network_interfaces()` function through as a
 # command for the interactive console.
 function net() {
+    local -ra params=( "$@" )
     source "${UTILS}/detection.sh"
-
+    source "${UTILS}/cli.sh"
+    source "${UTILS}/network.sh"
     local -r file="${UTILS}/network.sh"
-    logc "Network Interfaces"
-    bash "${file}" "network_interfaces"
-    logc "Network Routes"
-    bash "${file}" "get_routes"
+
+    logc "{{BOLD}}{{YELLOW}}Network Interfaces"
+    list_network_interfaces
+
+    logc "\n{{BOLD}}{{YELLOW}}TCP/IP Addresses"
+    bash "${file}" "network_interfaces" "${params[@]}"
+    logc "\n{{BOLD}}{{YELLOW}}Network Default Routes"
+    bash "${file}" "get_routes" "${params[@]}"
+    if ! has_cli_switch params "-6"; then
+        logc "\n{{DIM}}{{ITALIC}}- use {{BOLD}}{{GREEN}}-6{{RESET}}{{DIM}}{{ITALIC}} to get IPv6 information too"
+    fi
 }
 
 function track() {

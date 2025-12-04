@@ -4,7 +4,7 @@
 # The `proxmox.sh` file is for Proxmox Hosts
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__PVE_SH_LOADED:-}" ]] && return
+[[ -n "${__PVE_SH_LOADED:-}" ]] && declare -f "pve_api_get" > /dev/null && return
 __PVE_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then

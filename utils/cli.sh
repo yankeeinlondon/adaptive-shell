@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__CLI_SH_LOADED:-}" ]] && return
+[[ -n "${__CLI_SH_LOADED:-}" ]] && declare -f "cli_json" > /dev/null && return
 __CLI_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
@@ -55,6 +55,43 @@ function cli_force() {
             return 0
         fi
     done
+    return 1
+}
+
+# has_cli_switch <args_array_name> <switch>
+#
+# Returns true/false based on whether the specified switch
+# was found in the arguments array passed by reference.
+#
+# This function takes an array of arguments by reference (not value)
+# to efficiently check for the presence of a specific CLI switch.
+#
+# Example:
+#   args=("--verbose" "file.txt" "--force")
+#   if has_cli_switch args "--verbose"; then
+#       echo "Verbose mode enabled"
+#   fi
+function has_cli_switch() {
+    local var_name="$1"
+    local switch="$2"
+
+    # Validate we got both parameters
+    if [[ -z "$var_name" ]] || [[ -z "$switch" ]]; then
+        return 1
+    fi
+
+    # Check if it's a declared array variable (including readonly arrays with -ar)
+    # Note: bash uses 'declare -a', zsh uses 'typeset -a'
+    if declare -p "$var_name" 2>/dev/null | grep -qE '(declare|typeset).*-a'; then
+        local -n ref_arr="$var_name"
+        local arg
+        for arg in "${ref_arr[@]}"; do
+            if [[ "$arg" == "$switch" ]]; then
+                return 0
+            fi
+        done
+    fi
+
     return 1
 }
 

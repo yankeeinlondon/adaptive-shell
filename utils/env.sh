@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - prevents re-execution when sourced multiple times
-[[ -n "${__ENV_SH_LOADED:-}" ]] && return
+[[ -n "${__ENV_SH_LOADED:-}" ]] && declare -f "append_to_path" > /dev/null && return
 __ENV_SH_LOADED=1
 
 # append_to_path <path>

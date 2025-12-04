@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__CONFIGURE_SH_LOADED:-}" ]] && return
+[[ -n "${__CONFIGURE_SH_LOADED:-}" ]] && declare -f "configure_git" > /dev/null && return
 __CONFIGURE_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then

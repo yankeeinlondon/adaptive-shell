@@ -4,6 +4,18 @@
 [[ -n "${__NETWORK_SH_LOADED:-}" ]] && declare -f "list_network_interfaces" > /dev/null && return
 __NETWORK_SH_LOADED=1
 
+if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
+    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${UTILS}" == *"/utils" ]];then
+        ROOT="${UTILS%"/utils"}"
+    else
+        ROOT="$UTILS"
+    fi
+else
+    ROOT="${ADAPTIVE_SHELL}"
+    UTILS="${ROOT}/utils"
+fi
+
 # is_dns_name <name>
 #
 # Validates whether the given string is a valid DNS hostname
@@ -399,12 +411,15 @@ function network_interfaces() {
     if [[ -n "$output" ]]; then
         local highlighted
         highlighted=$(echo "$output" | highlight_ip_addresses)
-        trim_ref highlighted
+        trim_each highlighted
+        indent "  " highlighted
         printf '%s\n' "$(colorize "$highlighted")"
     fi
 }
 
 function get_ip4_routes() {
+    source "${UTILS}/os.sh"
+
     case $(os) in
         linux)
             ip route show
@@ -449,7 +464,9 @@ function get_ip6_default_routes() {
 function get_routes() {
     # shellcheck disable=SC2034
     local -ra params=( "$@" )
+    source "${UTILS}/logging.sh"
     source "${UTILS}/cli.sh";
+
 
     if has_cli_switch params "-6"; then
         logc "  {{BOLD}}IPv4 Routes"
@@ -468,8 +485,7 @@ function get_routes() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Set up paths for sourcing dependencies
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    source "${UTILS}/logging.sh"
-    source "${UTILS}/os.sh"
+    ROOT="${UTILS%"/utils"}"
 
     cmd="${1:-}"
     shift 2>/dev/null || true

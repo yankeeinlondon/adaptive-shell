@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - prevents re-execution when sourced multiple times
-[[ -n "${__ERRORS_SH_LOADED:-}" ]] && return
+[[ -n "${__ERRORS_SH_LOADED:-}" ]] && declare -f "error_handler" > /dev/null && return
 __ERRORS_SH_LOADED=1
 
 # Error Handling Utilities

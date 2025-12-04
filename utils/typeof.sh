@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - prevents re-execution when sourced multiple times
-[[ -n "${__TYPEOF_SH_LOADED:-}" ]] && return
+[[ -n "${__TYPEOF_SH_LOADED:-}" ]] && declare -f "typeof" > /dev/null && return
 __TYPEOF_SH_LOADED=1
 
 # Stub functions for not-yet-implemented features

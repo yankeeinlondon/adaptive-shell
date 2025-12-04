@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__INSTALL_SH_LOADED:-}" ]] && return
+[[ -n "${__INSTALL_SH_LOADED:-}" ]] && declare -f "install_on_macos" > /dev/null && return
 __INSTALL_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then

@@ -26,8 +26,6 @@ describe('text utilities', () => {
             expect(typeof api.stdErrContains).toBe("function")
 
         });
-
-
     })
 
 
@@ -421,6 +419,145 @@ describe('text utilities', () => {
             const result = sourcedBash('./utils/text.sh', 'text=$(printf "\\e[31mline1\\e[0m\\nline2") && strip_escape_sequences "$text"')
             expect(result).toContain('line1')
             expect(result).toContain('line2')
+        })
+    })
+
+    describe('trim_each()', () => {
+        describe('by-value mode (direct content)', () => {
+            it('should trim leading and trailing whitespace from each line', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "  line1  \n  line2  \n  line3  "')
+                expect(result).toBe('line1\nline2\nline3')
+            })
+
+            it('should handle empty string', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each ""')
+                expect(result).toBe('')
+            })
+
+            it('should handle single line like regular trim()', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "  single line  "')
+                expect(result).toBe('single line')
+            })
+
+            it('should convert lines with only whitespace to empty lines', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "line1\n   \nline3"')
+                expect(result).toBe('line1\n\nline3')
+            })
+
+            it('should preserve multiple consecutive newlines', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "line1\n\n\nline2"')
+                const lines = result.split('\n')
+                expect(lines.length).toBe(4)
+                expect(lines[0]).toBe('line1')
+                expect(lines[1]).toBe('')
+                expect(lines[2]).toBe('')
+                expect(lines[3]).toBe('line2')
+            })
+
+            it('should preserve trailing newlines', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "line1\nline2\n\n"')
+                const lines = result.split('\n')
+                expect(lines.length).toBe(4)
+                expect(lines[0]).toBe('line1')
+                expect(lines[1]).toBe('line2')
+                expect(lines[2]).toBe('')
+                expect(lines[3]).toBe('')
+            })
+
+            it('should handle content with no newlines', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "  no newlines  "')
+                expect(result).toBe('no newlines')
+            })
+
+            it('should handle mixed whitespace (tabs, spaces)', () => {
+                const result = sourcedBash('./utils/text.sh', "trim_each $'\\t  line1  \\t\\n  \\tline2\\t  '")
+                expect(result).toBe('line1\nline2')
+            })
+
+            it('should handle content that looks like variable names', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "  my_var  \n  another_name  "')
+                expect(result).toBe('my_var\nanother_name')
+            })
+        })
+
+        describe('by-reference mode (variable name)', () => {
+            it('should trim each line in-place when given a variable name', () => {
+                const exitCode = bashExitCode(
+                    'source ./utils/text.sh && ' +
+                    'content="  line1  \\n  line2  \\n  line3  " && ' +
+                    'trim_each content && ' +
+                    'test "$content" = "line1\\nline2\\nline3"'
+                )
+                expect(exitCode).toBe(0)
+            })
+
+            it('should modify the original variable', () => {
+                const result = sourcedBash(
+                    './utils/text.sh',
+                    'content="  foo  \\n  bar  " && trim_each content && echo "$content"'
+                )
+                expect(result).toBe('foo\nbar')
+            })
+
+            it('should handle variable with empty string', () => {
+                const exitCode = bashExitCode(
+                    'source ./utils/text.sh && ' +
+                    'content="" && ' +
+                    'trim_each content && ' +
+                    'test "$content" = ""'
+                )
+                expect(exitCode).toBe(0)
+            })
+
+            it('should handle variable with single line', () => {
+                const result = sourcedBash(
+                    './utils/text.sh',
+                    'content="  single  " && trim_each content && echo "$content"'
+                )
+                expect(result).toBe('single')
+            })
+
+            it('should preserve multiple newlines in variable', () => {
+                const result = sourcedBash(
+                    './utils/text.sh',
+                    'content="line1\\n\\n\\nline2" && trim_each content && echo "$content"'
+                )
+                const lines = result.split('\n')
+                expect(lines.length).toBe(4)
+                expect(lines[0]).toBe('line1')
+                expect(lines[3]).toBe('line2')
+            })
+
+            it('should fall back to value mode for nonexistent variable', () => {
+                // If variable doesn't exist, should treat as literal string
+                const result = sourcedBash('./utils/text.sh', 'trim_each "  nonexistent_var_123  "')
+                expect(result).toBe('nonexistent_var_123')
+            })
+        })
+
+        describe('edge cases and error conditions', () => {
+            it('should handle lines with leading tabs and trailing spaces', () => {
+                const result = sourcedBash('./utils/text.sh', "trim_each $'\\t\\tline1  \\n  line2\\t\\t'")
+                expect(result).toBe('line1\nline2')
+            })
+
+            it('should handle real-world multi-line content', () => {
+                const input = '  function foo()  \\n    echo "bar"  \\n  end  '
+                const result = sourcedBash('./utils/text.sh', `trim_each "${input}"`)
+                expect(result).toBe('function foo()\n  echo "bar"\nend')
+            })
+
+            it('should not crash on very long content', () => {
+                const longLine = 'a'.repeat(1000)
+                const input = `  ${longLine}  \\n  ${longLine}  `
+                const exitCode = bashExitCode(`source ./utils/text.sh && trim_each "${input}" > /dev/null`)
+                expect(exitCode).toBe(0)
+            })
+
+            it('should handle content with special characters', () => {
+                const result = sourcedBash('./utils/text.sh', 'trim_each "  $HOME  \\n  *.*  \\n  [a-z]  "')
+                expect(result).toBe('$HOME\n*.*\n[a-z]')
+            })
         })
     })
 

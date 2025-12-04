@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__FILESYSTEM_SH_LOADED:-}" ]] && return
+[[ -n "${__FILESYSTEM_SH_LOADED:-}" ]] && declare -f "file_exists" > /dev/null && return
 __FILESYSTEM_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sourceScript } from "../helpers"
+import { sourceScript, bashExitCode } from "../helpers"
 
 describe('CLI utilities', () => {
 
@@ -315,6 +315,171 @@ describe('CLI utilities', () => {
             expect(api).not.toContainInStdOut('data.txt');
         });
     });
+
+    describe('has_cli_switch()', () => {
+        it('should find a switch at the beginning of array', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose" "file.txt" "--force") && has_cli_switch args "--verbose"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should find a switch at the end of array', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("file.txt" "--verbose" "--force") && has_cli_switch args "--force"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should find a switch in the middle of array', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("file.txt" "--verbose" "--force" "output.txt") && has_cli_switch args "--verbose"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should return 1 when switch is not found', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose" "file.txt") && has_cli_switch args "--force"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should handle empty array', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=() && has_cli_switch args "--verbose"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should handle array with only switches', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose" "--force" "--json") && has_cli_switch args "--json"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should handle array with no switches', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("file.txt" "output.txt") && has_cli_switch args "--verbose"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should return 1 when switch parameter is empty', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose") && has_cli_switch args ""'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should return 1 when array name parameter is empty', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose") && has_cli_switch "" "--verbose"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should return 1 when variable is not an array', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && not_array="--verbose" && has_cli_switch not_array "--verbose"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should return 1 when variable does not exist', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && has_cli_switch nonexistent_var "--verbose"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should distinguish between similar switches', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose" "--verb") && has_cli_switch args "--verb"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should not match partial switches', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose") && has_cli_switch args "--verb"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should handle short form switches', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("-v" "-f" "file.txt") && has_cli_switch args "-v"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should handle switch-like values', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("file.txt" "--output" "--verbose.txt") && has_cli_switch args "--verbose.txt"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should be case sensitive', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbose") && has_cli_switch args "--VERBOSE"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should not match when switch is part of another argument', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--verbosity") && has_cli_switch args "--verbose"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should handle switches with equals syntax', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--config=file.conf" "--verbose") && has_cli_switch args "--config=file.conf"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should not match switches with different equals values', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--config=file.conf") && has_cli_switch args "--config=other.conf"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should handle combined short flags correctly', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("-vvv" "-abc") && has_cli_switch args "-vvv"'
+            )
+            expect(exitCode).toBe(0)
+        })
+
+        it('should not match individual flags in combined short flags', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("-abc") && has_cli_switch args "-a"'
+            )
+            expect(exitCode).toBe(1)
+        })
+
+        it('should work with multiple different switches in array', () => {
+            const exitCode = bashExitCode(`
+                source ./utils/cli.sh
+                args=("--verbose" "-v" "--force" "--json" "file.txt")
+                has_cli_switch args "--force" && has_cli_switch args "--json"
+            `)
+            expect(exitCode).toBe(0)
+        })
+
+        it('should handle special characters in switch names', () => {
+            const exitCode = bashExitCode(
+                'source ./utils/cli.sh && args=("--config-file" "--my_switch") && has_cli_switch args "--my_switch"'
+            )
+            expect(exitCode).toBe(0)
+        })
+    })
 
     describe('Edge cases and integration', () => {
         it('non_switch_params and switch_params should be complementary', () => {

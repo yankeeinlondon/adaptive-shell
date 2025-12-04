@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source guard - must be BEFORE path setup to prevent re-execution
-[[ -n "${__FUNCTIONS_SH_LOADED:-}" ]] && return
+[[ -n "${__FUNCTIONS_SH_LOADED:-}" ]] && declare -f "list_functions" > /dev/null && return
 __FUNCTIONS_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
