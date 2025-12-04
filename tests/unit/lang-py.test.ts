@@ -796,7 +796,7 @@ dependencies = ["zipp"]
 // TESTS
 // =============================================================================
 
-describe("lang-py", () => {
+describe("lang-py", { concurrent: true }, () => {
   const testDir = join(process.cwd(), 'tests', '.tmp-lang-py-test')
 
   // Pre-computed fixture paths for easy access in tests

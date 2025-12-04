@@ -62,56 +62,55 @@ function get_requirements_txt() {
     return 0
 }
 
-# _has_pyproject_dependency <dep>
+# _has_pyproject_dependency <dep> [pyproject_content]
 #
 # Check if a dependency exists in pyproject.toml (PEP 621 format).
 # Searches in [project.dependencies] section.
+# If pyproject_content is provided, uses it instead of reading from file.
 _has_pyproject_dependency() {
     local dep="${1:?dependency name required}"
-    local pyproject
+    local pyproject="${2:-}"
 
-    pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    # Get content if not provided
+    if [[ -z "$pyproject" ]]; then
+        pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    fi
 
-    # Check [project.dependencies] - array format like dependencies = ["requests>=2.0", "click"]
-    # Match the package name at start of string or after quote, allowing for version specifiers
-    if echo "$pyproject" | grep -E "^\s*dependencies\s*=\s*\[" >/dev/null 2>&1; then
-        if echo "$pyproject" | grep -E "\"${dep}([<>=!~\[]|\")" >/dev/null 2>&1; then
-            return 0
-        fi
+    source "${UTILS}/install.sh"
+    ensure_install "yq" "install_yq"
+
+    # Use yq to check if dependency exists in project.dependencies array
+    # Match package name at start, followed by version specifier or end
+    if echo "$pyproject" | yq -p toml -e \
+        ".project.dependencies[] | select(test(\"^${dep}([<>=!~\\\\[]|$)\"))" \
+        >/dev/null 2>&1; then
+        return 0
     fi
 
     return 1
 }
 
-# _has_poetry_dependency <dep>
+# _has_poetry_dependency <dep> [pyproject_content]
 #
 # Check if a dependency exists in Poetry format pyproject.toml.
 # Searches in [tool.poetry.dependencies] section.
+# If pyproject_content is provided, uses it instead of reading from file.
 _has_poetry_dependency() {
     local dep="${1:?dependency name required}"
-    local pyproject
+    local pyproject="${2:-}"
 
-    pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    # Get content if not provided
+    if [[ -z "$pyproject" ]]; then
+        pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    fi
 
-    # Check if we have [tool.poetry.dependencies] section
-    if echo "$pyproject" | grep -qE '^\[tool\.poetry\.dependencies\]'; then
-        # Extract the section and check for the dependency
-        local in_section=0
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^\[tool\.poetry\.dependencies\] ]]; then
-                in_section=1
-                continue
-            fi
-            if [[ "$line" =~ ^\[.*\] ]] && [[ $in_section -eq 1 ]]; then
-                break
-            fi
-            if [[ $in_section -eq 1 ]]; then
-                # Match dependency = "version" or dependency = { ... }
-                if [[ "$line" =~ ^${dep}[[:space:]]*= ]]; then
-                    return 0
-                fi
-            fi
-        done <<< "$pyproject"
+    source "${UTILS}/install.sh"
+    ensure_install "yq" "install_yq"
+
+    # Use yq to check if dependency key exists in tool.poetry.dependencies
+    if echo "$pyproject" | yq -p toml -e \
+        ".tool.poetry.dependencies | has(\"${dep}\")" 2>/dev/null | grep -q "true"; then
+        return 0
     fi
 
     return 1
@@ -164,13 +163,17 @@ _has_requirements_dependency() {
 function has_dependency() {
     local -r dep="${1:?no package sent into has_dependency()!}"
 
-    # Check pyproject.toml PEP 621 format
-    if _has_pyproject_dependency "$dep"; then
+    # Cache pyproject.toml content to avoid multiple reads
+    local pyproject
+    pyproject=$(get_pyproject_toml 2>/dev/null) || pyproject=""
+
+    # Check pyproject.toml PEP 621 format (pass cached content)
+    if [[ -n "$pyproject" ]] && _has_pyproject_dependency "$dep" "$pyproject"; then
         return 0
     fi
 
-    # Check Poetry format
-    if _has_poetry_dependency "$dep"; then
+    # Check Poetry format (pass cached content)
+    if [[ -n "$pyproject" ]] && _has_poetry_dependency "$dep" "$pyproject"; then
         return 0
     fi
 
@@ -182,68 +185,53 @@ function has_dependency() {
     return 1
 }
 
-# _has_pyproject_optional_dependency <dep>
+# _has_pyproject_optional_dependency <dep> [pyproject_content]
 #
 # Check if a dependency exists in any [project.optional-dependencies] group.
+# If pyproject_content is provided, uses it instead of reading from file.
 _has_pyproject_optional_dependency() {
     local dep="${1:?dependency name required}"
-    local pyproject
+    local pyproject="${2:-}"
 
-    pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    # Get content if not provided
+    if [[ -z "$pyproject" ]]; then
+        pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    fi
 
-    # Check [project.optional-dependencies] section
-    # Format: [project.optional-dependencies]
-    #         dev = ["pytest", "black"]
-    #         test = ["pytest-cov"]
-    if echo "$pyproject" | grep -qE '^\[project\.optional-dependencies\]'; then
-        local in_section=0
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^\[project\.optional-dependencies\] ]]; then
-                in_section=1
-                continue
-            fi
-            if [[ "$line" =~ ^\[.*\] ]] && [[ $in_section -eq 1 ]]; then
-                break
-            fi
-            if [[ $in_section -eq 1 ]]; then
-                # Check if the dependency appears in any array in this section
-                if echo "$line" | grep -qE "\"${dep}([<>=!~\[]|\")"; then
-                    return 0
-                fi
-            fi
-        done <<< "$pyproject"
+    source "${UTILS}/install.sh"
+    ensure_install "yq" "install_yq"
+
+    # Use yq to check if dependency exists in any optional-dependencies group
+    # Flatten all groups and search for matching package name
+    if echo "$pyproject" | yq -p toml -e \
+        ".project.optional-dependencies.[] | .[] | select(test(\"^${dep}([<>=!~\\\\[]|$)\"))" \
+        >/dev/null 2>&1; then
+        return 0
     fi
 
     return 1
 }
 
-# _has_poetry_dev_dependency <dep>
+# _has_poetry_dev_dependency <dep> [pyproject_content]
 #
 # Check if a dependency exists in Poetry dev-dependencies.
+# If pyproject_content is provided, uses it instead of reading from file.
 _has_poetry_dev_dependency() {
     local dep="${1:?dependency name required}"
-    local pyproject
+    local pyproject="${2:-}"
 
-    pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    # Get content if not provided
+    if [[ -z "$pyproject" ]]; then
+        pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
+    fi
 
-    # Check if we have [tool.poetry.dev-dependencies] section
-    if echo "$pyproject" | grep -qE '^\[tool\.poetry\.dev-dependencies\]'; then
-        local in_section=0
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^\[tool\.poetry\.dev-dependencies\] ]]; then
-                in_section=1
-                continue
-            fi
-            if [[ "$line" =~ ^\[.*\] ]] && [[ $in_section -eq 1 ]]; then
-                break
-            fi
-            if [[ $in_section -eq 1 ]]; then
-                # Match dependency = "version" or dependency = { ... }
-                if [[ "$line" =~ ^${dep}[[:space:]]*= ]]; then
-                    return 0
-                fi
-            fi
-        done <<< "$pyproject"
+    source "${UTILS}/install.sh"
+    ensure_install "yq" "install_yq"
+
+    # Use yq to check if dependency key exists in tool.poetry.dev-dependencies
+    if echo "$pyproject" | yq -p toml -e \
+        ".tool.poetry.dev-dependencies | has(\"${dep}\")" 2>/dev/null | grep -q "true"; then
+        return 0
     fi
 
     return 1
@@ -257,13 +245,17 @@ _has_poetry_dev_dependency() {
 function has_dev_dependency() {
     local -r dep="${1:?no package sent into has_dev_dependency()!}"
 
-    # Check pyproject.toml optional-dependencies
-    if _has_pyproject_optional_dependency "$dep"; then
+    # Cache pyproject.toml content to avoid multiple reads
+    local pyproject
+    pyproject=$(get_pyproject_toml 2>/dev/null) || pyproject=""
+
+    # Check pyproject.toml optional-dependencies (pass cached content)
+    if [[ -n "$pyproject" ]] && _has_pyproject_optional_dependency "$dep" "$pyproject"; then
         return 0
     fi
 
-    # Check Poetry dev-dependencies
-    if _has_poetry_dev_dependency "$dep"; then
+    # Check Poetry dev-dependencies (pass cached content)
+    if [[ -n "$pyproject" ]] && _has_poetry_dev_dependency "$dep" "$pyproject"; then
         return 0
     fi
 

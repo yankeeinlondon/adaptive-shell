@@ -1,5 +1,0 @@
-
-[project]
-name = "test"
-
-[tool.hatch.build]

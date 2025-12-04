@@ -1,6 +1,0 @@
-
-[project]
-dependencies = ["requests", "click"]
-
-[project.optional-dependencies]
-dev = ["pytest"]
