@@ -8,6 +8,14 @@ import { sourceScript, bashExitCode, runInShell, runInBothShells, isShellAvailab
 const PROJECT_ROOT = process.cwd()
 
 /**
+ * Normalize path separators to forward slashes for cross-platform comparison.
+ * Git always returns forward slashes, but Node.js path.join uses backslashes on Windows.
+ */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/')
+}
+
+/**
  * Helper to initialize a git repo in a directory for testing
  */
 function initGitRepo(dir: string): void {
@@ -638,14 +646,16 @@ describe('detection utilities', () => {
       const { gitDir } = getOrCreateRepoRoot()
       const api = sourceScript('./utils/detection.sh')('repo_root')(gitDir)
       expect(api).toBeSuccessful()
-      expect(api.result.stdout).toBe(gitDir)
+      // Normalize paths for cross-platform comparison (git returns forward slashes)
+      expect(normalizePath(api.result.stdout)).toBe(normalizePath(gitDir))
     })
 
     it('should output the repo root when called from subdirectory', () => {
       const { gitDir, subDir } = getOrCreateRepoRoot()
       const api = sourceScript('./utils/detection.sh')('repo_root')(subDir)
       expect(api).toBeSuccessful()
-      expect(api.result.stdout).toBe(gitDir)
+      // Normalize paths for cross-platform comparison (git returns forward slashes)
+      expect(normalizePath(api.result.stdout)).toBe(normalizePath(gitDir))
     })
 
     it('should output an absolute path', () => {

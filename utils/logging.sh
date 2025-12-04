@@ -16,8 +16,6 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-
-
 # log
 #
 # Logs the parameters passed to STDERR.
@@ -29,6 +27,7 @@ function log() {
 
     printf "%b\\n" "${*}${reset}" >&2
 }
+
 # logc <content> <content> <...>
 #
 # Logs all passed parameters to STDERR.

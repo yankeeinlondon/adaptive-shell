@@ -82,15 +82,17 @@ function has_cli_switch() {
 
     # Check if it's a declared array variable (including readonly arrays with -ar)
     # Note: bash uses 'declare -a', zsh uses 'typeset -a'
-    if declare -p "$var_name" 2>/dev/null | grep -qE '(declare|typeset).*-a'; then
-        local -n ref_arr="$var_name"
-        local arg
-        for arg in "${ref_arr[@]}"; do
-            if [[ "$arg" == "$switch" ]]; then
-                return 0
-            fi
-        done
+    if ! declare -p "$var_name" 2>/dev/null | grep -qE '(declare|typeset).*-a'; then
+        return 1
     fi
+
+    # Use eval for Bash 3.x compatibility (avoid local -n nameref)
+    local arg
+    eval 'for arg in "${'"$var_name"'[@]}"; do
+        if [[ "$arg" == "'"$switch"'" ]]; then
+            return 0
+        fi
+    done'
 
     return 1
 }
@@ -115,15 +117,14 @@ function non_switch_params() {
         local var_name="$1"
         # Check if it's a declared array variable
         if declare -p "$var_name" 2>/dev/null | grep -q 'declare -a'; then
-            # Use nameref for pass-by-reference
-            local -n ref_arr="$var_name"
-            for arg in "${ref_arr[@]}"; do
+            # Use eval for Bash 3.x compatibility (avoid local -n nameref)
+            eval 'for arg in "${'"$var_name"'[@]}"; do
                 if [[ ! "$arg" =~ ^- ]]; then
                     result+=("$arg")
                 fi
-            done
-            # Reassign the filtered array
-            ref_arr=("${result[@]}")
+            done'
+            # Reassign the filtered array using eval
+            eval "$var_name"'=("${result[@]}")'
             return 0
         fi
     fi
@@ -163,15 +164,14 @@ function switch_params() {
         local var_name="$1"
         # Check if it's a declared array variable
         if declare -p "$var_name" 2>/dev/null | grep -q 'declare -a'; then
-            # Use nameref for pass-by-reference
-            local -n ref_arr="$var_name"
-            for arg in "${ref_arr[@]}"; do
+            # Use eval for Bash 3.x compatibility (avoid local -n nameref)
+            eval 'for arg in "${'"$var_name"'[@]}"; do
                 if [[ "$arg" =~ ^- ]]; then
                     result+=("$arg")
                 fi
-            done
-            # Reassign the filtered array
-            ref_arr=("${result[@]}")
+            done'
+            # Reassign the filtered array using eval
+            eval "$var_name"'=("${result[@]}")'
             return 0
         fi
     fi

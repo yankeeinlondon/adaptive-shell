@@ -187,19 +187,18 @@ function crates_not_installed() {
     # Check if first arg is an array name (pass-by-reference)
     # We detect this by: single argument that is a declared array
     if [[ $# -eq 1 ]] && declare -p "$first_arg" 2>/dev/null | grep -q '^declare -a'; then
-        # It's an array reference - modify in-place
-        local -n arr_ref="$first_arg"
+        # It's an array reference - modify in-place using eval for Bash 3.x compatibility
         local not_installed=()
         local crate
 
-        for crate in "${arr_ref[@]}"; do
+        eval 'for crate in "${'"$first_arg"'[@]}"; do
             if ! has_dependency_anywhere "$crate"; then
                 not_installed+=("$crate")
             fi
-        done
+        done'
 
-        # Modify the original array in-place
-        arr_ref=("${not_installed[@]}")
+        # Modify the original array in-place using eval
+        eval "$first_arg"'=("${not_installed[@]}")'
     else
         # Direct arguments (pass-by-value) - output to stdout
         local crate

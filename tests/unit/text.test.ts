@@ -397,9 +397,16 @@ describe('text utilities', () => {
             expect(result).toContain('    ') // 4 spaces between words
         })
 
-        it('should handle OSC52 clipboard sequences', () => {
-            // OSC52 format: ESC]52;c;base64_data ESC\ or BEL
-            const result = sourcedBash('./utils/text.sh', 'text=$(printf "before\\e]52;c;aGVsbG8=\\e\\\\\\\\after") && strip_escape_sequences "$text"')
+        it('should handle OSC52 clipboard sequences with BEL terminator', () => {
+            // OSC52 format: ESC]52;c;base64_data BEL
+            const result = sourcedBash('./utils/text.sh', 'text=$(printf "before\\e]52;c;aGVsbG8=\\aafter") && strip_escape_sequences "$text"')
+            expect(result).toBe('beforeafter')
+        })
+
+        it('should handle OSC sequences with ESC backslash terminator', () => {
+            // OSC format: ESC]...ESC\ (String Terminator)
+            // Using $'...' ANSI-C quoting with \x1b for ESC and \x5c for backslash
+            const result = sourcedBash('./utils/text.sh', "text=$'before\\x1b]1;title\\x1b\\x5cafter' && strip_escape_sequences \"$text\"")
             expect(result).toBe('beforeafter')
         })
 

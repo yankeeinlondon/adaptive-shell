@@ -306,19 +306,18 @@ function packages_not_installed() {
 
     # Check if first arg is an array name (pass-by-reference)
     if [[ $# -eq 1 ]] && declare -p "$first_arg" 2>/dev/null | grep -q '^declare -a'; then
-        # It's an array reference - modify in-place
-        local -n arr_ref="$first_arg"
+        # It's an array reference - modify in-place using eval for Bash 3.x compatibility
         local not_installed=()
         local pkg
 
-        for pkg in "${arr_ref[@]}"; do
+        eval 'for pkg in "${'"$first_arg"'[@]}"; do
             if ! has_dependency_anywhere "$pkg"; then
                 not_installed+=("$pkg")
             fi
-        done
+        done'
 
-        # Modify the original array in-place
-        arr_ref=("${not_installed[@]}")
+        # Modify the original array in-place using eval
+        eval "$first_arg"'=("${not_installed[@]}")'
     else
         # Direct arguments (pass-by-value) - output to stdout
         local pkg

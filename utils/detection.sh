@@ -70,8 +70,7 @@ function is_pve_host() {
 function is_pve_container() {
     # Must be running in a container or VM
     if ! is_lxc && ! is_vm; then
-        # shellcheck disable=SC2086
-        return ${EXIT_FALSE}
+        return 1
     fi
 
     # Must have API key access
