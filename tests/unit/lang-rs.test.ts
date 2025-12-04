@@ -38,8 +38,557 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
   `, { cwd: testDir })
 }
 
-describe("lang-rs", () => {
+// =============================================================================
+// FIXTURE DEFINITIONS - All test directories and their contents
+// =============================================================================
+
+interface FileFixture {
+  files: Record<string, string>
+  subdirs?: string[]
+}
+
+interface GitFixture extends FileFixture {
+  git: true
+  commits?: Array<{ file: string; content: string; message: string }>
+}
+
+type Fixture = FileFixture | GitFixture
+
+const FIXTURES: Record<string, Fixture> = {
+  // get_cargo_toml() fixtures
+  'cargo-cwd': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test-crate"
+version = "0.1.0"
+edition = "2021"`
+    }
+  },
+  'cargo-repo-root': {
+    git: true,
+    subdirs: ['crates/app'],
+    files: {
+      'Cargo.toml': `[package]
+name = "root-crate"
+version = "2.0.0"`
+    },
+    commits: [
+      { file: 'Cargo.toml', content: `[package]\nname = "root-crate"\nversion = "2.0.0"`, message: 'init' }
+    ]
+  },
+  'cargo-empty': {
+    files: {
+      'readme.txt': 'no Cargo.toml here'
+    }
+  },
+  'cargo-prefer-cwd': {
+    git: true,
+    subdirs: ['crates/app'],
+    files: {
+      'Cargo.toml': `[package]
+name = "root-crate"`,
+      'crates/app/Cargo.toml': `[package]
+name = "sub-crate"`
+    },
+    commits: [
+      { file: 'Cargo.toml', content: '[package]\nname = "root-crate"', message: 'init' }
+    ]
+  },
+  'cargo-special': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+description = "A \\"quoted\\" value"`
+    }
+  },
+
+  // has_dependency() fixtures
+  'has-dep-inline': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+tokio = "1.0"`
+    }
+  },
+  'has-dep-table': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }`
+    }
+  },
+  'no-dep': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"`
+    }
+  },
+  'no-deps-section': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+version = "0.1.0"`
+    }
+  },
+  'dev-not-in-deps': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+
+[dev-dependencies]
+pretty_assertions = "1.0"`
+    }
+  },
+  'dep-no-arg': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`
+    }
+  },
+
+  // has_dev_dependency() fixtures
+  'has-dev-dep-inline': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dev-dependencies]
+pretty_assertions = "1.0"
+criterion = "0.5"`
+    }
+  },
+  'has-dev-dep-table': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }`
+    }
+  },
+  'no-dev-dep': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dev-dependencies]
+pretty_assertions = "1.0"`
+    }
+  },
+  'no-dev-deps-section': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"`
+    }
+  },
+  'dep-not-in-dev': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+
+[dev-dependencies]`
+    }
+  },
+  'dev-dep-no-arg': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`
+    }
+  },
+
+  // has_build_dependency() fixtures
+  'has-build-dep-inline': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[build-dependencies]
+cc = "1.0"
+bindgen = "0.65"`
+    }
+  },
+  'has-build-dep-table': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[build-dependencies]
+bindgen = { version = "0.65", features = ["runtime"] }`
+    }
+  },
+  'no-build-dep': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[build-dependencies]
+cc = "1.0"`
+    }
+  },
+  'no-build-deps-section': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"`
+    }
+  },
+  'dep-not-in-build': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+
+[build-dependencies]`
+    }
+  },
+  'build-dep-no-arg': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`
+    }
+  },
+
+  // has_dependency_anywhere() fixtures
+  'dep-anywhere-deps': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"`
+    }
+  },
+  'dep-anywhere-dev': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dev-dependencies]
+pretty_assertions = "1.0"`
+    }
+  },
+  'dep-anywhere-build': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[build-dependencies]
+cc = "1.0"`
+    }
+  },
+  'dep-nowhere': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.0"
+
+[build-dependencies]
+cc = "1.0"`
+    }
+  },
+  'dep-anywhere-no-arg': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`
+    }
+  },
+
+  // crates_not_installed() fixtures
+  'crates-not-installed-basic': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.0"`
+    }
+  },
+  'crates-all-installed': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+tokio = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.0"`
+    }
+  },
+  'crates-none-installed': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+
+[dev-dependencies]`
+    }
+  },
+  'crates-in-deps': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+tokio = "1.0"`
+    }
+  },
+  'crates-in-devdeps': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dev-dependencies]
+pretty_assertions = "1.0"
+criterion = "0.5"`
+    }
+  },
+  'crates-in-builddeps': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[build-dependencies]
+cc = "1.0"
+bindgen = "0.65"`
+    }
+  },
+  'crates-mixed-sections': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.0"
+
+[build-dependencies]
+cc = "1.0"`
+    }
+  },
+  'crates-single-arg': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]`
+    }
+  },
+  'crates-multi-args': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]`
+    }
+  },
+  'crates-by-ref': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"`
+    }
+  },
+  'crates-empty-input': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]`
+    }
+  },
+  'crates-naming': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde_json = "1.0"`
+    }
+  },
+  'crates-no-cargo': {
+    files: {
+      'readme.txt': 'no Cargo.toml'
+    }
+  },
+  'crates-no-dep-sections': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+version = "0.1.0"`
+    }
+  },
+  'crates-order': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"`
+    }
+  },
+
+  // get_rs_linter_by_config() fixtures
+  'linter-config-clippy': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`,
+      'clippy.toml': 'msrv = "1.70"'
+    }
+  },
+  'linter-config-dot-clippy': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`,
+      '.clippy.toml': 'msrv = "1.70"'
+    }
+  },
+  'linter-config-dylint': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`,
+      'dylint.toml': '[workspace]'
+    }
+  },
+  'linter-config-none': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`
+    }
+  },
+  'linter-config-repo-root': {
+    git: true,
+    subdirs: ['crates/app'],
+    files: {
+      'Cargo.toml': `[workspace]
+members = ["crates/*"]`,
+      'clippy.toml': 'msrv = "1.70"'
+    },
+    commits: [
+      { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
+    ]
+  },
+
+  // get_rs_formatter_by_config() fixtures
+  'formatter-config-rustfmt': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`,
+      'rustfmt.toml': 'max_width = 100'
+    }
+  },
+  'formatter-config-dot-rustfmt': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`,
+      '.rustfmt.toml': 'max_width = 100'
+    }
+  },
+  'formatter-config-none': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"`
+    }
+  },
+  'formatter-config-repo-root': {
+    git: true,
+    subdirs: ['crates/app'],
+    files: {
+      'Cargo.toml': `[workspace]
+members = ["crates/*"]`,
+      'rustfmt.toml': 'max_width = 100'
+    },
+    commits: [
+      { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
+    ]
+  },
+
+  // is_cargo_workspace() fixtures
+  'is-workspace-yes': {
+    files: {
+      'Cargo.toml': `[workspace]
+members = [
+  "crates/*"
+]
+
+[workspace.dependencies]
+serde = "1.0"`
+    }
+  },
+  'is-workspace-no': {
+    files: {
+      'Cargo.toml': `[package]
+name = "test"
+version = "0.1.0"
+
+[dependencies]
+serde = "1.0"`
+    }
+  },
+  'is-workspace-subdir': {
+    git: true,
+    subdirs: ['crates/app'],
+    files: {
+      'Cargo.toml': `[workspace]
+members = ["crates/*"]`,
+      'crates/app/Cargo.toml': `[package]
+name = "app"`
+    },
+    commits: [
+      { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
+    ]
+  },
+  'is-workspace-empty': {
+    files: {
+      'Cargo.toml': ''
+    }
+  }
+}
+
+// =============================================================================
+// TESTS
+// =============================================================================
+
+describe("lang-rs", { concurrent: true }, () => {
   const testDir = join(process.cwd(), 'tests', '.tmp-lang-rs-test')
+
+  // Pre-computed fixture paths for easy access in tests
+  const dirs: Record<string, string> = {}
 
   beforeAll(() => {
     // Clean up from previous runs and create test directory
@@ -47,6 +596,45 @@ describe("lang-rs", () => {
       rmSync(testDir, { recursive: true, force: true })
     }
     mkdirSync(testDir, { recursive: true })
+
+    // Create all fixtures
+    for (const [name, fixture] of Object.entries(FIXTURES)) {
+      const fixtureDir = join(testDir, name)
+      dirs[name] = fixtureDir
+
+      // Create subdirectories first if specified
+      if (fixture.subdirs) {
+        for (const subdir of fixture.subdirs) {
+          mkdirSync(join(fixtureDir, subdir), { recursive: true })
+        }
+      } else {
+        mkdirSync(fixtureDir, { recursive: true })
+      }
+
+      // Initialize git repo if needed (before writing files that need to be committed)
+      const isGitFixture = 'git' in fixture && fixture.git
+      if (isGitFixture) {
+        initGitRepo(fixtureDir)
+      }
+
+      // Write all files
+      for (const [filename, content] of Object.entries(fixture.files)) {
+        const filePath = join(fixtureDir, filename)
+        const fileDir = join(filePath, '..')
+        if (!existsSync(fileDir)) {
+          mkdirSync(fileDir, { recursive: true })
+        }
+        writeFileSync(filePath, content)
+      }
+
+      // Create commits if specified
+      if (isGitFixture && (fixture as GitFixture).commits) {
+        for (const commit of (fixture as GitFixture).commits!) {
+          execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
+          execSync(`git commit -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
+        }
+      }
+    }
   })
 
   afterAll(() => {
@@ -58,385 +646,156 @@ describe("lang-rs", () => {
 
   describe('get_cargo_toml()', () => {
     it('should return Cargo.toml content from current directory', () => {
-      const cargoDir = join(testDir, 'cargo-cwd')
-      mkdirSync(cargoDir, { recursive: true })
-      const cargoContent = `[package]
-name = "test-crate"
-version = "0.1.0"
-edition = "2021"`
-      writeFileSync(join(cargoDir, 'Cargo.toml'), cargoContent)
-
-      const result = runInTestDir('bash', cargoDir, 'get_cargo_toml')
+      const result = runInTestDir('bash', dirs['cargo-cwd'], 'get_cargo_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(cargoContent)
+      expect(result.stdout).toContain('name = "test-crate"')
     })
 
     it('should return Cargo.toml content from repo root when not in cwd', () => {
-      const repoDir = join(testDir, 'cargo-repo-root')
-      const subDir = join(repoDir, 'crates', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-      const cargoContent = `[package]
-name = "root-crate"
-version = "2.0.0"`
-      writeFileSync(join(repoDir, 'Cargo.toml'), cargoContent)
-      commitFile(repoDir, 'Cargo.toml', cargoContent, 'init')
-
+      const subDir = join(dirs['cargo-repo-root'], 'crates', 'app')
       const result = runInTestDir('bash', subDir, 'get_cargo_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(cargoContent)
+      expect(result.stdout).toContain('name = "root-crate"')
     })
 
     it('should return 1 when no Cargo.toml exists', () => {
-      const tmpEmptyDir = `/tmp/cargo-empty-${Date.now()}`
-      mkdirSync(tmpEmptyDir, { recursive: true })
-      writeFileSync(join(tmpEmptyDir, 'readme.txt'), 'no Cargo.toml here')
-
-      try {
-        const result = runInTestDir('bash', tmpEmptyDir, 'get_cargo_toml')
-        expect(result.code).toBe(1)
-      } finally {
-        rmSync(tmpEmptyDir, { recursive: true, force: true })
-      }
+      const result = runInTestDir('bash', dirs['cargo-empty'], 'get_cargo_toml')
+      expect(result.code).toBe(1)
     })
 
     it('should prefer cwd Cargo.toml over repo root', () => {
-      const repoDir = join(testDir, 'cargo-prefer-cwd')
-      const subDir = join(repoDir, 'crates', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-
-      const rootCargo = `[package]
-name = "root-crate"`
-      const subCargo = `[package]
-name = "sub-crate"`
-      writeFileSync(join(repoDir, 'Cargo.toml'), rootCargo)
-      writeFileSync(join(subDir, 'Cargo.toml'), subCargo)
-      commitFile(repoDir, 'Cargo.toml', rootCargo, 'init')
-
+      const subDir = join(dirs['cargo-prefer-cwd'], 'crates', 'app')
       const result = runInTestDir('bash', subDir, 'get_cargo_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(subCargo)
+      expect(result.stdout).toContain('name = "sub-crate"')
     })
 
     it('should handle Cargo.toml with special characters', () => {
-      const cargoDir = join(testDir, 'cargo-special')
-      mkdirSync(cargoDir, { recursive: true })
-      const cargoContent = `[package]
-name = "test"
-description = "A \\"quoted\\" value"`
-      writeFileSync(join(cargoDir, 'Cargo.toml'), cargoContent)
-
-      const result = runInTestDir('bash', cargoDir, 'get_cargo_toml')
+      const result = runInTestDir('bash', dirs['cargo-special'], 'get_cargo_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(cargoContent)
+      expect(result.stdout).toContain('description')
     })
   })
 
   describe('has_dependency()', () => {
     it('should return 0 when dependency exists in inline format', () => {
-      const cargoDir = join(testDir, 'has-dep-inline')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-tokio = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency "serde"')
+      const result = runInTestDir('bash', dirs['has-dep-inline'], 'has_dependency "serde"')
       expect(result.code).toBe(0)
     })
 
     it('should return 0 when dependency exists in table format', () => {
-      const cargoDir = join(testDir, 'has-dep-table')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-tokio = { version = "1.0", features = ["full"] }`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency "tokio"')
+      const result = runInTestDir('bash', dirs['has-dep-table'], 'has_dependency "tokio"')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when dependency does not exist', () => {
-      const cargoDir = join(testDir, 'no-dep')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency "tokio"')
+      const result = runInTestDir('bash', dirs['no-dep'], 'has_dependency "tokio"')
       expect(result.code).toBe(1)
     })
 
     it('should return 1 when dependencies section does not exist', () => {
-      const cargoDir = join(testDir, 'no-deps-section')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-version = "0.1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency "serde"')
+      const result = runInTestDir('bash', dirs['no-deps-section'], 'has_dependency "serde"')
       expect(result.code).toBe(1)
     })
 
     it('should not find dev-dependency in dependencies', () => {
-      const cargoDir = join(testDir, 'dev-not-in-deps')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-
-[dev-dependencies]
-pretty_assertions = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency "pretty_assertions"')
+      const result = runInTestDir('bash', dirs['dev-not-in-deps'], 'has_dependency "pretty_assertions"')
       expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
-      const cargoDir = join(testDir, 'dep-no-arg')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency')
+      const result = runInTestDir('bash', dirs['dep-no-arg'], 'has_dependency')
       expect(result.code).not.toBe(0)
     })
   })
 
   describe('has_dev_dependency()', () => {
     it('should return 0 when dev-dependency exists in inline format', () => {
-      const cargoDir = join(testDir, 'has-dev-dep-inline')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-criterion = "0.5"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dev_dependency "pretty_assertions"')
+      const result = runInTestDir('bash', dirs['has-dev-dep-inline'], 'has_dev_dependency "pretty_assertions"')
       expect(result.code).toBe(0)
     })
 
     it('should return 0 when dev-dependency exists in table format', () => {
-      const cargoDir = join(testDir, 'has-dev-dep-table')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dev_dependency "criterion"')
+      const result = runInTestDir('bash', dirs['has-dev-dep-table'], 'has_dev_dependency "criterion"')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when dev-dependency does not exist', () => {
-      const cargoDir = join(testDir, 'no-dev-dep')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dev_dependency "criterion"')
+      const result = runInTestDir('bash', dirs['no-dev-dep'], 'has_dev_dependency "criterion"')
       expect(result.code).toBe(1)
     })
 
     it('should return 1 when dev-dependencies section does not exist', () => {
-      const cargoDir = join(testDir, 'no-dev-deps-section')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dev_dependency "pretty_assertions"')
+      const result = runInTestDir('bash', dirs['no-dev-deps-section'], 'has_dev_dependency "pretty_assertions"')
       expect(result.code).toBe(1)
     })
 
     it('should not find dependency in dev-dependencies', () => {
-      const cargoDir = join(testDir, 'dep-not-in-dev')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dev_dependency "serde"')
+      const result = runInTestDir('bash', dirs['dep-not-in-dev'], 'has_dev_dependency "serde"')
       expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
-      const cargoDir = join(testDir, 'dev-dep-no-arg')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dev_dependency')
+      const result = runInTestDir('bash', dirs['dev-dep-no-arg'], 'has_dev_dependency')
       expect(result.code).not.toBe(0)
     })
   })
 
   describe('has_build_dependency()', () => {
     it('should return 0 when build-dependency exists in inline format', () => {
-      const cargoDir = join(testDir, 'has-build-dep-inline')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"
-bindgen = "0.65"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_build_dependency "cc"')
+      const result = runInTestDir('bash', dirs['has-build-dep-inline'], 'has_build_dependency "cc"')
       expect(result.code).toBe(0)
     })
 
     it('should return 0 when build-dependency exists in table format', () => {
-      const cargoDir = join(testDir, 'has-build-dep-table')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[build-dependencies]
-bindgen = { version = "0.65", features = ["runtime"] }`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_build_dependency "bindgen"')
+      const result = runInTestDir('bash', dirs['has-build-dep-table'], 'has_build_dependency "bindgen"')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when build-dependency does not exist', () => {
-      const cargoDir = join(testDir, 'no-build-dep')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_build_dependency "bindgen"')
+      const result = runInTestDir('bash', dirs['no-build-dep'], 'has_build_dependency "bindgen"')
       expect(result.code).toBe(1)
     })
 
     it('should return 1 when build-dependencies section does not exist', () => {
-      const cargoDir = join(testDir, 'no-build-deps-section')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_build_dependency "cc"')
+      const result = runInTestDir('bash', dirs['no-build-deps-section'], 'has_build_dependency "cc"')
       expect(result.code).toBe(1)
     })
 
     it('should not find dependency in build-dependencies', () => {
-      const cargoDir = join(testDir, 'dep-not-in-build')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[build-dependencies]`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_build_dependency "serde"')
+      const result = runInTestDir('bash', dirs['dep-not-in-build'], 'has_build_dependency "serde"')
       expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
-      const cargoDir = join(testDir, 'build-dep-no-arg')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_build_dependency')
+      const result = runInTestDir('bash', dirs['build-dep-no-arg'], 'has_build_dependency')
       expect(result.code).not.toBe(0)
     })
   })
 
   describe('has_dependency_anywhere()', () => {
     it('should find dependency in [dependencies] section', () => {
-      const cargoDir = join(testDir, 'dep-anywhere-deps')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency_anywhere "serde"')
+      const result = runInTestDir('bash', dirs['dep-anywhere-deps'], 'has_dependency_anywhere "serde"')
       expect(result.code).toBe(0)
     })
 
     it('should find dependency in [dev-dependencies] section', () => {
-      const cargoDir = join(testDir, 'dep-anywhere-dev')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency_anywhere "pretty_assertions"')
+      const result = runInTestDir('bash', dirs['dep-anywhere-dev'], 'has_dependency_anywhere "pretty_assertions"')
       expect(result.code).toBe(0)
     })
 
     it('should find dependency in [build-dependencies] section', () => {
-      const cargoDir = join(testDir, 'dep-anywhere-build')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency_anywhere "cc"')
+      const result = runInTestDir('bash', dirs['dep-anywhere-build'], 'has_dependency_anywhere "cc"')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when dependency not in any section', () => {
-      const cargoDir = join(testDir, 'dep-nowhere')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-
-[build-dependencies]
-cc = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency_anywhere "tokio"')
+      const result = runInTestDir('bash', dirs['dep-nowhere'], 'has_dependency_anywhere "tokio"')
       expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
-      const cargoDir = join(testDir, 'dep-anywhere-no-arg')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-
-      const result = runInTestDir('bash', cargoDir, 'has_dependency_anywhere')
+      const result = runInTestDir('bash', dirs['dep-anywhere-no-arg'], 'has_dependency_anywhere')
       expect(result.code).not.toBe(0)
     })
   })
@@ -444,52 +803,20 @@ name = "test"`)
   describe('crates_not_installed()', () => {
     describe('basic functionality', () => {
       it('should return crates not in any dependency section', () => {
-        const cargoDir = join(testDir, 'crates-not-installed-basic')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "tokio" "axum" "clap"')
+        const result = runInTestDir('bash', dirs['crates-not-installed-basic'], 'crates_not_installed "tokio" "axum" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['tokio', 'axum', 'clap'])
       })
 
       it('should return empty when all crates are installed', () => {
-        const cargoDir = join(testDir, 'crates-all-installed')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-tokio = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "serde" "tokio" "pretty_assertions"')
+        const result = runInTestDir('bash', dirs['crates-all-installed'], 'crates_not_installed "serde" "tokio" "pretty_assertions"')
         expect(result.code).toBe(0)
         expect(result.stdout.trim()).toBe('')
       })
 
       it('should return all crates when none are installed', () => {
-        const cargoDir = join(testDir, 'crates-none-installed')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-
-[dev-dependencies]`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "serde" "tokio" "clap"')
+        const result = runInTestDir('bash', dirs['crates-none-installed'], 'crates_not_installed "serde" "tokio" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['serde', 'tokio', 'clap'])
@@ -498,69 +825,28 @@ name = "test"
 
     describe('dependency section coverage', () => {
       it('should filter out crates in dependencies', () => {
-        const cargoDir = join(testDir, 'crates-in-deps')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-tokio = "1.0"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "serde" "tokio" "clap"')
+        const result = runInTestDir('bash', dirs['crates-in-deps'], 'crates_not_installed "serde" "tokio" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['clap'])
       })
 
       it('should filter out crates in dev-dependencies', () => {
-        const cargoDir = join(testDir, 'crates-in-devdeps')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-criterion = "0.5"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "pretty_assertions" "criterion" "clap"')
+        const result = runInTestDir('bash', dirs['crates-in-devdeps'], 'crates_not_installed "pretty_assertions" "criterion" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['clap'])
       })
 
       it('should filter out crates in build-dependencies', () => {
-        const cargoDir = join(testDir, 'crates-in-builddeps')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"
-bindgen = "0.65"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "cc" "bindgen" "clap"')
+        const result = runInTestDir('bash', dirs['crates-in-builddeps'], 'crates_not_installed "cc" "bindgen" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['clap'])
       })
 
       it('should handle crates mixed across all sections', () => {
-        const cargoDir = join(testDir, 'crates-mixed-sections')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-
-[build-dependencies]
-cc = "1.0"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "serde" "pretty_assertions" "cc" "tokio" "clap"')
+        const result = runInTestDir('bash', dirs['crates-mixed-sections'], 'crates_not_installed "serde" "pretty_assertions" "cc" "tokio" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['tokio', 'clap'])
@@ -569,62 +855,33 @@ cc = "1.0"`)
 
     describe('input handling', () => {
       it('should handle single crate argument', () => {
-        const cargoDir = join(testDir, 'crates-single-arg')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "tokio"')
+        const result = runInTestDir('bash', dirs['crates-single-arg'], 'crates_not_installed "tokio"')
         expect(result.code).toBe(0)
         expect(result.stdout.trim()).toBe('tokio')
       })
 
       it('should handle multiple crate arguments', () => {
-        const cargoDir = join(testDir, 'crates-multi-args')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "tokio" "axum" "clap"')
+        const result = runInTestDir('bash', dirs['crates-multi-args'], 'crates_not_installed "tokio" "axum" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['tokio', 'axum', 'clap'])
       })
 
       it('should handle pass-by-reference (array name) and modify in-place', () => {
-        const cargoDir = join(testDir, 'crates-by-ref')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`)
-
         // Pass-by-reference should modify array in-place, not output to stdout
         const script = `
           declare -a my_crates=("serde" "tokio" "clap")
           crates_not_installed my_crates
           echo "\${my_crates[@]}"
         `
-        const result = runInTestDir('bash', cargoDir, script)
+        const result = runInTestDir('bash', dirs['crates-by-ref'], script)
         expect(result.code).toBe(0)
         // Array should now only contain not-installed crates
         expect(result.stdout).toBe('tokio clap')
       })
 
       it('should return empty output for empty input', () => {
-        const cargoDir = join(testDir, 'crates-empty-input')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed')
+        const result = runInTestDir('bash', dirs['crates-empty-input'], 'crates_not_installed')
         expect(result.code).toBe(0)
         expect(result.stdout.trim()).toBe('')
       })
@@ -632,48 +889,26 @@ name = "test"
 
     describe('edge cases', () => {
       it('should handle crates with hyphens and underscores', () => {
-        const cargoDir = join(testDir, 'crates-naming')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde_json = "1.0"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "serde_json" "tokio-util" "clap"')
+        const result = runInTestDir('bash', dirs['crates-naming'], 'crates_not_installed "serde_json" "tokio-util" "clap"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['tokio-util', 'clap'])
       })
 
       it('should handle no Cargo.toml file', () => {
-        const tmpEmptyDir = `/tmp/crates-no-cargo-${Date.now()}`
-        mkdirSync(tmpEmptyDir, { recursive: true })
-        writeFileSync(join(tmpEmptyDir, 'readme.txt'), 'no Cargo.toml')
-
-        try {
-          const result = runInTestDir('bash', tmpEmptyDir, 'crates_not_installed "serde" "tokio"')
-          // Should return all crates as not installed (or error)
-          if (result.code === 0) {
-            const lines = result.stdout.trim().split('\n').filter(l => l)
-            expect(lines).toEqual(['serde', 'tokio'])
-          } else {
-            // Error is also acceptable behavior
-            expect(result.code).not.toBe(0)
-          }
-        } finally {
-          rmSync(tmpEmptyDir, { recursive: true, force: true })
+        const result = runInTestDir('bash', dirs['crates-no-cargo'], 'crates_not_installed "serde" "tokio"')
+        // Should return all crates as not installed (or error)
+        if (result.code === 0) {
+          const lines = result.stdout.trim().split('\n').filter(l => l)
+          expect(lines).toEqual(['serde', 'tokio'])
+        } else {
+          // Error is also acceptable behavior
+          expect(result.code).not.toBe(0)
         }
       })
 
       it('should handle Cargo.toml with no dependency sections', () => {
-        const cargoDir = join(testDir, 'crates-no-dep-sections')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-version = "0.1.0"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "serde" "tokio"')
+        const result = runInTestDir('bash', dirs['crates-no-dep-sections'], 'crates_not_installed "serde" "tokio"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['serde', 'tokio'])
@@ -682,15 +917,7 @@ version = "0.1.0"`)
 
     describe('output format', () => {
       it('should preserve input order in output', () => {
-        const cargoDir = join(testDir, 'crates-order')
-        mkdirSync(cargoDir, { recursive: true })
-        writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`)
-
-        const result = runInTestDir('bash', cargoDir, 'crates_not_installed "zebra" "apple" "mango" "serde"')
+        const result = runInTestDir('bash', dirs['crates-order'], 'crates_not_installed "zebra" "apple" "mango" "serde"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['zebra', 'apple', 'mango'])
@@ -700,61 +927,30 @@ serde = "1.0"`)
 
   describe('get_rs_linter_by_config()', () => {
     it('should detect clippy.toml', () => {
-      const cargoDir = join(testDir, 'linter-config-clippy')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-      writeFileSync(join(cargoDir, 'clippy.toml'), 'msrv = "1.70"')
-
-      const result = runInTestDir('bash', cargoDir, 'get_rs_linter_by_config')
+      const result = runInTestDir('bash', dirs['linter-config-clippy'], 'get_rs_linter_by_config')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('clippy')
     })
 
     it('should detect .clippy.toml', () => {
-      const cargoDir = join(testDir, 'linter-config-dot-clippy')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-      writeFileSync(join(cargoDir, '.clippy.toml'), 'msrv = "1.70"')
-
-      const result = runInTestDir('bash', cargoDir, 'get_rs_linter_by_config')
+      const result = runInTestDir('bash', dirs['linter-config-dot-clippy'], 'get_rs_linter_by_config')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('clippy')
     })
 
     it('should detect dylint.toml', () => {
-      const cargoDir = join(testDir, 'linter-config-dylint')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-      writeFileSync(join(cargoDir, 'dylint.toml'), '[workspace]')
-
-      const result = runInTestDir('bash', cargoDir, 'get_rs_linter_by_config')
+      const result = runInTestDir('bash', dirs['linter-config-dylint'], 'get_rs_linter_by_config')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('dylint')
     })
 
     it('should return 1 when no linter config found', () => {
-      const cargoDir = join(testDir, 'linter-config-none')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-
-      const result = runInTestDir('bash', cargoDir, 'get_rs_linter_by_config')
+      const result = runInTestDir('bash', dirs['linter-config-none'], 'get_rs_linter_by_config')
       expect(result.code).toBe(1)
     })
 
     it('should detect from repo root when in subdirectory', () => {
-      const repoDir = join(testDir, 'linter-config-repo-root')
-      const subDir = join(repoDir, 'crates', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-      writeFileSync(join(repoDir, 'Cargo.toml'), `[workspace]
-members = ["crates/*"]`)
-      writeFileSync(join(repoDir, 'clippy.toml'), 'msrv = "1.70"')
-      commitFile(repoDir, 'Cargo.toml', '[workspace]', 'init')
-
+      const subDir = join(dirs['linter-config-repo-root'], 'crates', 'app')
       const result = runInTestDir('bash', subDir, 'get_rs_linter_by_config')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('clippy')
@@ -763,49 +959,24 @@ members = ["crates/*"]`)
 
   describe('get_rs_formatter_by_config()', () => {
     it('should detect rustfmt.toml', () => {
-      const cargoDir = join(testDir, 'formatter-config-rustfmt')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-      writeFileSync(join(cargoDir, 'rustfmt.toml'), 'max_width = 100')
-
-      const result = runInTestDir('bash', cargoDir, 'get_rs_formatter_by_config')
+      const result = runInTestDir('bash', dirs['formatter-config-rustfmt'], 'get_rs_formatter_by_config')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('rustfmt')
     })
 
     it('should detect .rustfmt.toml', () => {
-      const cargoDir = join(testDir, 'formatter-config-dot-rustfmt')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-      writeFileSync(join(cargoDir, '.rustfmt.toml'), 'max_width = 100')
-
-      const result = runInTestDir('bash', cargoDir, 'get_rs_formatter_by_config')
+      const result = runInTestDir('bash', dirs['formatter-config-dot-rustfmt'], 'get_rs_formatter_by_config')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('rustfmt')
     })
 
     it('should return 1 when no formatter config found', () => {
-      const cargoDir = join(testDir, 'formatter-config-none')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"`)
-
-      const result = runInTestDir('bash', cargoDir, 'get_rs_formatter_by_config')
+      const result = runInTestDir('bash', dirs['formatter-config-none'], 'get_rs_formatter_by_config')
       expect(result.code).toBe(1)
     })
 
     it('should detect from repo root when in subdirectory', () => {
-      const repoDir = join(testDir, 'formatter-config-repo-root')
-      const subDir = join(repoDir, 'crates', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-      writeFileSync(join(repoDir, 'Cargo.toml'), `[workspace]
-members = ["crates/*"]`)
-      writeFileSync(join(repoDir, 'rustfmt.toml'), 'max_width = 100')
-      commitFile(repoDir, 'Cargo.toml', '[workspace]', 'init')
-
+      const subDir = join(dirs['formatter-config-repo-root'], 'crates', 'app')
       const result = runInTestDir('bash', subDir, 'get_rs_formatter_by_config')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('rustfmt')
@@ -814,55 +985,23 @@ members = ["crates/*"]`)
 
   describe('is_cargo_workspace()', () => {
     it('should return 0 when [workspace] section exists', () => {
-      const cargoDir = join(testDir, 'is-workspace-yes')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[workspace]
-members = [
-  "crates/*"
-]
-
-[workspace.dependencies]
-serde = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'is_cargo_workspace')
+      const result = runInTestDir('bash', dirs['is-workspace-yes'], 'is_cargo_workspace')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when [workspace] section does not exist', () => {
-      const cargoDir = join(testDir, 'is-workspace-no')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), `[package]
-name = "test"
-version = "0.1.0"
-
-[dependencies]
-serde = "1.0"`)
-
-      const result = runInTestDir('bash', cargoDir, 'is_cargo_workspace')
+      const result = runInTestDir('bash', dirs['is-workspace-no'], 'is_cargo_workspace')
       expect(result.code).toBe(1)
     })
 
     it('should detect workspace from repo root when in subdirectory', () => {
-      const repoDir = join(testDir, 'is-workspace-subdir')
-      const subDir = join(repoDir, 'crates', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-      writeFileSync(join(repoDir, 'Cargo.toml'), `[workspace]
-members = ["crates/*"]`)
-      writeFileSync(join(subDir, 'Cargo.toml'), `[package]
-name = "app"`)
-      commitFile(repoDir, 'Cargo.toml', '[workspace]', 'init')
-
+      const subDir = join(dirs['is-workspace-subdir'], 'crates', 'app')
       const result = runInTestDir('bash', subDir, 'is_cargo_workspace')
       expect(result.code).toBe(0)
     })
 
     it('should handle empty Cargo.toml', () => {
-      const cargoDir = join(testDir, 'is-workspace-empty')
-      mkdirSync(cargoDir, { recursive: true })
-      writeFileSync(join(cargoDir, 'Cargo.toml'), '')
-
-      const result = runInTestDir('bash', cargoDir, 'is_cargo_workspace')
+      const result = runInTestDir('bash', dirs['is-workspace-empty'], 'is_cargo_workspace')
       expect(result.code).toBe(1)
     })
   })

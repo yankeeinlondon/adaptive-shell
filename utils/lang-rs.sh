@@ -81,18 +81,7 @@ _has_cargo_dependency() {
 # of Cargo.toml.
 function has_dependency() {
     local -r dep="${1:?no crate sent into has_dependency()!}"
-
-    local cargo_toml
-    cargo_toml=$(get_cargo_toml) || return 1
-
-    local section_content
-    section_content=$(echo "$cargo_toml" | _extract_toml_section "dependencies")
-
-    if _has_toml_key "$section_content" "$dep"; then
-        return 0
-    else
-        return 1
-    fi
+    _has_cargo_dependency "dependencies" "$dep"
 }
 
 # has_dev_dependency <dep>
@@ -101,18 +90,7 @@ function has_dependency() {
 # of Cargo.toml.
 function has_dev_dependency() {
     local -r dep="${1:?no crate sent into has_dev_dependency()!}"
-
-    local cargo_toml
-    cargo_toml=$(get_cargo_toml) || return 1
-
-    local section_content
-    section_content=$(echo "$cargo_toml" | _extract_toml_section "dev-dependencies")
-
-    if _has_toml_key "$section_content" "$dep"; then
-        return 0
-    else
-        return 1
-    fi
+    _has_cargo_dependency "dev-dependencies" "$dep"
 }
 
 # has_build_dependency <dep>
@@ -121,18 +99,7 @@ function has_dev_dependency() {
 # of Cargo.toml.
 function has_build_dependency() {
     local -r dep="${1:?no crate sent into has_build_dependency()!}"
-
-    local cargo_toml
-    cargo_toml=$(get_cargo_toml) || return 1
-
-    local section_content
-    section_content=$(echo "$cargo_toml" | _extract_toml_section "build-dependencies")
-
-    if _has_toml_key "$section_content" "$dep"; then
-        return 0
-    else
-        return 1
-    fi
+    _has_cargo_dependency "build-dependencies" "$dep"
 }
 
 # has_dependency_anywhere <dep>
@@ -142,11 +109,18 @@ function has_build_dependency() {
 function has_dependency_anywhere() {
     local -r dep="${1:?no crate sent into has_dependency_anywhere()!}"
 
-    if has_dependency "$dep" || has_dev_dependency "$dep" || has_build_dependency "$dep"; then
+    # Cache cargo content to avoid multiple file reads
+    local cargo
+    cargo=$(get_cargo_toml 2>/dev/null) || return 1
+
+    # Check all sections with cached content
+    if _has_cargo_dependency "dependencies" "$dep" "$cargo" || \
+       _has_cargo_dependency "dev-dependencies" "$dep" "$cargo" || \
+       _has_cargo_dependency "build-dependencies" "$dep" "$cargo"; then
         return 0
-    else
-        return 1
     fi
+
+    return 1
 }
 
 # crates_not_installed <crate1> [crate2] ... OR crates_not_installed <array_name>
@@ -319,6 +293,7 @@ function get_rs_formatter_by_config() {
 # Checks if the current project is a Cargo workspace by looking for
 # a [workspace] section in Cargo.toml.
 # Checks CWD first, then repo root if in a git repository.
+# Requires: yq must be installed (checked once at module level)
 function is_cargo_workspace() {
     source "${UTILS}/detection.sh"
 
@@ -327,7 +302,7 @@ function is_cargo_workspace() {
     # Try CWD first
     if [[ -f "./Cargo.toml" ]]; then
         cargo_toml=$(cat "./Cargo.toml")
-        if echo "$cargo_toml" | grep -qE '^\[workspace\]'; then
+        if echo "$cargo_toml" | yq -p toml -e '.workspace' >/dev/null 2>&1; then
             return 0
         fi
     fi
@@ -338,7 +313,7 @@ function is_cargo_workspace() {
         root=$(repo_root ".")
         if [[ -f "${root}/Cargo.toml" ]]; then
             cargo_toml=$(cat "${root}/Cargo.toml")
-            if echo "$cargo_toml" | grep -qE '^\[workspace\]'; then
+            if echo "$cargo_toml" | yq -p toml -e '.workspace' >/dev/null 2>&1; then
                 return 0
             fi
         fi
