@@ -1,3 +1,0 @@
-
-[tool.poetry.dev-dependencies]
-black = "^23.0.0"

@@ -29,25 +29,6 @@ function os_initialized() {
 }
 
 
-function get_nala() {
-    set -e
-
-    base_url="https://deb.volian.org/volian/pool/main/v/volian-archive/"
-    version="0.3.1"
-
-    archive="volian-archive-nala_${version}_all.deb"
-    keyring="volian-archive-keyring_${version}_all.deb"
-
-    wget "${base_url}${archive}" -P /tmp
-    wget "${base_url}${keyring}" -P /tmp
-
-    echo "sudo is required to install the archives, update apt, and install Nala"
-
-    ${SUDO} apt install /tmp/${archive} /tmp/${keyring} -y
-    ${SUDO} apt update
-    ${SUDO} apt install nala -y
-}
-
 # use_allowed_hosts_alias()
 #
 # creates a symbol link to `authorized_keys` in the .config directory
