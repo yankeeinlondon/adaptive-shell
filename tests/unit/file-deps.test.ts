@@ -57,6 +57,7 @@ rgb_text "255 0 0" "red text"
       shell: 'bash',
       encoding: 'utf-8',
       cwd: process.cwd(),
+      timeout: 30000, // 30 second timeout to prevent CI hangs
       env: {
         ...process.env,
         ROOT: process.cwd(),

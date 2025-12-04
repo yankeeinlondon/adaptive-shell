@@ -49,15 +49,17 @@ retain_prefixes_val() {
 # and returns only those items which _start with_ one
 # of the prefixes provided.
 retain_prefixes_ref() {
-  local -n _arr="$1"; shift
+  local arr_name="$1"; shift
   local it p match
-  for it in "${_arr[@]}"; do
+
+  # Use eval for Bash 3.x compatibility (avoid local -n nameref)
+  eval 'for it in "${'"$arr_name"'[@]}"; do
     match=0
     for p in "$@"; do
       [[ $it == ${p}* ]] && match=1 && break
     done
-    (( match )) && printf '%s\n' "$it"
-  done
+    (( match )) && printf "%s\n" "$it"
+  done'
 }
 
 
@@ -90,15 +92,17 @@ filter_prefixes_val() {
 # Filters out the items in the `variable_ref` list
 # which start with any of the string prefixes provided.
 filter_prefixes_ref() {
-  local -n _arr="$1"; shift
+  local arr_name="$1"; shift
   local it p match
-  for it in "${_arr[@]}"; do
+
+  # Use eval for Bash 3.x compatibility (avoid local -n nameref)
+  eval 'for it in "${'"$arr_name"'[@]}"; do
     match=0
     for p in "$@"; do
       [[ $it == ${p}* ]] && match=1 && break
     done
-    (( ! match )) && printf '%s\n' "$it"
-  done
+    (( ! match )) && printf "%s\n" "$it"
+  done'
 }
 
 
@@ -107,13 +111,14 @@ filter_prefixes_ref() {
 # Checks if the array referenced by `variable_ref` contains
 # the `search_value`. Returns 0 if found, 1 if not found.
 list_contains_ref() {
-    local -n _arr="$1"
+    local arr_name="$1"
     local -r find="$2"
     local it
 
-    for it in "${_arr[@]}"; do
+    # Use eval for Bash 3.x compatibility (avoid local -n nameref)
+    eval 'for it in "${'"$arr_name"'[@]}"; do
         [[ "$it" == "$find" ]] && return 0
-    done
+    done'
     return 1
 }
 

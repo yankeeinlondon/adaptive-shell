@@ -1,0 +1,6 @@
+
+[project]
+dependencies = ["requests"]
+
+[project.optional-dependencies]
+dev = ["pytest"]

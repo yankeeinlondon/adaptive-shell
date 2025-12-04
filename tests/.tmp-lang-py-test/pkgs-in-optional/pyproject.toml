@@ -1,0 +1,4 @@
+
+[project.optional-dependencies]
+dev = ["pytest", "black"]
+test = ["pytest-cov"]

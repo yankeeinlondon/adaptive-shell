@@ -1,0 +1,6 @@
+
+[project]
+name = "test"
+
+[tool.black]
+line-length = 88

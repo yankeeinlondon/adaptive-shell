@@ -4,6 +4,15 @@
 [[ -n "${__TYPEOF_SH_LOADED:-}" ]] && declare -f "typeof" > /dev/null && return
 __TYPEOF_SH_LOADED=1
 
+# Check for Bash 4.3+ features (namerefs and parameter transformation)
+# These features are required for advanced type checking functions
+__TYPEOF_BASH_MAJOR="${BASH_VERSINFO[0]:-0}"
+__TYPEOF_BASH_MINOR="${BASH_VERSINFO[1]:-0}"
+__TYPEOF_HAS_NAMEREF=0
+if (( __TYPEOF_BASH_MAJOR > 4 || (__TYPEOF_BASH_MAJOR == 4 && __TYPEOF_BASH_MINOR >= 3) )); then
+    __TYPEOF_HAS_NAMEREF=1
+fi
+
 # Stub functions for not-yet-implemented features
 # TODO: Implement these properly
 is_list() { return 1; }
@@ -21,6 +30,9 @@ OBJECT_PREFIX="${OBJECT_PREFIX:-\{}"
 OBJECT_SUFFIX="${OBJECT_SUFFIX:-\}}"
 
 function is_bound() {
+    # Requires Bash 4.3+ for nameref support
+    (( __TYPEOF_HAS_NAMEREF )) || return 1
+
     allow_errors
     local -n __test_by_ref=$1 2>/dev/null || { debug "is_bound" "unbounded ref";  return 1; }
 
@@ -47,6 +59,18 @@ function is_bound() {
 
 
 function typeof() {
+    # On Bash < 4.3, skip nameref logic and treat as string value
+    if (( ! __TYPEOF_HAS_NAMEREF )); then
+        if is_numeric "$1"; then
+            echo "number"
+        elif is_empty "${1:-}"; then
+            echo "empty"
+        else
+            echo "string"
+        fi
+        return 0
+    fi
+
     allow_errors
     local -n _var_type=$1 2>/dev/null
     catch_errors
@@ -95,6 +119,14 @@ function typeof() {
 
 
 function is_not_typeof() {
+    # On Bash < 4.3, use simple string comparison
+    if (( ! __TYPEOF_HAS_NAMEREF )); then
+        local -r test="${2:-string}"
+        local -r val_type="$(typeof "$1")"
+        [[ "$val_type" != "$test" ]]
+        return $?
+    fi
+
     allow_errors
     local -n _var_reference_=$1
     local -r test="${2:-is_not_typeof(var,type) did not provide a type!}"
@@ -127,14 +159,21 @@ function is_not_typeof() {
 
 
 function is_typeof() {
-    allow_errors
-    local -n _var_reference_=$1
     local -r test="$2"
 
     if is_empty "$test"; then
         panic "Empty value passed in as type to test for in is_typeof(var,test)!"
     fi
 
+    # On Bash < 4.3, use simple string comparison
+    if (( ! __TYPEOF_HAS_NAMEREF )); then
+        local -r val_type="$(typeof "$1")"
+        [[ "$val_type" == "$test" ]]
+        return $?
+    fi
+
+    allow_errors
+    local -n _var_reference_=$1
     catch_errors
 
     if is_bound _var_reference_; then
@@ -173,6 +212,9 @@ function is_typeof() {
 # Note: this check only works after the variable passed in
 # is actually set and set -u is in effect
 function is_assoc_array() {
+    # Requires Bash 4.3+ for nameref and parameter transformation
+    (( __TYPEOF_HAS_NAMEREF )) || return 1
+
     local -r var="$1"
     if has_characters '!@#$%^&()_+' "$var"; then
         return 1;
@@ -244,6 +286,9 @@ function not_empty() {
 # Note: this check only works after the variable passed in
 # is actually set and set -u is in effect
 function is_array() {
+    # Requires Bash 4.3+ for nameref and parameter transformation
+    (( __TYPEOF_HAS_NAMEREF )) || return 1
+
     allow_errors
     local -n __var__=$1 2>/dev/null
     local -r test=${__var__@a} 2>/dev/null
@@ -297,6 +342,17 @@ function is_shell_alias() {
 #
 # tests whether <candidate> is an object and returns 0/1
 function is_object() {
+    # On Bash < 4.3, check string value directly
+    if (( ! __TYPEOF_HAS_NAMEREF )); then
+        local var="$1"
+        if not_empty "$var" && starts_with "${OBJECT_PREFIX}" "${var}"; then
+            if ends_with "${OBJECT_SUFFIX}" "${var}"; then
+                return 0
+            fi
+        fi
+        return 1
+    fi
+
     allow_errors
     local -n candidate=$1 2>/dev/null
     catch_errors

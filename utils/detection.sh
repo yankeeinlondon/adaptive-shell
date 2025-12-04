@@ -64,12 +64,16 @@ function is_pve_host() {
 
 # is_pve_container
 #
-# Test whether current host is an LXC container or VM
+# Test whether current host is an LXC container or KVM VM
 # running on Proxmox VE with API access available.
 # Returns 0 if true, 1 if false.
+#
+# Note: Uses is_kvm_vm() instead of is_vm() to specifically detect
+# Proxmox/KVM virtualization rather than any hypervisor (which would
+# match Azure, VMware, Hyper-V, etc.)
 function is_pve_container() {
-    # Must be running in a container or VM
-    if ! is_lxc && ! is_vm; then
+    # Must be running in an LXC container or KVM VM (Proxmox-specific)
+    if ! is_lxc && ! is_kvm_vm; then
         return 1
     fi
 
@@ -136,8 +140,11 @@ is_xonsh(){ [[ "$(get_shell)" == "xonsh" ]]; }
 
 # is_docker()
 #
-# Check for Docker container
+# Check for Docker container (Linux only)
 is_docker() {
+    # These checks only apply to Linux
+    [[ "$(uname -s)" != "Linux" ]] && return 1
+
     # Check common Docker indicators
     if [ -f /.dockerenv ] ||
        { [ -f /proc/1/cgroup ] && grep -qi "docker\|kubepods" /proc/1/cgroup; }; then
@@ -146,8 +153,13 @@ is_docker() {
     return 1
 }
 
-# Check for LXC container
+# is_lxc()
+#
+# Check for LXC container (Linux only)
 is_lxc() {
+    # These checks only apply to Linux
+    [[ "$(uname -s)" != "Linux" ]] && return 1
+
     # Check common LXC indicators
     if grep -q 'container=lxc' /proc/1/environ 2>/dev/null ||
        [ -f /run/.containerenv ] ||
@@ -159,8 +171,13 @@ is_lxc() {
 
 # is_vm
 #
-# Check for VM (any hypervisor)
+# Check for VM (any hypervisor) - Linux only
+# Note: This detects Linux VMs via /proc and /sys interfaces.
+# Windows/macOS have different virtualization detection mechanisms.
 is_vm() {
+    # These checks only apply to Linux
+    [[ "$(uname -s)" != "Linux" ]] && return 1
+
     # Check common VM indicators
     if grep -q 'hypervisor' /proc/cpuinfo 2>/dev/null ||
        ( [ -f /sys/class/dmi/id/product_name ] &&
@@ -172,10 +189,13 @@ is_vm() {
 
 # is_kvm_vm
 #
-# Check if running in a KVM/QEMU VM specifically.
+# Check if running in a KVM/QEMU VM specifically (Linux only).
 # This is the virtualization technology used by Proxmox VE,
 # but also by other hypervisors (libvirt, oVirt, OpenStack, etc.)
 is_kvm_vm() {
+    # These checks only apply to Linux
+    [[ "$(uname -s)" != "Linux" ]] && return 1
+
     # Method 1: Use systemd-detect-virt if available (most reliable)
     if command -v systemd-detect-virt >/dev/null 2>&1; then
         local virt_type
