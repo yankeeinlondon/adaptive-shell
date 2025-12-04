@@ -15,8 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check if release
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [[ "${{ github.event.head_commit.message }}" == *"release v"* ]]; then
+          if [[ "$COMMIT_MSG" == *"release v"* ]]; then
             echo "::notice::This is a Release so skipping redundant testing step"
           else
             echo "::notice::Regular commit (not release)"
