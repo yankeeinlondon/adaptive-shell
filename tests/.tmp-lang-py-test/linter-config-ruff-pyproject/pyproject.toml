@@ -1,0 +1,6 @@
+
+[project]
+name = "test"
+
+[tool.ruff]
+line-length = 88

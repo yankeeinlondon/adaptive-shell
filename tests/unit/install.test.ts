@@ -480,6 +480,156 @@ describe('install utilities', () => {
   })
 })
 
+describe('ensure_install()', () => {
+  /**
+   * Helper to run ensure_install tests with mocks
+   */
+  function runEnsureInstall(options: {
+    availableCommands: string[]
+    availableFunctions?: string[]
+    installResult?: 'success' | 'fail'
+    script: string
+  }): { calls: string[]; exitCode: number; output: string } {
+    const { availableCommands, availableFunctions = [], installResult = 'success', script } = options
+
+    const availableCmd = availableCommands.length > 0
+      ? `mock_available_commands ${availableCommands.map(c => `"${c}"`).join(' ')}`
+      : ''
+    const availableFn = availableFunctions.length > 0
+      ? `mock_available_functions ${availableFunctions.map(f => `"${f}"`).join(' ')}`
+      : ''
+
+    // Define a test install function
+    const installFn = installResult === 'success'
+      ? 'test_install_fn() { _mock_record "test_install_fn:called"; return 0; }'
+      : 'test_install_fn() { _mock_record "test_install_fn:called"; return 1; }'
+
+    const fullScript = `
+source utils/install.sh
+source tests/helpers/install-mocks.sh
+${availableCmd}
+${availableFn}
+${installFn}
+${script}
+exit_code=$?
+echo "---CALLS---"
+for call in "\${MOCK_CALLS[@]}"; do
+  echo "$call"
+done
+echo "---EXIT_CODE---"
+echo "$exit_code"
+`
+
+    let output = ''
+    let exitCode = 0
+    try {
+      output = execSync(fullScript, {
+        shell: 'bash',
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          ROOT: process.cwd()
+        }
+      })
+    } catch (error: any) {
+      output = error.stdout?.toString() || ''
+      // Capture exit code from error when script exits early
+      exitCode = error.status ?? 1
+    }
+
+    const lines = output.trim().split('\n')
+
+    // Only parse exit code from output if we didn't get it from an error
+    if (exitCode === 0) {
+      const exitCodeIndex = lines.indexOf('---EXIT_CODE---')
+      if (exitCodeIndex >= 0 && lines[exitCodeIndex + 1]) {
+        exitCode = parseInt(lines[exitCodeIndex + 1], 10) || 0
+      }
+    }
+
+    const callsStartIndex = lines.indexOf('---CALLS---')
+    const exitCodeIndex = lines.indexOf('---EXIT_CODE---')
+    const calls = callsStartIndex >= 0 && exitCodeIndex >= 0
+      ? lines.slice(callsStartIndex + 1, exitCodeIndex).filter(l => l.trim())
+      : callsStartIndex >= 0
+        ? lines.slice(callsStartIndex + 1).filter(l => l.trim() && !l.includes('---'))
+        : []
+
+    return { calls, exitCode, output }
+  }
+
+  describe('parameter validation', () => {
+    it('should fail when no cmd is provided', () => {
+      const api = sourceScript('./utils/install.sh')('ensure_install')()
+      expect(api).toFail()
+      expect(api).toContainInStdErr('no command passed')
+    })
+
+    it('should fail when no install function is provided', () => {
+      const api = sourceScript('./utils/install.sh')('ensure_install')('jq')
+      expect(api).toFail()
+      expect(api).toContainInStdErr('no install function passed')
+    })
+  })
+
+  describe('when command already exists', () => {
+    it('should succeed silently without calling install function', () => {
+      const result = runEnsureInstall({
+        availableCommands: ['jq'],
+        script: 'ensure_install jq test_install_fn'
+      })
+      expect(result.exitCode).toBe(0)
+      // has_command should be checked
+      expect(result.calls).toContain('has_command:jq')
+      // install function should NOT be called
+      expect(result.calls.some(c => c.includes('test_install_fn:called'))).toBe(false)
+    })
+  })
+
+  describe('when command does not exist', () => {
+    it('should call the install function when it exists', () => {
+      const result = runEnsureInstall({
+        availableCommands: [], // jq not available
+        script: 'ensure_install jq test_install_fn'
+      })
+      // install function should be called
+      expect(result.calls.some(c => c.includes('test_install_fn:called'))).toBe(true)
+    })
+
+    it('should return success when install function succeeds', () => {
+      const result = runEnsureInstall({
+        availableCommands: [], // jq not available
+        installResult: 'success',
+        script: 'ensure_install jq test_install_fn'
+      })
+      expect(result.exitCode).toBe(0)
+    })
+
+    it('should EXIT when install function fails', () => {
+      const result = runEnsureInstall({
+        availableCommands: [], // jq not available
+        installResult: 'fail',
+        script: 'ensure_install jq test_install_fn; echo "SHOULD_NOT_REACH"'
+      })
+      // Script should exit, not continue
+      expect(result.exitCode).not.toBe(0)
+      expect(result.output).not.toContain('SHOULD_NOT_REACH')
+    })
+
+    it('should EXIT when install function does not exist', () => {
+      const result = runEnsureInstall({
+        availableCommands: [], // jq not available
+        script: 'ensure_install jq nonexistent_install_fn; echo "SHOULD_NOT_REACH"'
+      })
+      // Script should exit, not continue
+      expect(result.exitCode).not.toBe(0)
+      expect(result.output).not.toContain('SHOULD_NOT_REACH')
+    })
+  })
+})
+
 describe('installed package listing', () => {
   it('installed_cargo should list and link packages', () => {
     const result = runWithMocks({

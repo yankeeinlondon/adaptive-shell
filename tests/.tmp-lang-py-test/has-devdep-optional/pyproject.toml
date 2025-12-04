@@ -1,0 +1,7 @@
+
+[project]
+name = "test"
+
+[project.optional-dependencies]
+test = ["pytest-cov"]
+lint = ["ruff"]

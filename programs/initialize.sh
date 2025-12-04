@@ -202,6 +202,142 @@ function debian() {
     remove_colors
 }
 
+function init_js() {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
+    source "${UTILS}/empty.sh"
+    source "${UTILS}/install.sh"
+    source "${UTILS}/lang-js.sh"
+
+    logc "\nInitializing a {{BOLD}}{{BLUE}}JS{{RESET}}/{{BOLD}}{{BLUE}}TS{{RESET}} project"
+    local -r dir="$(pwd)"
+
+    if ! [[ -f "./package.json" ]]; then
+        cd "$(repo_root ".")" > /dev/null || error "problem finding root directory while trying initialize the JS/TS project" 1
+        logc "{{DIM}}- moving temporarily to repo root"
+    fi
+
+    if has_function "gitignore"; then
+        gitignore
+    fi
+
+    if [[ -f "./.shellcheckrc" ]]; then
+        logc "{{DIM}}- the {{BLUE}}.shellcheckrc{{RESET}}{{DIM}} file already exists"
+    else
+        cp "${UTILS}/../resources/.shellcheckrc" "."
+    fi
+
+    if [[ -f "./.markdownlint.jsonc" ]]; then
+        logc "{{DIM}}- the {{BLUE}}.markdownlint.jsonc{{RESET}}{{DIM}} file already exists"
+    else
+        cp "${UTILS}/../resources/.markdownlint.jsonc" "."
+    fi
+
+    if has_dependency_anywhere "typescript"; then
+        if [[ -f "./tsconfig.json" ]]; then
+            logc "{{DIM}}- repo is a {{BLUE}}Typescript{{RESET}}{{DIM}} project, {{BLUE}}tsconfig.json{{RESET}}{{DIM}} already exists"
+        else
+            logc "- repo is a {{BLUE}}Typescript{{RESET}} project but is missing {{BLUE}}tsconfig.json{{RESET}}!"
+            cp ".${ROOT}/resources/tsconfig.json" "." > /dev/null || error "failed to copy tsconfig.json to repo's root!"
+        fi
+    fi
+
+    ensure_install "npm" "install_npm"
+
+    local -r pkg="$(js_package_manager)"
+    if is_empty "pkg"; then
+        logc "- unable to determine preferred package manager (will use {{BLUE}}pnpm{{RESET}})"
+        ensure_install "pnpm" "install_pnpm"
+    else
+        logc "- {{GREEN}}${pkg}{{RESET}} will be used as package manager"
+        local -a _dev=(
+            "vitest"
+            "@vitest/ui"
+            "@vitest/coverage-v8"
+            "bumpp"
+            "npm-run-all"
+            "typescript"
+            "husky"
+            "@types/node"
+            "typed-tester"
+            "jiti"
+        )
+        if has_dependency "vue" || has_dependency "react"; then
+            _dev+=("vite")
+        else
+            _dev+=("tsdown")
+        fi
+        packages_not_installed _dev
+        if [[ "${#_dev[@]}" -gt 0 ]]; then
+            logc "- installing the following dev dependencies: {{BLUE}}${_dev[*]}"
+            "${pkg}" install -D "${_dev[@]}" > /dev/null || error "failed to install dev dependencies!"
+            logc "- dev dependencies installed"
+        fi
+
+        local -a _dep=(
+        )
+        if [[ -f "./src/index.ts" ]]; then
+            _dep+=(
+                "inferred-types"
+            )
+        fi
+        if has_dependency "vue"; then
+            _dep+=("vueuse")
+        fi
+        packages_not_installed _dep
+        if [[ "${#_dep[@]}" -gt 0 ]]; then
+            logc "- installing the following dependencies: {{BLUE}}${_dep[*]}"
+            "${pkg}" install "${_dep[@]}" > /dev/null || error "failed to install dependencies!"
+        fi
+
+        if [[ "${#_dev[@]}" -eq 0 ]] && [[ "${#_dep[@]}" -eq 0 ]]; then
+            logc "{{DIM}}- all npm packages already installed"
+        fi
+
+    fi
+
+    local DEP CONFIG
+    if DEP="$(get_js_linter_by_dep)"; then
+        logc "- the linter {{BOLD}}{{BLUE}}${DEP}{{RESET}} was found in your installed dependencies"
+        install_js_linter_config "${DEP}"
+        if CONFIG="$(get_js_linter_by_config_file)"; then
+            if contains "${CONFIG}" "${DEP}"; then
+                logc "- the configuration file -- {{BLUE}}${CONFIG}{{RESET}} -- matches the linter"
+            else
+                logc "- {{YELLOW}}{{BOLD}}WARN:{{RESET}} the configuration file found is for a different linter than what has been installed as a dependency!"
+            fi
+        else
+            install_js_linter_config "${DEP}"
+        fi
+    elif CONFIG="$(get_js_linter_by_config_file)"; then
+        # Config file but nothing installed
+        logc "- we found the linter configuration file {{BLUE}}${CONFIG}{{RESET}} but no linters are installed!"
+    fi
+
+    if [[ "${dir}" != "${PWD}" ]]; then
+        logc "{{DIM}}- returning back to working directory"
+        cd "${dir}" > /dev/null
+    fi
+}
+
+function init_python() {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
+    source "${UTILS}/empty.sh"
+    source "${UTILS}/install.sh"
+    source "${UTILS}/lang-py.sh"
+    logc ""
+}
+
+function init_rust() {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
+    source "${UTILS}/empty.sh"
+    source "${UTILS}/install.sh"
+    source "${UTILS}/lang-rs.sh"
+    logc ""
+}
+
 
 function main() {
     # shellcheck source="../utils/install.sh"
@@ -209,68 +345,87 @@ function main() {
     # shellcheck source="../utils/os.sh"
     source "${UTILS}/os.sh"
 
-    OS="$(os)"
+    local continue
+    continue=0
 
-    logc "\nInitializing packages for {{BOLD}}{{YELLOW}}${OS}{{RESET}}"
-    log ""
+    if looks_like_js_project; then
+        init_js
+        continue=1
+    fi
 
-    case "${OS}" in
+    if looks_like_python_project; then
+        init_python
+        continue=1
+    fi
 
-        linux)
-            if is_debian || is_ubuntu; then
-                install_nala || error "Failed to install Nala!" 1
-            fi
-            install_git
-            install_openssh
-            install_gpg
-            install_gh
-            install_curl
-            install_wget
-            install_neovim
-            install_jq
-            install_eza
-            install_dust
-            install_ripgrep
-            install_starship
-            install_btop
-            install_delta
-            install_fzf
-            ;;
-        macos)
+    if looks_like_rust_project; then
+        init_rust
+        continue=1
+    fi
 
-            install_git
-            install_openssh
-            install_gpg
-            install_gh
-            install_curl
-            install_wget
-            install_neovim
-            install_jq
-            install_jqp
-            install_eza
-            install_dust
-            install_ripgrep
-            install_starship
-            install_uv
-            install_claude_code
-            install_gemini_cli
-            install_btop
-            install_delta
-            install_fzf
-            install_just
-            ;;
+    if [[ ${continue} -eq 0 ]] || [[ "$PWD" == "${HOME}" ]]; then
+        OS="$(os)"
 
-        windows)
+        logc "\nInitializing packages for {{BOLD}}{{YELLOW}}${OS}{{RESET}}"
+        log ""
 
-            logc "- no initialization yet for {{BOLD}}Windows{{RESET}}."
-            ;;
+        case "${OS}" in
 
-        *)
-            logc "- unknown OS {{RED}}{{BOLD}${OS}{{RESET}}"
-            exit 1
-            ;;
-    esac
+            linux)
+                if is_debian || is_ubuntu; then
+                    install_nala || error "Failed to install Nala!" 1
+                fi
+                install_git
+                install_openssh
+                install_gpg
+                install_gh
+                install_curl
+                install_wget
+                install_neovim
+                install_jq
+                install_eza
+                install_dust
+                install_ripgrep
+                install_starship
+                install_btop
+                install_delta
+                install_fzf
+                ;;
+            macos)
 
+                install_git
+                install_openssh
+                install_gpg
+                install_gh
+                install_curl
+                install_wget
+                install_neovim
+                install_jq
+                install_jqp
+                install_eza
+                install_dust
+                install_ripgrep
+                install_starship
+                install_uv
+                install_claude_code
+                install_gemini_cli
+                install_btop
+                install_delta
+                install_fzf
+                install_just
+                ;;
+
+            windows)
+
+                logc "- no initialization yet for {{BOLD}}Windows{{RESET}}."
+                ;;
+
+            *)
+                logc "- unknown OS {{RED}}{{BOLD}${OS}{{RESET}}"
+                exit 1
+                ;;
+        esac
+    fi
 
 }
 

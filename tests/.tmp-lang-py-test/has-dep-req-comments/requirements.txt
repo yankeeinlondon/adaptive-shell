@@ -1,0 +1,5 @@
+
+# Web framework
+requests>=2.0.0
+# CLI
+click>=8.0.0

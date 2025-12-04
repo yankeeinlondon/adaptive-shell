@@ -19,6 +19,9 @@ declare -a MOCK_CALLS=()
 # Commands that should appear "available" (set via mock_available_commands)
 declare -a MOCK_AVAILABLE_COMMANDS=()
 
+# Functions that should appear "available" (set via mock_available_functions)
+declare -a MOCK_AVAILABLE_FUNCTIONS=()
+
 # Packages that should "exist" in package managers (format: "manager:package")
 declare -a MOCK_EXISTING_PACKAGES=()
 
@@ -39,6 +42,16 @@ mock_available_commands() {
     MOCK_AVAILABLE_COMMANDS=($@)
     if [[ "$MOCK_DEBUG" == "true" ]]; then
         echo "MOCK: available commands = ${MOCK_AVAILABLE_COMMANDS[*]}" >&2
+    fi
+}
+
+# mock_available_functions <fn1> [<fn2>] ...
+#
+# Set which functions should appear "available" via has_function
+mock_available_functions() {
+    MOCK_AVAILABLE_FUNCTIONS=($@)
+    if [[ "$MOCK_DEBUG" == "true" ]]; then
+        echo "MOCK: available functions = ${MOCK_AVAILABLE_FUNCTIONS[*]}" >&2
     fi
 }
 
@@ -72,6 +85,7 @@ mock_install_succeeds() {
 reset_mocks() {
     MOCK_CALLS=()
     MOCK_AVAILABLE_COMMANDS=()
+    MOCK_AVAILABLE_FUNCTIONS=()
     MOCK_EXISTING_PACKAGES=()
     MOCK_INSTALLED_PACKAGES=()
     MOCK_INSTALL_SUCCESS=()
@@ -174,6 +188,27 @@ has_command() {
             return 0
         fi
     done
+    return 1
+}
+
+# Override has_function to use mock configuration
+# Note: Also returns true for actual functions defined in the test script
+has_function() {
+    local fn="$1"
+    _mock_record "has_function:$fn"
+
+    # Check if it's in mock list
+    for available in "${MOCK_AVAILABLE_FUNCTIONS[@]}"; do
+        if [[ "$available" == "$fn" ]]; then
+            return 0
+        fi
+    done
+
+    # Also check if it's an actual function (for test-defined functions)
+    if [[ "$(type -t "$fn" 2>/dev/null)" == "function" ]]; then
+        return 0
+    fi
+
     return 1
 }
 

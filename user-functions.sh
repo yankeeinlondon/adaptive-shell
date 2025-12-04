@@ -197,7 +197,7 @@ trace/*
 .trace/*
 EOF
   else
-    logc "- the ${BLUE}.gitignore${RESET} file already exists, ${ITALIC}skipping${RESET}"
+    logc "- the {{BLUE}}.gitignore{{RESET}} file already exists, {{ITALIC}}skipping{{RESET}}"
   fi
 }
 

@@ -1636,17 +1636,39 @@ install_npm() {
         logc "- {{BOLD}}{{BLUE}}npm CLI{{RESET}} is already installed"
         return 0
     fi
-    if is_mac; then
-        install_on_macos "npm"
-    elif is_debian || is_ubuntu; then
-        install_on_debian "npm"
-    elif is_alpine; then
-        install_on_alpine "npm"
-    elif is_fedora; then
-        install_on_fedora "npm"
-    else
-        logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}npm{{RESET}}"
-        return 1
+    # installing "node" is typically the right way of installing "npm"
+    if ! has_command "node"; then
+        if is_mac; then
+            install_on_macos "node"
+        elif is_debian || is_ubuntu; then
+            install_on_debian "nodejs" "node"
+        elif is_alpine; then
+            install_on_alpine "nodejs" "node"
+        elif is_fedora; then
+            install_on_fedora "nodejs" "node"
+        elif is_arch; then
+            install_on_fedora "nodejs" "node"
+        else
+            logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}node/npm{{RESET}}"
+            return 1
+        fi
+    fi
+
+    if ! has_command "npm"; then
+        if is_mac; then
+            install_on_macos "npm"
+        elif is_debian || is_ubuntu; then
+            install_on_debian "npm"
+        elif is_alpine; then
+            install_on_alpine "npm"
+        elif is_fedora; then
+            install_on_fedora "npm"
+        elif is_arch; then
+            install_on_fedora "npm"
+        else
+            logc "- {{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}npm{{RESET}}"
+            return 1
+        fi
     fi
 
 }
@@ -1940,6 +1962,26 @@ function upgrade_packages() {
 
     return $((failed > 0 ? 1 : 0))
 }
+
+# ensure_install <cmd> <install-fn>
+#
+# Ensures that a particular system package is installed on the host.
+# If the command already exists, succeeds silently.
+# If the install function fails or doesn't exist, EXITS the script with code 1.
+function ensure_install() {
+    local -r cmd="${1:?no command passed into ensure_install()!}"
+    local -r install="${2:?no install function passed into ensure_install()!}"
+
+    if ! has_command "${cmd}"; then
+        if has_function "${install}"; then
+            "${install}" || exit 1
+        else
+            logc "- {{RED}}{{BOLD}}ERROR: {{RESET}}the install function {{BLUE}}${install}{{RESET}} does not exist! Can not ensure that the command {{BLUE}}${cmd}{{RESET}} is installed on the system!"
+            exit 1
+        fi
+    fi
+}
+
 
 
 # CLI invocation handler - allows running script directly with a function name
