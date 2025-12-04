@@ -1,9 +1,10 @@
 {
   "name": "@yankeeinlondon/adaptive-shell",
   "version": "0.1.0",
-  "description": "Adaptive shell configuration utilities for bash",
+  "description": "Adaptive shell configuration utilities for bash with huge bash library",
   "type": "module",
   "scripts": {
+    "build": "echo 'No build step required'",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
