@@ -1541,7 +1541,8 @@ install_nvm() {
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 }
 
-install_yazi() {
+# https://yazi-rs.github.io/
+function install_yazi() {
     if has_command "yazi"; then
         logc "- {{BOLD}}{{BLUE}}yazi{{RESET}} is already installed"
         return 0
