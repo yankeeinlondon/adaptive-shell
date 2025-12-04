@@ -29,5 +29,5 @@ jobs:
     uses: yankeeinlondon/gha/.github/workflows/test.yml@main
     with:
         transpile: true
-        nodeVersion: "22"
+        nodeVersion: "22.x"
 
