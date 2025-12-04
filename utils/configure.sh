@@ -19,9 +19,30 @@ fi
 # shellcheck source="./logging.sh"
 source "${UTILS}/logging.sh"
 
+# configure_git
+#
+# Adds Name, Email,
 function configure_git() {
-    :
+    source "${UTILS}/text.sh"
+    source "${UTILS}/empty.sh"
+
+    local -r name=$(strip_trailing "$(git config --global user.name)" "\n")
+    local -r email=$(strip_trailing "$(git config --global user.email)" "\n")
+    local -r signingkey=$(strip_trailing "$(git config --global user.signingkey)" "\n")
+
+    if not_empty "${name}" || not_empty "${email}" || not_empty "${signingkey}"; then
+        logc "- {{BOLD}}{{BLUE}}git{{RESET}}{{BOLD}} is configured:"
+        logc "    - Name: \t{{YELLOW}}${name}{{RESET}}"
+        logc "    - Email:\t{{YELLOW}}${email}{{RESET}}"
+        logc "    - Signing Key: {{YELLOW}}${signingkey}{{RESET}}"
+    else
+        logc "- your {{BOLD}}{{GREEN}}git{{RESET}} configuration is taken from the {{BLUE}}~/.config/git/config{{RESET}} file"
+        logc "- if you've linked your config to a shared directory or are using a git dotfiles to sync across machines then you should have this set but it doesn't look like that has been done on this host yet."
+        logc ""
+    fi
+
 }
+
 
 function configure_ssh_keys() {
     :

@@ -566,6 +566,11 @@ function has_typescript_files() {
 function looks_like_js_project() {
     local found
 
+    # Home directory is never a JS project (even if it has .js config files)
+    if [[ "${PWD}" == "${HOME}" ]]; then
+        return 1
+    fi
+
     # Primary indicator: package.json
     if [[ -f "./package.json" ]]; then
         return 0
@@ -596,6 +601,11 @@ function looks_like_js_project() {
 # Returns 0 if Rust project detected, 1 otherwise.
 function looks_like_rust_project() {
     local found
+
+    # Home directory is never a Rust project
+    if [[ "${PWD}" == "${HOME}" ]]; then
+        return 1
+    fi
 
     # Primary indicator: Cargo.toml
     if [[ -f "./Cargo.toml" ]]; then
@@ -628,6 +638,11 @@ function looks_like_rust_project() {
 function looks_like_python_project() {
     local root="."
     local found
+
+    # Home directory is never a Python project
+    if [[ "${PWD}" == "${HOME}" ]]; then
+        return 1
+    fi
 
     # Check repo root if in a git repo
     if is_git_repo "."; then

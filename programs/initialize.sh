@@ -321,10 +321,9 @@ function init_rust() {
 
 
 function main() {
-    # shellcheck source="../utils/install.sh"
     source "${UTILS}/install.sh"
-    # shellcheck source="../utils/os.sh"
     source "${UTILS}/os.sh"
+    source "${UTILS}/configure.sh"
 
     local continue
     continue=0
@@ -364,6 +363,7 @@ function main() {
                 install_wget
                 install_neovim
                 install_jq
+                install_yq
                 install_eza
                 install_dust
                 install_ripgrep
@@ -371,18 +371,23 @@ function main() {
                 install_btop
                 install_delta
                 install_fzf
+
+                configure_git
                 ;;
             macos)
 
                 install_git
+                configure_git
                 install_openssh
                 install_gpg
                 install_gh
                 install_curl
+                install_xh
                 install_wget
                 install_neovim
                 install_jq
                 install_jqp
+                install_yq
                 install_eza
                 install_dust
                 install_ripgrep
@@ -394,11 +399,13 @@ function main() {
                 install_delta
                 install_fzf
                 install_just
+
                 ;;
 
             windows)
-
-                logc "- no initialization yet for {{BOLD}}Windows{{RESET}}."
+                install_jq
+                install_delta
+                install_yq
                 ;;
 
             *)

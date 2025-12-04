@@ -25,24 +25,14 @@ allow_errors
 function report_about() {
     catch_errors
 
-    # shellcheck source="../utils/color.sh"
     source "${UTILS}/color.sh"
-    # shellcheck source="../utils/logging.sh"
     source "${UTILS}/logging.sh"
-    # shellcheck source="./aliases.sh"
     source "${REPORTS}/aliases.sh"
-    # shellcheck source="./paths.sh"
     source "${REPORTS}/paths.sh"
-    # shellcheck source="../utils/detection.sh"
     source "${UTILS}/detection.sh"
-    # shellcheck source="../utils/os.sh"
     source "${UTILS}/os.sh"
-
-    # shellcheck source="../utils/git.sh"
     source "${UTILS}/git.sh"
-    # shellcheck source="../programs/ssh.sh"
-    source "${PROGRAMS}/ssh.sh"
-    # shellcheck source="../utils/programs.sh"
+    source "${UTILS}/ssh.sh"
     source "${UTILS}/programs.sh"
 
 

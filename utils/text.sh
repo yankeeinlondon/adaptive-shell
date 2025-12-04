@@ -169,6 +169,16 @@ function ensure_starting() {
     return 0
 }
 
+# strip_trailing <content> <strip>
+#
+# if `content` ends with `strip` then `strip` is removed.
+function strip_trailing() {
+    local -r content="${1:-}"
+    local -r strip="${2:?strip_trailing() requires a strip parameter!}"
+
+    echo "${content%"$strip"}"
+}
+
 # has_characters <chars> <content>
 #
 # tests whether the content has any of the characters passed in

@@ -38,6 +38,33 @@ function get_ssh_hosts() {
   printf '%s\n' "${hosts[@]}"
 }
 
+# github_auth_test
+#
+# Tests whether your SSH key will provide you access and under what user
+#
+# - return 0 / 1 based on whether the SSH key is accepted as valid
+# - the username you'll accessing Github will will be returned on STDOUT
+function github_auth_test() {
+    local output
+    local username
+
+    # ssh -T git@github.com returns exit code 1 even on success (no shell access)
+    # Output goes to stderr, so we redirect stderr to stdout
+    output=$(ssh -T git@github.com 2>&1)
+
+    # Check for successful authentication message
+    # Format: "Hi USERNAME! You've successfully authenticated, but GitHub does not provide shell access."
+    if [[ "$output" =~ ^Hi\ ([^!]+)!\  ]]; then
+        username="${BASH_REMATCH[1]}"
+        printf '%s\n' "$username"
+        return 0
+    fi
+
+    # Authentication failed
+    return 1
+}
+
+
 # CLI invocation handler - allows running script directly with a function name
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Set up paths for sourcing dependencies
@@ -66,3 +93,4 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         exit 1
     fi
 fi
+
