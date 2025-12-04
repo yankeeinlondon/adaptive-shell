@@ -1,4 +1,11 @@
 {
+    "bashIde.globPattern": "**/*@(.sh|.inc|.bash|.command)",
+    "bashIde.explainshellEndpoint": "",
+    "bashIde.includeAllWorkspaceSymbols": false,
+    "files.exclude": {
+        "**/resources/kubectl-completions.bash.sh": true
+    },
+    "bashIde.backgroundAnalysisMaxFiles": 100,
     "cSpell.words": [
         "apfs",
         "armv",

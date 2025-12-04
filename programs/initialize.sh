@@ -51,7 +51,7 @@ function debian() {
     if has_command "nala"; then
         log "- ${BOLD}${BLUE}nala${RESET} already installed, skipping"
     else
-        if get_nala; then
+        if install_nala; then
             log ""
             log "- ${BOLD}${BLUE}nala${RESET} has been installed in favor of apt"
             log ""
@@ -219,7 +219,7 @@ function init_js() {
             logc "{{DIM}}- repo is a {{BLUE}}Typescript{{RESET}}{{DIM}} project, {{BLUE}}tsconfig.json{{RESET}}{{DIM}} already exists"
         else
             logc "- repo is a {{BLUE}}Typescript{{RESET}} project but is missing {{BLUE}}tsconfig.json{{RESET}}!"
-            cp ".${ROOT}/resources/tsconfig.json" "." > /dev/null || error "failed to copy tsconfig.json to repo's root!"
+            cp "${ROOT}/resources/tsconfig.json" "." > /dev/null || error "failed to copy tsconfig.json to repo's root!"
         fi
     fi
 
@@ -402,7 +402,7 @@ function main() {
                 ;;
 
             *)
-                logc "- unknown OS {{RED}}{{BOLD}${OS}{{RESET}}"
+                logc "- unknown OS {{RED}}{{BOLD}}${OS}{{RESET}}"
                 exit 1
                 ;;
         esac
