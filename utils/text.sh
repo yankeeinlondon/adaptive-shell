@@ -851,32 +851,63 @@ trim() {
 #
 # Takes content as a parameter and returns the content with each line
 # trimmed of leading and trailing whitespace.
+#
+# Note: When called via command substitution $(trim_each_val ...),
+# bash will strip trailing newlines. Use trim_each_ref for cases
+# where trailing empty lines must be preserved.
 function trim_each_val() {
     local content="$*"
 
     # Handle empty content early
     if [[ -z "$content" ]]; then
-        echo ""
+        printf ''
         return 0
     fi
 
     local result=""
+    local current_line=""
+    local -i i=0
+    local -i len=${#content}
     local first_line=true
 
-    # Process line by line, preserving newlines
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        local trimmed_line
-        trimmed_line="$(trim_val "$line")"
+    # Process character by character to properly handle trailing empty lines
+    while [[ $i -lt $len ]]; do
+        local char="${content:$i:1}"
+
+        if [[ "$char" == $'\n' ]]; then
+            # End of line - trim and append
+            local trimmed="${current_line}"
+            trimmed="${trimmed#"${trimmed%%[![:space:]]*}"}"
+            trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+
+            if [[ "$first_line" == true ]]; then
+                result="$trimmed"
+                first_line=false
+            else
+                result="${result}"$'\n'"${trimmed}"
+            fi
+            current_line=""
+        else
+            current_line="${current_line}${char}"
+        fi
+
+        i=$((i + 1))
+    done
+
+    # Handle last line (if content doesn't end with newline)
+    if [[ -n "$current_line" ]]; then
+        local trimmed="${current_line}"
+        trimmed="${trimmed#"${trimmed%%[![:space:]]*}"}"
+        trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
 
         if [[ "$first_line" == true ]]; then
-            result="$trimmed_line"
-            first_line=false
+            result="$trimmed"
         else
-            result="${result}"$'\n'"${trimmed_line}"
+            result="${result}"$'\n'"${trimmed}"
         fi
-    done <<< "$content"
+    fi
 
-    echo "$result"
+    printf '%s' "$result"
     return 0
 }
 
@@ -884,16 +915,66 @@ function trim_each_val() {
 #
 # Takes a reference to a variable and changes the variable to have
 # each line trimmed of leading and trailing whitespace.
+#
+# This version properly preserves trailing empty lines since it
+# doesn't use command substitution.
 function trim_each_ref() {
-    local var_name="$1"
-    local value="${!var_name}"
+    local __trim_each_var_name="$1"
+    # IMPORTANT: Don't use 'content' as a local variable name here!
+    # It would shadow the caller's variable if they named it 'content'.
+    local __trim_each_input="${!__trim_each_var_name}"
 
-    # Process the content
-    local trimmed
-    trimmed="$(trim_each_val "$value")"
+    # Handle empty content early
+    if [[ -z "$__trim_each_input" ]]; then
+        printf -v "$__trim_each_var_name" '%s' ''
+        return 0
+    fi
+
+    local __trim_each_result=""
+    local __trim_each_current_line=""
+    local -i __trim_each_i=0
+    local -i __trim_each_len=${#__trim_each_input}
+    local __trim_each_first_line=true
+
+    # Process character by character to properly handle trailing empty lines
+    while [[ $__trim_each_i -lt $__trim_each_len ]]; do
+        local __trim_each_char="${__trim_each_input:$__trim_each_i:1}"
+
+        if [[ "$__trim_each_char" == $'\n' ]]; then
+            # End of line - trim and append
+            local __trim_each_trimmed="${__trim_each_current_line}"
+            __trim_each_trimmed="${__trim_each_trimmed#"${__trim_each_trimmed%%[![:space:]]*}"}"
+            __trim_each_trimmed="${__trim_each_trimmed%"${__trim_each_trimmed##*[![:space:]]}"}"
+
+            if [[ "$__trim_each_first_line" == true ]]; then
+                __trim_each_result="$__trim_each_trimmed"
+                __trim_each_first_line=false
+            else
+                __trim_each_result="${__trim_each_result}"$'\n'"${__trim_each_trimmed}"
+            fi
+            __trim_each_current_line=""
+        else
+            __trim_each_current_line="${__trim_each_current_line}${__trim_each_char}"
+        fi
+
+        __trim_each_i=$((__trim_each_i + 1))
+    done
+
+    # Handle last line (if content doesn't end with newline)
+    if [[ -n "$__trim_each_current_line" ]]; then
+        local __trim_each_trimmed="${__trim_each_current_line}"
+        __trim_each_trimmed="${__trim_each_trimmed#"${__trim_each_trimmed%%[![:space:]]*}"}"
+        __trim_each_trimmed="${__trim_each_trimmed%"${__trim_each_trimmed##*[![:space:]]}"}"
+
+        if [[ "$__trim_each_first_line" == true ]]; then
+            __trim_each_result="$__trim_each_trimmed"
+        else
+            __trim_each_result="${__trim_each_result}"$'\n'"${__trim_each_trimmed}"
+        fi
+    fi
 
     # Reassign the trimmed value to the original variable
-    printf -v "$var_name" '%s' "$trimmed"
+    printf -v "$__trim_each_var_name" '%s' "$__trim_each_result"
 }
 
 # trim_each <ref_or_value>
