@@ -4,7 +4,7 @@
   "description": "Adaptive shell configuration utilities for bash with huge bash library",
   "type": "module",
   "scripts": {
-    "build": "echo 'No build step required'",
+    "build": "",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
