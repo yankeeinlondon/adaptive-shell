@@ -14,9 +14,7 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-source "${UTILS}/logging.sh"
-source "${UTILS}/detection.sh"
-source "${UTILS}/install.sh"
+
 
 # use "dust" over base "du" if available
 function du() {
@@ -37,6 +35,7 @@ function du() {
     fi
     remove_colors
 }
+
 # h <filter>
 #
 # history convenience utility
@@ -132,8 +131,8 @@ function vitesse_ext() {
 
 
 function gitignore() {
-    source "${UTILS}/color.sh"
     source "${UTILS}/logging.sh"
+    source "${UTILS}/color.sh"
 
   if [ ! -f "./.gitignore" ]; then
     logc "- creating {{BLUE}}.gitignore{{RESET}} file"

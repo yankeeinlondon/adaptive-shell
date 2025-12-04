@@ -448,7 +448,10 @@ describe('text utilities', () => {
             })
 
             it('should preserve trailing newlines', () => {
-                const result = sourcedBash('./utils/text.sh', 'trim_each "line1\nline2\n\n"')
+                const result = sourcedBash(
+                    './utils/text.sh',
+                    `trim_each $'line1\\nline2\\n\\n'`
+                )
                 const lines = result.split('\n')
                 expect(lines.length).toBe(4)
                 expect(lines[0]).toBe('line1')
@@ -476,10 +479,10 @@ describe('text utilities', () => {
         describe('by-reference mode (variable name)', () => {
             it('should trim each line in-place when given a variable name', () => {
                 const exitCode = bashExitCode(
-                    'source ./utils/text.sh && ' +
-                    'content="  line1  \\n  line2  \\n  line3  " && ' +
-                    'trim_each content && ' +
-                    'test "$content" = "line1\\nline2\\nline3"'
+                    `source ./utils/text.sh && ` +
+                    `content=$'  line1  \\n  line2  \\n  line3  ' && ` +
+                    `trim_each content && ` +
+                    `test "$content" = $'line1\\nline2\\nline3'`
                 )
                 expect(exitCode).toBe(0)
             })
@@ -487,7 +490,7 @@ describe('text utilities', () => {
             it('should modify the original variable', () => {
                 const result = sourcedBash(
                     './utils/text.sh',
-                    'content="  foo  \\n  bar  " && trim_each content && echo "$content"'
+                    `content=$'  foo  \\n  bar  ' && trim_each content && echo "$content"`
                 )
                 expect(result).toBe('foo\nbar')
             })
@@ -513,7 +516,7 @@ describe('text utilities', () => {
             it('should preserve multiple newlines in variable', () => {
                 const result = sourcedBash(
                     './utils/text.sh',
-                    'content="line1\\n\\n\\nline2" && trim_each content && echo "$content"'
+                    `content=$'line1\\n\\n\\nline2' && trim_each content && echo "$content"`
                 )
                 const lines = result.split('\n')
                 expect(lines.length).toBe(4)
@@ -535,14 +538,20 @@ describe('text utilities', () => {
             })
 
             it('should handle real-world multi-line content', () => {
-                const input = '  function foo()  \\n    echo "bar"  \\n  end  '
-                const result = sourcedBash('./utils/text.sh', `trim_each "${input}"`)
+                const result = sourcedBash('./utils/text.sh', `trim_each $'  function foo()  \\n    echo "bar"  \\n  end  '`)
                 expect(result).toBe('function foo()\n  echo "bar"\nend')
             })
 
             it('should handle content with special characters', () => {
-                const result = sourcedBash('./utils/text.sh', 'trim_each "  $HOME  \\n  *.*  \\n  [a-z]  "')
+                const result = sourcedBash('./utils/text.sh', `trim_each $'  \\$HOME  \\n  *.*  \\n  [a-z]  '`)
                 expect(result).toBe('$HOME\n*.*\n[a-z]')
+            })
+
+            it('should not crash on very long content', () => {
+                // Use 100 chars instead of 1000 to avoid command line length issues
+                const longLine = 'a'.repeat(100)
+                const result = sourcedBash('./utils/text.sh', `line="${longLine}" && trim_each "  \${line}  " && echo "success"`)
+                expect(result).toContain('success')
             })
         })
     })

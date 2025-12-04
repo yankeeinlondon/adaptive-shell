@@ -36,7 +36,6 @@ function log() {
 #   - parameters through `colorize()` to that
 #   the caller doesn't need to bother with the
 function logc() {
-    # shellcheck source="../color.sh"
     source "${UTILS}/color.sh"
 
     local -r colors_missing=$(colors_not_setup)
@@ -64,7 +63,7 @@ function logc() {
 function hr() {
     # shellcheck source="./detection.sh"
     source "${UTILS}/detection.sh"
-    
+
 }
 
 # stdout <content>
