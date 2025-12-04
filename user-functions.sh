@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+[[ -n "${__USER_FUNCTIONS_SH_LOADED:-}" ]] && declare -f "du" > /dev/null && return
+__USER_FUNCTIONS_SH_LOADED=1
+
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
