@@ -861,6 +861,115 @@ function install_on_arch() {
     return 1
 }
 
+# install_on_windows [--prefer-choco] [--prefer-scoop] <pkg> [<pkg2>] [<pkg3>] ...
+#
+# Attempts to install a named package on Windows. Accepts multiple package name
+# variants which are tried in order with each package manager until one succeeds.
+# Priority order: winget > chocolatey > scoop
+# Use --prefer-choco to try chocolatey first, --prefer-scoop to try scoop first.
+function install_on_windows() {
+    local prefer_choco=false
+    local prefer_scoop=false
+    local pkg_names=()
+
+    # Parse flags from arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prefer-choco)
+                prefer_choco=true
+                shift
+                ;;
+            --prefer-scoop)
+                prefer_scoop=true
+                shift
+                ;;
+            *)
+                pkg_names+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ${#pkg_names[@]} -eq 0 ]]; then
+        logc "{{RED}}ERROR{{RESET}}: no package provided to install_on_windows()!"
+        return 1
+    fi
+
+    # Try chocolatey first if preferred
+    if [[ "$prefer_choco" == true ]] && has_command "choco"; then
+        for pkg in "${pkg_names[@]}"; do
+            if choco search "$pkg" --exact &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}chocolatey{{RESET}}"
+                choco install "$pkg" -y && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}chocolatey{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try scoop first if preferred
+    if [[ "$prefer_scoop" == true ]] && has_command "scoop"; then
+        for pkg in "${pkg_names[@]}"; do
+            if scoop search "$pkg" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}scoop{{RESET}}"
+                scoop install "$pkg" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}scoop{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try winget with each package name variant
+    if has_command "winget"; then
+        for pkg in "${pkg_names[@]}"; do
+            if winget search --exact --id "$pkg" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}winget{{RESET}}"
+                winget install --exact --id "$pkg" --accept-source-agreements --accept-package-agreements && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}winget{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try chocolatey (if not already tried as preferred)
+    if [[ "$prefer_choco" != true ]] && has_command "choco"; then
+        for pkg in "${pkg_names[@]}"; do
+            if choco search "$pkg" --exact &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}chocolatey{{RESET}}"
+                choco install "$pkg" -y && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}chocolatey{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Try scoop (if not already tried as preferred)
+    if [[ "$prefer_scoop" != true ]] && has_command "scoop"; then
+        for pkg in "${pkg_names[@]}"; do
+            if scoop search "$pkg" &>/dev/null; then
+                logc "- installing {{GREEN}}${pkg}{{RESET}} using {{BOLD}}scoop{{RESET}}"
+                scoop install "$pkg" && return 0
+                logc "{{BOLD}}{{RED}}ERROR{{RESET}}: failed to install {{GREEN}}${pkg}{{RESET}} package!"
+                return 1
+            else
+                logc "- {{BOLD}}scoop{{RESET}} does not have package {{GREEN}}${pkg}{{RESET}}"
+            fi
+        done
+    fi
+
+    # Nothing worked
+    logc "- unsure how to install any of '${pkg_names[*]}' on this Windows system"
+    return 1
+}
+
 function install_openssh() {
     if has_command "ssh-keygen"; then
         logc "- {{BOLD}}{{BLUE}}openssh{{RESET}} is already installed"
@@ -921,7 +1030,8 @@ function install_curl() {
         install_on_fedora "curl"
     elif is_arch; then
         install_on_arch "curl"
-
+    elif is_windows; then
+        install_on_windows "cURL.cURL" "curl"
     else
         logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}curl{{RESET}}"
         return 1
@@ -1284,7 +1394,8 @@ function install_jq() {
         install_on_fedora "jq"
     elif is_arch; then
         install_on_arch "jq"
-
+    elif is_windows; then
+        install_on_windows "jqlang.jq" "jq"
     else
         logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}jq{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
         return 1
@@ -1331,9 +1442,10 @@ function install_yq() {
         install_on_fedora "yq"
     elif is_arch; then
         install_on_arch "yq"
-
+    elif is_windows; then
+        install_on_windows "MikeFarah.yq" "yq"
     else
-        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}yq{{RESET}}, go to {{GREEN}}https://jqlang.org/download/{{RESET}} and download manually"
+        logc "{{RED}}ERROR:{{RESET}}Unable to automate the install of {{BOLD}}{{BLUE}}yq{{RESET}}, go to {{GREEN}}https://github.com/mikefarah/yq{{RESET}} and download manually"
         return 1
     fi
 }

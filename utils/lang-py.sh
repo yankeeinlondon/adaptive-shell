@@ -16,6 +16,16 @@ else
     UTILS="${ROOT}/utils"
 fi
 
+# Ensure yq is available (checked once at module load)
+# This avoids repeated has_command checks in every function call
+if [[ -z "${__LANG_PY_YQ_CHECKED:-}" ]]; then
+    __LANG_PY_YQ_CHECKED=1
+    if ! command -v yq >/dev/null 2>&1; then
+        source "${UTILS}/install.sh"
+        ensure_install "yq" "install_yq"
+    fi
+fi
+
 # get_pyproject_toml()
 #
 # Attempts to read in content from pyproject.toml from current working
@@ -67,6 +77,7 @@ function get_requirements_txt() {
 # Check if a dependency exists in pyproject.toml (PEP 621 format).
 # Searches in [project.dependencies] section.
 # If pyproject_content is provided, uses it instead of reading from file.
+# Requires: yq must be installed (checked once at module level)
 _has_pyproject_dependency() {
     local dep="${1:?dependency name required}"
     local pyproject="${2:-}"
@@ -75,9 +86,6 @@ _has_pyproject_dependency() {
     if [[ -z "$pyproject" ]]; then
         pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
     fi
-
-    source "${UTILS}/install.sh"
-    ensure_install "yq" "install_yq"
 
     # Use yq to check if dependency exists in project.dependencies array
     # Match package name at start, followed by version specifier or end
@@ -95,6 +103,7 @@ _has_pyproject_dependency() {
 # Check if a dependency exists in Poetry format pyproject.toml.
 # Searches in [tool.poetry.dependencies] section.
 # If pyproject_content is provided, uses it instead of reading from file.
+# Requires: yq must be installed (checked once at module level)
 _has_poetry_dependency() {
     local dep="${1:?dependency name required}"
     local pyproject="${2:-}"
@@ -103,9 +112,6 @@ _has_poetry_dependency() {
     if [[ -z "$pyproject" ]]; then
         pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
     fi
-
-    source "${UTILS}/install.sh"
-    ensure_install "yq" "install_yq"
 
     # Use yq to check if dependency key exists in tool.poetry.dependencies
     if echo "$pyproject" | yq -p toml -e \
@@ -189,6 +195,7 @@ function has_dependency() {
 #
 # Check if a dependency exists in any [project.optional-dependencies] group.
 # If pyproject_content is provided, uses it instead of reading from file.
+# Requires: yq must be installed (checked once at module level)
 _has_pyproject_optional_dependency() {
     local dep="${1:?dependency name required}"
     local pyproject="${2:-}"
@@ -197,9 +204,6 @@ _has_pyproject_optional_dependency() {
     if [[ -z "$pyproject" ]]; then
         pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
     fi
-
-    source "${UTILS}/install.sh"
-    ensure_install "yq" "install_yq"
 
     # Use yq to check if dependency exists in any optional-dependencies group
     # Flatten all groups and search for matching package name
@@ -216,6 +220,7 @@ _has_pyproject_optional_dependency() {
 #
 # Check if a dependency exists in Poetry dev-dependencies.
 # If pyproject_content is provided, uses it instead of reading from file.
+# Requires: yq must be installed (checked once at module level)
 _has_poetry_dev_dependency() {
     local dep="${1:?dependency name required}"
     local pyproject="${2:-}"
@@ -224,9 +229,6 @@ _has_poetry_dev_dependency() {
     if [[ -z "$pyproject" ]]; then
         pyproject=$(get_pyproject_toml 2>/dev/null) || return 1
     fi
-
-    source "${UTILS}/install.sh"
-    ensure_install "yq" "install_yq"
 
     # Use yq to check if dependency key exists in tool.poetry.dev-dependencies
     if echo "$pyproject" | yq -p toml -e \

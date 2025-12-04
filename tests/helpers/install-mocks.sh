@@ -677,5 +677,133 @@ snap() {
     esac
 }
 
+# Mock winget (Windows Package Manager)
+winget() {
+    local subcmd="$1"
+    shift
+    _mock_record "winget:$subcmd:$*"
+
+    case "$subcmd" in
+        search)
+            # winget search --exact --id <pkg>
+            local pkg=""
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --exact|--id|-e|-q) shift ;;
+                    *) pkg="$1"; shift ;;
+                esac
+            done
+            if _mock_has_package "winget" "$pkg"; then
+                echo "Name      Id                Version"
+                echo "-------------------------------------------"
+                echo "Package   $pkg   1.0.0"
+                return 0
+            fi
+            return 1
+            ;;
+        install)
+            # winget install --exact --id <pkg> --accept-source-agreements --accept-package-agreements
+            local pkg=""
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --exact|--id|-e|--accept-source-agreements|--accept-package-agreements) shift ;;
+                    *) pkg="$1"; shift ;;
+                esac
+            done
+            if _mock_install_succeeds "winget" "$pkg"; then
+                return 0
+            fi
+            return 1
+            ;;
+        list)
+            _mock_list_installed "winget" _fmt_simple
+            return 0
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+# Mock choco (Chocolatey)
+choco() {
+    local subcmd="$1"
+    shift
+    _mock_record "choco:$subcmd:$*"
+
+    case "$subcmd" in
+        search)
+            # choco search <pkg> --exact
+            local pkg=""
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --exact) shift ;;
+                    *) pkg="$1"; shift ;;
+                esac
+            done
+            if _mock_has_package "choco" "$pkg"; then
+                echo "$pkg 1.0.0"
+                return 0
+            fi
+            return 1
+            ;;
+        install)
+            # choco install <pkg> -y
+            local pkg=""
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -y|--yes) shift ;;
+                    *) pkg="$1"; shift ;;
+                esac
+            done
+            if _mock_install_succeeds "choco" "$pkg"; then
+                return 0
+            fi
+            return 1
+            ;;
+        list)
+            _mock_list_installed "choco" _fmt_simple
+            return 0
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+# Mock scoop
+scoop() {
+    local subcmd="$1"
+    shift
+    _mock_record "scoop:$subcmd:$*"
+
+    case "$subcmd" in
+        search)
+            # scoop search <pkg>
+            local pkg="$1"
+            if _mock_has_package "scoop" "$pkg"; then
+                echo "'$pkg' (1.0.0)"
+                return 0
+            fi
+            return 1
+            ;;
+        install)
+            # scoop install <pkg>
+            local pkg="$1"
+            if _mock_install_succeeds "scoop" "$pkg"; then
+                return 0
+            fi
+            return 1
+            ;;
+        list)
+            _mock_list_installed "scoop" _fmt_simple
+            return 0
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
 # Disable SUDO during tests
 SUDO=""

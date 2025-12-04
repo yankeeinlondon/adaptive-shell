@@ -16,6 +16,16 @@ else
     UTILS="${ROOT}/utils"
 fi
 
+# Ensure yq is available (checked once at module load)
+# This avoids repeated has_command checks in every function call
+if [[ -z "${__LANG_RS_YQ_CHECKED:-}" ]]; then
+    __LANG_RS_YQ_CHECKED=1
+    if ! command -v yq >/dev/null 2>&1; then
+        source "${UTILS}/install.sh"
+        ensure_install "yq" "install_yq"
+    fi
+fi
+
 # get_cargo_toml()
 #
 # Attempts to read in content from Cargo.toml from current working
@@ -39,48 +49,29 @@ function get_cargo_toml() {
     return 0
 }
 
-# _extract_toml_section <section_name>
+# _has_cargo_dependency <section> <dep> [cargo_content]
 #
-# Helper function to extract a TOML section from stdin.
-# Reads from the start of [section_name] until the next section or EOF.
-_extract_toml_section() {
+# Helper function to check if a crate exists in a Cargo.toml dependency section.
+# Uses yq for robust TOML parsing including inline tables and dotted keys.
+# If cargo_content is provided, uses it instead of reading from file.
+# Requires: yq must be installed (checked once at module level)
+_has_cargo_dependency() {
     local section="${1:?section name required}"
-    local in_section=0
-    local line
+    local dep="${2:?dependency name required}"
+    local cargo="${3:-}"
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        # Check if we're entering our target section
-        if [[ "$line" =~ ^\[${section}\]$ ]]; then
-            in_section=1
-            continue
-        fi
-        # Check if we're entering a different section (exit our section)
-        if [[ "$line" =~ ^\[.*\]$ ]] && [[ $in_section -eq 1 ]]; then
-            break
-        fi
-        # Output lines if we're in our section
-        if [[ $in_section -eq 1 ]]; then
-            echo "$line"
-        fi
-    done
-}
+    # Get content if not provided
+    if [[ -z "$cargo" ]]; then
+        cargo=$(get_cargo_toml 2>/dev/null) || return 1
+    fi
 
-# _has_toml_key <section_content> <key>
-#
-# Helper function to check if a key exists in TOML section content.
-# Handles both inline format (key = "value") and table format (key = { ... })
-_has_toml_key() {
-    local content="$1"
-    local key="${2:?key name required}"
-
-    # Match either:
-    # - key = "..." (inline string)
-    # - key = { ... } (inline table)
-    # - key.* = ... (dotted key)
-    # Allow for optional whitespace around the equals sign
-    if echo "$content" | grep -qE "^${key}[[:space:]]*="; then
+    # Use yq to check if dependency key exists in the specified section
+    # This handles all TOML formats: inline string, inline table, dotted keys
+    if echo "$cargo" | yq -p toml -e \
+        ".${section} | has(\"${dep}\")" 2>/dev/null | grep -q "true"; then
         return 0
     fi
+
     return 1
 }
 
