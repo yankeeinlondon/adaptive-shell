@@ -39,6 +39,13 @@ rgb_text "255 0 0" "red text"
     // Using __FUNCTION_REGISTRY_CACHE skips the expensive registry build (~2s -> ~100ms)
     const DELIMITER = '___SPLIT_MARKER___'
     const script = `
+      # Verify the mock registry cache is available - if not, fail fast
+      # This prevents 30-second timeouts on CI if env var passing fails
+      if [ -z "\${__FUNCTION_REGISTRY_CACHE:-}" ]; then
+        echo "ERROR: __FUNCTION_REGISTRY_CACHE not set - env var passing failed" >&2
+        exit 1
+      fi
+
       source ./reports/file-deps.sh
 
       # First call - uses pre-set mock registry (no expensive build)
@@ -53,17 +60,31 @@ rgb_text "255 0 0" "red text"
       report_file_dependencies "${tempTestFile}" --json
     `
 
-    const result = execSync(script, {
-      shell: 'bash',
-      encoding: 'utf-8',
-      cwd: process.cwd(),
-      timeout: 30000, // 30 second timeout to prevent CI hangs
-      env: {
-        ...process.env,
-        ROOT: process.cwd(),
-        __FUNCTION_REGISTRY_CACHE: mockRegistry
-      }
-    })
+    let result: string
+    try {
+      result = execSync(script, {
+        shell: 'bash',
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+        timeout: 30000, // 30 second timeout to prevent CI hangs
+        env: {
+          ...process.env,
+          ROOT: process.cwd(),
+          __FUNCTION_REGISTRY_CACHE: mockRegistry
+        }
+      })
+    } catch (err: any) {
+      // Provide clear error message for CI debugging
+      const stderr = err.stderr?.toString() || ''
+      const stdout = err.stdout?.toString() || ''
+      throw new Error(
+        `Bash script failed:\n` +
+        `Exit code: ${err.status}\n` +
+        `Signal: ${err.signal || 'none'}\n` +
+        `Stderr: ${stderr.slice(0, 500)}\n` +
+        `Stdout: ${stdout.slice(0, 500)}`
+      )
+    }
 
     const [fileDepsJson, consoleOutput, reportJson] = result.split(DELIMITER).map(s => s.trim())
 
