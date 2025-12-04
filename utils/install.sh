@@ -1426,22 +1426,128 @@ function install_jqp() {
     fi
 }
 
-# parser for JSON, YAML, and TOML
+# _yq_supports_toml
+#
+# Checks if the installed yq supports TOML parsing (mikefarah/yq does, Python yq doesn't).
+# Returns 0 if yq supports TOML, 1 otherwise.
+_yq_supports_toml() {
+    if ! has_command "yq"; then
+        return 1
+    fi
+    # mikefarah/yq supports -p toml flag, Python yq doesn't
+    echo '' | yq -p toml '.' &>/dev/null
+}
+
+# _install_mikefarah_yq
+#
+# Installs mikefarah/yq from GitHub releases. This is needed on Debian/Ubuntu
+# because the APT 'yq' package is the Python-based yq which doesn't support TOML.
+_install_mikefarah_yq() {
+    local arch
+    local os_name
+    local binary_name
+    local yq_version="v4.44.3"  # Stable version with TOML support
+
+    # Determine architecture
+    case "$(uname -m)" in
+        x86_64)  arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l)  arch="arm" ;;
+        i686)    arch="386" ;;
+        *)
+            logc "{{RED}}ERROR{{RESET}}: unsupported architecture $(uname -m) for mikefarah/yq"
+            return 1
+            ;;
+    esac
+
+    # Determine OS
+    case "$(uname -s)" in
+        Linux)  os_name="linux" ;;
+        Darwin) os_name="darwin" ;;
+        *)
+            logc "{{RED}}ERROR{{RESET}}: unsupported OS $(uname -s) for mikefarah/yq"
+            return 1
+            ;;
+    esac
+
+    binary_name="yq_${os_name}_${arch}"
+    local download_url="https://github.com/mikefarah/yq/releases/download/${yq_version}/${binary_name}"
+
+    logc "- installing {{BOLD}}{{BLUE}}yq{{RESET}} (mikefarah/yq) from GitHub releases..."
+
+    # Ensure wget or curl is available
+    if ! has_command "wget" && ! has_command "curl"; then
+        logc "{{RED}}ERROR{{RESET}}: wget or curl required to download yq"
+        return 1
+    fi
+
+    # Download to temp location
+    local tmp_file
+    tmp_file=$(mktemp)
+
+    if has_command "wget"; then
+        if ! wget -q -O "$tmp_file" "$download_url"; then
+            rm -f "$tmp_file"
+            logc "{{RED}}ERROR{{RESET}}: failed to download yq from $download_url"
+            return 1
+        fi
+    else
+        if ! curl -fsSL -o "$tmp_file" "$download_url"; then
+            rm -f "$tmp_file"
+            logc "{{RED}}ERROR{{RESET}}: failed to download yq from $download_url"
+            return 1
+        fi
+    fi
+
+    # Make executable and move to /usr/local/bin
+    chmod +x "$tmp_file"
+    if ! ${SUDO} mv "$tmp_file" /usr/local/bin/yq; then
+        rm -f "$tmp_file"
+        logc "{{RED}}ERROR{{RESET}}: failed to install yq to /usr/local/bin"
+        return 1
+    fi
+
+    logc "- {{BOLD}}{{BLUE}}yq{{RESET}} installed successfully"
+    return 0
+}
+
+# install_yq
+#
+# Installs mikefarah/yq (Go-based) which supports JSON, YAML, XML, CSV, TOML parsing.
+# NOTE: There are two different tools named "yq":
+#   - mikefarah/yq (Go): Full-featured, supports TOML with -p toml flag
+#   - kislyuk/yq (Python): jq wrapper, no native TOML support
+#
+# Package availability by distro:
+#   - macOS (Homebrew): "yq" = mikefarah/yq ✓
+#   - Alpine: "yq-go" = mikefarah/yq (in community repo)
+#   - Fedora: "yq" = mikefarah/yq ✓
+#   - Arch: "go-yq" = mikefarah/yq, "yq" = kislyuk/yq
+#   - Debian/Ubuntu: "yq" = kislyuk/yq (need GitHub releases)
+#   - Windows: "MikeFarah.yq" (winget) = mikefarah/yq ✓
 function install_yq() {
-    if has_command "yq"; then
+    # Check if yq is installed AND supports TOML (mikefarah/yq)
+    # Python yq from APT repos doesn't support TOML parsing
+    if _yq_supports_toml; then
         logc "- {{BOLD}}{{BLUE}}yq{{RESET}} is already installed"
         return 0
     fi
     if is_mac; then
         install_on_macos "yq"
     elif is_debian || is_ubuntu; then
-        install_on_debian "yq"
+        # APT 'yq' package is Python-based and doesn't support TOML
+        # Install mikefarah/yq directly from GitHub releases
+        _install_mikefarah_yq
     elif is_alpine; then
-        install_on_alpine "yq"
+        # Alpine has 'yq-go' (mikefarah/yq) in community repo
+        install_on_alpine "yq-go"
     elif is_fedora; then
+        # https://packages.fedoraproject.org/pkgs/yq/yq/
         install_on_fedora "yq"
     elif is_arch; then
-        install_on_arch "yq"
+        # Arch has 'yq' (Python/kislyuk) and 'go-yq' (Go/mikefarah)
+        # We need go-yq for TOML support
+        install_on_arch "go-yq"
     elif is_windows; then
         install_on_windows "MikeFarah.yq" "yq"
     else

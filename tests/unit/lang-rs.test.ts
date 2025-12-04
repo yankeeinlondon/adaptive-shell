@@ -631,7 +631,7 @@ describe("lang-rs", { concurrent: true }, () => {
       if (isGitFixture && (fixture as GitFixture).commits) {
         for (const commit of (fixture as GitFixture).commits!) {
           execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
-          execSync(`git commit -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
+          execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
         }
       }
     }

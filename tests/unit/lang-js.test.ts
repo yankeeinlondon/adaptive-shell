@@ -22,7 +22,7 @@ function initGitRepo(dir: string): void {
 function commitFile(dir: string, filename: string, content: string, message: string): void {
   writeFileSync(join(dir, filename), content)
   execSync(`git add "${filename}"`, { cwd: dir, stdio: 'pipe' })
-  execSync(`git commit -m "${message}"`, { cwd: dir, stdio: 'pipe' })
+  execSync(`git commit --no-gpg-sign -m "${message}"`, { cwd: dir, stdio: 'pipe' })
 }
 
 /**
