@@ -992,6 +992,124 @@ describe('detection utilities', () => {
     })
   })
 
+  describe('js_package_manager()', () => {
+    it('should return "pnpm" when pnpm-lock.yaml exists', () => {
+      const pnpmDir = join(testDir, 'pnpm-project')
+      mkdirSync(pnpmDir, { recursive: true })
+      writeFileSync(join(pnpmDir, 'package.json'), '{"name": "test"}')
+      writeFileSync(join(pnpmDir, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0')
+
+      const result = runInTestDir('bash', pnpmDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('pnpm')
+    })
+
+    it('should return "pnpm" when pnpm-workspace.yaml exists', () => {
+      const pnpmDir = join(testDir, 'pnpm-workspace-project')
+      mkdirSync(pnpmDir, { recursive: true })
+      writeFileSync(join(pnpmDir, 'package.json'), '{"name": "test"}')
+      writeFileSync(join(pnpmDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
+
+      const result = runInTestDir('bash', pnpmDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('pnpm')
+    })
+
+    it('should return "npm" when package-lock.json exists', () => {
+      const npmDir = join(testDir, 'npm-project')
+      mkdirSync(npmDir, { recursive: true })
+      writeFileSync(join(npmDir, 'package.json'), '{"name": "test"}')
+      writeFileSync(join(npmDir, 'package-lock.json'), '{"lockfileVersion": 2}')
+
+      const result = runInTestDir('bash', npmDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('npm')
+    })
+
+    it('should return "yarn" when yarn.lock exists', () => {
+      const yarnDir = join(testDir, 'yarn-project')
+      mkdirSync(yarnDir, { recursive: true })
+      writeFileSync(join(yarnDir, 'package.json'), '{"name": "test"}')
+      writeFileSync(join(yarnDir, 'yarn.lock'), '# yarn lockfile v1')
+
+      const result = runInTestDir('bash', yarnDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('yarn')
+    })
+
+    it('should return "bun" when bun.lockb exists', () => {
+      const bunDir = join(testDir, 'bun-project')
+      mkdirSync(bunDir, { recursive: true })
+      writeFileSync(join(bunDir, 'package.json'), '{"name": "test"}')
+      writeFileSync(join(bunDir, 'bun.lockb'), 'binary-content')
+
+      const result = runInTestDir('bash', bunDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('bun')
+    })
+
+    it('should return "deno" when deno.lock exists', () => {
+      const denoDir = join(testDir, 'deno-project')
+      mkdirSync(denoDir, { recursive: true })
+      writeFileSync(join(denoDir, 'package.json'), '{"name": "test"}')
+      writeFileSync(join(denoDir, 'deno.lock'), '{"version": "2"}')
+
+      const result = runInTestDir('bash', denoDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('deno')
+    })
+
+    it('should return success with empty output when package.json exists but no lock file', () => {
+      const jsDir = join(testDir, 'js-no-lock')
+      mkdirSync(jsDir, { recursive: true })
+      writeFileSync(join(jsDir, 'package.json'), '{"name": "test"}')
+
+      const result = runInTestDir('bash', jsDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('')
+    })
+
+    it('should return 1 when not a JS project', () => {
+      const tmpNonJsDir = `/tmp/pkg-mgr-nojs-${Date.now()}`
+      mkdirSync(tmpNonJsDir, { recursive: true })
+      writeFileSync(join(tmpNonJsDir, 'readme.txt'), 'not a js project')
+
+      try {
+        const result = runInTestDir('bash', tmpNonJsDir, 'js_package_manager')
+        expect(result.code).toBe(1)
+      } finally {
+        rmSync(tmpNonJsDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should detect package manager from repo root when in subdirectory', () => {
+      const repoDir = join(testDir, 'pkg-mgr-subdir-test')
+      const subDir = join(repoDir, 'packages', 'app')
+      mkdirSync(subDir, { recursive: true })
+      initGitRepo(repoDir)
+      writeFileSync(join(repoDir, 'package.json'), '{"name": "monorepo"}')
+      writeFileSync(join(repoDir, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0')
+      commitFile(repoDir, 'package.json', '{"name": "monorepo"}', 'init')
+
+      const result = runInTestDir('bash', subDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('pnpm')
+    })
+
+    it('should prioritize pnpm over npm when both lock files exist', () => {
+      // This tests the order of checks in the function
+      const mixedDir = join(testDir, 'mixed-locks')
+      mkdirSync(mixedDir, { recursive: true })
+      writeFileSync(join(mixedDir, 'package.json'), '{"name": "test"}')
+      writeFileSync(join(mixedDir, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0')
+      writeFileSync(join(mixedDir, 'package-lock.json'), '{"lockfileVersion": 2}')
+
+      const result = runInTestDir('bash', mixedDir, 'js_package_manager')
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe('pnpm')
+    })
+  })
+
   describe('looks_like_rust_project()', () => {
     it('should return 0 when Cargo.toml exists in CWD', () => {
       const rustDir = join(testDir, 'rust-project')
