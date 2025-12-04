@@ -13,7 +13,7 @@ else
 fi
 
 # Guard to prevent circular dependencies
-[[ -n "${__TEXT_SH_LOADED:-}" ]] && return
+[[ -n "${__TEXT_SH_LOADED:-}" ]] && declare -f "lc" > /dev/null && return
 __TEXT_SH_LOADED=1
 
 # shellcheck source="./logging.sh"
@@ -221,14 +221,61 @@ find_replace() {
 }
 
 
-# indent(indent_txt, main_content)
-function indent() {
-    local -r indent_txt="${1:?No indentation text passed to indent()!}"
-    local -r main_content="${2:?No main content passed to indent()!}"
+# indent_val <indent_txt> <content>
+#
+# Takes content as a parameter and returns the content with each line
+# indented by the specified indent text.
+function indent_val() {
+    local -r indent_txt="${1:?No indentation text passed to indent_val()!}"
+    local -r content="${2:?No content passed to indent_val()!}"
 
-    printf "%s\n" "$main_content" | while IFS= read -r line; do
+    printf "%s\n" "$content" | while IFS= read -r line; do
         printf "%s%s\n" "${indent_txt}" "${line}"
     done
+}
+
+# indent_ref <indent_txt> <ref>
+#
+# Takes a reference to a variable and changes the variable to have
+# each line indented by the specified indent text.
+function indent_ref() {
+    local -r indent_txt="${1:?No indentation text passed to indent_ref()!}"
+    local var_name="$2"
+    local value="${!var_name}"
+
+    # Process the content
+    local indented
+    indented="$(indent_val "$indent_txt" "$value")"
+
+    # Reassign the indented value to the original variable
+    printf -v "$var_name" '%s' "$indented"
+}
+
+# indent <indent_txt> <ref_or_value>
+#
+# Takes either a reference to a variable _or_ textual content as the
+# second parameter. It then leverages `indent_ref()` or `indent_val()`
+# based on the type of parameter you pass it.
+#
+# Each line in the content will be indented by the specified indent text.
+#
+# Examples:
+#   indent "  " $'line1\nline2'  # → "  line1\n  line2"
+#
+#   content=$'foo\nbar'
+#   indent "  " content
+#   echo "$content"  # → "  foo\n  bar"
+function indent() {
+    local -r indent_txt="${1:?No indentation text passed to indent()!}"
+    local arg="${2:?No content passed to indent()!}"
+
+    if [[ $# -eq 2 && $arg =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ && ${!arg+_} ]]; then
+        # Case 1: variable name (in-place)
+        indent_ref "$indent_txt" "$arg"
+    else
+        # Case 2: direct string (echo result)
+        indent_val "$indent_txt" "$arg"
+    fi
 }
 
 
@@ -798,6 +845,74 @@ trim() {
     value="${value%"${value##*[![:space:]]}"}"
     echo "$value"
   fi
+}
+
+# trim_each_val <content>
+#
+# Takes content as a parameter and returns the content with each line
+# trimmed of leading and trailing whitespace.
+function trim_each_val() {
+    local content="$*"
+
+    # Handle empty content early
+    if [[ -z "$content" ]]; then
+        echo ""
+        return 0
+    fi
+
+    local result=""
+    local first_line=true
+
+    # Process line by line, preserving newlines
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        local trimmed_line
+        trimmed_line="$(trim_val "$line")"
+
+        if [[ "$first_line" == true ]]; then
+            result="$trimmed_line"
+            first_line=false
+        else
+            result="${result}"$'\n'"${trimmed_line}"
+        fi
+    done <<< "$content"
+
+    echo "$result"
+    return 0
+}
+
+# trim_each_ref <ref>
+#
+# Takes a reference to a variable and changes the variable to have
+# each line trimmed of leading and trailing whitespace.
+function trim_each_ref() {
+    local var_name="$1"
+    local value="${!var_name}"
+
+    # Process the content
+    local trimmed
+    trimmed="$(trim_each_val "$value")"
+
+    # Reassign the trimmed value to the original variable
+    printf -v "$var_name" '%s' "$trimmed"
+}
+
+# trim_each <ref_or_value>
+#
+# Takes either a reference to a variable _or_ textual content as a
+# parameter. It then leverages the `trim_each_ref()` or `trim_each_val()`
+# functions based on the type of parameters you pass it.
+#
+# Each line in the content will be trimmed of leading and trailing whitespace.
+function trim_each() {
+    local arg="$1"
+
+    if [[ $# -eq 1 && $arg =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ && ${!arg+_} ]]; then
+        # Case 1: variable name (in-place)
+        trim_each_ref "$arg"
+    else
+        # Case 2: direct string (echo result)
+        trim_each_val "$@"
+    fi
 }
 
 # CLI invocation handler - allows running script directly with a function name
