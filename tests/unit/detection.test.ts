@@ -672,19 +672,28 @@ describe('detection utilities', () => {
 
   describe('repo_is_dirty()', () => {
     const gitTestDir = join(testDir, 'git-dirty-test')
+    const subDir = join(gitTestDir, 'subdir')
 
-    beforeEach(() => {
-      // Clean up from previous test in this describe block
+    // Initialize repo ONCE with an initial commit, then reset between tests
+    beforeAll(() => {
       if (existsSync(gitTestDir)) {
         rmSync(gitTestDir, { recursive: true, force: true })
       }
-      mkdirSync(gitTestDir, { recursive: true })
+      mkdirSync(subDir, { recursive: true })
       initGitRepo(gitTestDir)
+      // Create .gitkeep so subdir is tracked and preserved by git clean
+      writeFileSync(join(subDir, '.gitkeep'), '')
+      execSync('git add subdir/.gitkeep', { cwd: gitTestDir, stdio: 'pipe' })
+      commitFile(gitTestDir, 'file.txt', 'initial content', 'initial commit')
+    })
+
+    beforeEach(() => {
+      // Fast reset instead of recreating repo - preserves initial commit
+      execSync('git reset --hard HEAD && git clean -fd', { cwd: gitTestDir, stdio: 'pipe' })
     })
 
     it('should return 0 (dirty) when repo has uncommitted changes', () => {
-      // Create initial commit, then modify the file
-      commitFile(gitTestDir, 'file.txt', 'initial content', 'initial commit')
+      // Modify the existing file to make repo dirty
       writeFileSync(join(gitTestDir, 'file.txt'), 'modified content')
 
       const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(gitTestDir)
@@ -692,15 +701,12 @@ describe('detection utilities', () => {
     })
 
     it('should return 1 (clean) when repo has no uncommitted changes', () => {
-      // Create a commit and leave the repo clean
-      commitFile(gitTestDir, 'file.txt', 'content', 'initial commit')
-
+      // After reset in beforeEach, repo is already clean
       const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(gitTestDir)
       expect(api).toFail()
     })
 
     it('should return 0 (dirty) for staged but uncommitted changes', () => {
-      commitFile(gitTestDir, 'file.txt', 'initial', 'initial commit')
       writeFileSync(join(gitTestDir, 'new-file.txt'), 'new content')
       execSync('git add new-file.txt', { cwd: gitTestDir, stdio: 'pipe' })
 
@@ -709,7 +715,6 @@ describe('detection utilities', () => {
     })
 
     it('should return 0 (dirty) for untracked files', () => {
-      commitFile(gitTestDir, 'file.txt', 'initial', 'initial commit')
       writeFileSync(join(gitTestDir, 'untracked.txt'), 'untracked content')
 
       const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(gitTestDir)
@@ -717,9 +722,7 @@ describe('detection utilities', () => {
     })
 
     it('should work when called from subdirectory', () => {
-      commitFile(gitTestDir, 'file.txt', 'initial', 'initial commit')
-      const subDir = join(gitTestDir, 'subdir')
-      mkdirSync(subDir, { recursive: true })
+      // subDir created in beforeAll, just add a dirty file
       writeFileSync(join(gitTestDir, 'modified.txt'), 'dirty')
 
       const api = sourceScript('./utils/detection.sh')('repo_is_dirty')(subDir)

@@ -28,7 +28,7 @@ source "${UTILS}/empty.sh"
 # get_shell
 #
 # Return the *name* of the current interactive shell (not a path).
-get_shell() {
+function get_shell() {
   # Prefer version vars (fast, reliable)
   if [ -n "${ZSH_VERSION-}" ];  then printf '%s\n' zsh;  return; fi
   if [ -n "${BASH_VERSION-}" ]; then printf '%s\n' bash; return; fi
@@ -568,6 +568,61 @@ function looks_like_js_project() {
     fi
 
     return 1
+}
+
+# js_package_manager
+#
+# Returns the JS/TS package being used in this repo:
+#   - returns error code if this is NOT a JS/TS project directory
+#   - on success returns "npm", "yarn", "pnpm", "bun", or "deno"
+#   - if unable to determine (but it IS a JS/TS project directory) then will nothing but
+#     exit code will be successful
+function js_package_manager() {
+    if looks_like_js_project; then
+        if [[ -f "./package.json" ]]; then
+            if [[ -f "./pnpm-lock.yaml" ]] ||  [[ -f "./pnpm-workspace.yaml" ]]; then
+                echo "pnpm"
+                return 0
+            elif [[ -f "./package-lock.json" ]]; then
+                echo "npm"
+                return 0
+            elif [[ -f "./yarn.lock" ]]; then
+                echo "yarn"
+                return 0
+            elif [[ -f "./bun.lockb" ]]; then
+                echo "bun"
+                return 0
+            elif [[ -f "./deno.lock" ]]; then
+                echo "deno"
+                return 0
+            else
+                return 0
+            fi
+        else
+            # repo root must be in parent dir
+            local -r dir="$(repo_root ".")"
+            if [[ -f "${dir}/pnpm-lock.yaml" ]] ||  [[ -f "${dir}/pnpm-workspace.yaml" ]]; then
+                echo "pnpm"
+                return 0
+            elif [[ -f "${dir}/package-lock.json" ]]; then
+                echo "npm"
+                return 0
+            elif [[ -f "${dir}/yarn.lock" ]]; then
+                echo "yarn"
+                return 0
+            elif [[ -f "${dir}/bun.lockb" ]]; then
+                echo "bun"
+                return 0
+            elif [[ -f "${dir}/deno.lock" ]]; then
+                echo "deno"
+                return 0
+            else
+                return 0
+            fi
+        fi
+    else
+        return 1
+    fi
 }
 
 # looks_like_rust_project
