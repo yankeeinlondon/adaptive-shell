@@ -4,11 +4,14 @@ import { TestOptions } from './index';
 
 
 
+// Default timeout in milliseconds (10 seconds - prevents hangs on WSL/Windows)
+const DEFAULT_TIMEOUT = 10000
+
 /**
  * Execute bash script and return stdout
  *
  * @param script - The bash script to execute
- * @param options - Optional configuration (env vars, cwd)
+ * @param options - Optional configuration (env vars, cwd, timeout)
  * @returns The stdout output, trimmed
  */
 export function bash(script: string, options?: TestOptions): string {
@@ -21,12 +24,14 @@ export function bash(script: string, options?: TestOptions): string {
     const stderr = isUndefined(options?.stderr)
         ? "pipe"
         : options.stdin
+    const timeout = options?.timeout ?? DEFAULT_TIMEOUT
     try {
         return execSync(script, {
             shell: 'bash',  // Use bash from PATH (not /bin/bash which is 3.2 on macOS)
             encoding: 'utf-8',
             cwd: options?.cwd || process.cwd(),
             stdio: [stdin, stdout, stderr],
+            timeout,
             env: {
                 ...process.env,
                 ROOT: process.cwd(),
@@ -88,16 +93,18 @@ export function bashExitCode(script: string, options?: TestOptions): number {
  * Execute bash and return both stdout and stderr combined
  *
  * @param script - The bash script to execute
- * @param options - Optional configuration (env vars, cwd)
+ * @param options - Optional configuration (env vars, cwd, timeout)
  * @returns Combined stdout and stderr output, trimmed
  */
 export function bashWithStderr(script: string, options?: TestOptions): string {
+    const timeout = options?.timeout ?? DEFAULT_TIMEOUT
     try {
         // Redirect stderr to stdout in the bash command itself
         const result = execSync(`${script} 2>&1`, {
             shell: 'bash',
             encoding: 'utf-8',
             cwd: options?.cwd || process.cwd(),
+            timeout,
             env: {
                 ...process.env,
                 ROOT: process.cwd(),
@@ -131,15 +138,17 @@ export function sourcedBashWithStderr(file: string, script: string, options?: Te
  * (preserves leading whitespace, useful for testing indentation)
  *
  * @param script - The bash script to execute
- * @param options - Optional configuration (env vars, cwd)
+ * @param options - Optional configuration (env vars, cwd, timeout)
  * @returns The stdout output with only trailing whitespace removed
  */
 export function bashNoTrimStart(script: string, options?: TestOptions): string {
+    const timeout = options?.timeout ?? DEFAULT_TIMEOUT
     try {
         const result = execSync(script, {
             shell: 'bash',
             encoding: 'utf-8',
             cwd: options?.cwd || process.cwd(),
+            timeout,
             env: {
                 ...process.env,
                 ROOT: process.cwd(),

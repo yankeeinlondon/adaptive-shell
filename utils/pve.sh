@@ -96,11 +96,11 @@ function about_container() {
         else
             message="{{BOLD}}LXC{{RESET}} container"
         fi
-    elif is_vm; then
+    elif is_kvm_vm; then
         if is_pve_container; then
             message="{{BOLD}}Proxmox VM{{RESET}}"
         else
-            message="{{BOLD}}VM{{RESET}}"
+            message="{{BOLD}}KVM/QEMU VM{{RESET}}"
         fi
     else
         # shellcheck disable=SC2086

@@ -9,16 +9,18 @@ import type { SourcedTestUtil, TestUtil, TestApi } from './TestUtil';
 import { DidNotFail, DidNotPass, StdErrReturn, StdOutReturn, StdOutReturnTrimmed } from './errors';
 import { fallback } from './fallback';
 
+// Default timeout in milliseconds (10 seconds - prevents hangs on WSL/Windows)
+const DEFAULT_TIMEOUT = 10000
 
 /**
  * converts a `TestOptions` hash into a `SpawnSyncOptions` hash.
  */
 export function toSpawnOption<T extends TestOptions>(opt: T): ToSpawnOptions<T> & SpawnSyncOptions {
-    const t = fallback(opt.stdin, "pipe");
     return {
         encoding: "utf-8",
         cwd: fallback(opt.cwd, cwd()),
         env: fallback(opt.env, {}),
+        timeout: fallback(opt.timeout, DEFAULT_TIMEOUT),
         stdio: [
             fallback(opt.stdin, "pipe"),
             fallback(opt.stdout, "pipe"),

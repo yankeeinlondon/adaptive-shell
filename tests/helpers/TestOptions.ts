@@ -9,6 +9,10 @@ export type TestOptions = {
     env?: Record<string, string>
     cwd?: string,
     /**
+     * Timeout in milliseconds (default: 10000ms for deprecated helpers, 30000ms for shell-runner)
+     */
+    timeout?: number,
+    /**
      * how you want the tests to handle STDIN (by default it is `pipe`)
      */
     stdin?: IOType,
@@ -27,6 +31,7 @@ export type ToSpawnOptions<T extends TestOptions> = {
     encoding: "utf-8";
     cwd: Fallback<T["cwd"], string>;
     env: Fallback<T["env"], EmptyString>;
+    timeout: Fallback<T["timeout"], number>;
     stdio: [
         T["stdin"] | "pipe",
         T["stdout"] | "pipe",
