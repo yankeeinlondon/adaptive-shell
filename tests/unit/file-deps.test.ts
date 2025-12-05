@@ -4,19 +4,25 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { execSync } from 'child_process'
 
-// Skip on Windows - this test relies on Unix bash features and environment
+// Skip on Windows/WSL - this test relies on Unix bash features and environment
 // variable passing that doesn't work correctly in Windows bash environments
 const isWindows = process.platform === 'win32'
+const isWSL = process.platform === 'linux' && (
+  !!process.env.WSL_DISTRO_NAME ||
+  !!process.env.WSL_INTEROP ||
+  process.cwd().startsWith('/mnt/c')
+)
+const skipTest = isWindows || isWSL
 
-describe.skipIf(isWindows)('file dependency analysis', () => {
+describe.skipIf(skipTest)('file dependency analysis', () => {
   let tempTestFile: string
   let cachedFileDepsResult: any
   let cachedReportConsoleOutput: string
   let cachedReportJsonResult: any
 
   beforeAll(() => {
-    // Skip setup on Windows - Vitest's skipIf doesn't prevent beforeAll from running
-    if (isWindows) return
+    // Skip setup on Windows/WSL - Vitest's skipIf doesn't prevent beforeAll from running
+    if (skipTest) return
 
     // Create a temporary test file with known dependencies
     tempTestFile = join(tmpdir(), `test-file-deps-${Date.now()}.sh`)
@@ -101,8 +107,8 @@ rgb_text "255 0 0" "red text"
   })
 
   afterAll(() => {
-    // Skip cleanup on Windows
-    if (isWindows) return
+    // Skip cleanup on Windows/WSL
+    if (skipTest) return
 
     // Clean up temp file
     try {
