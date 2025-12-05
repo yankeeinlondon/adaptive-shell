@@ -30,6 +30,6 @@ jobs:
     needs: check
     uses: yankeeinlondon/gha/.github/workflows/test.yml@main
     with:
-        transpile: true
+        transpile: false
         nodeVersion: '["22.x"]'
-
+        choco_install: 'jq yq curl'
