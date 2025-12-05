@@ -1,0 +1,6 @@
+[package]
+name = "test"
+
+[dev-dependencies]
+pretty_assertions = "1.0"
+criterion = "0.5"

@@ -1,0 +1,7 @@
+[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+
+[build-dependencies]

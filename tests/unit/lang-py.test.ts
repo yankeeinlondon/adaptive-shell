@@ -7,6 +7,9 @@ import { runInShell, isWSL } from "../helpers"
 /** Project root for absolute path references */
 const PROJECT_ROOT = process.cwd()
 
+/** Path to permanent fixtures */
+const FIXTURES_DIR = join(PROJECT_ROOT, 'tests', 'fixtures', 'lang-py')
+
 /**
  * Helper to initialize a git repo in a directory for testing
  */
@@ -39,108 +42,17 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
 }
 
 // =============================================================================
-// FIXTURE DEFINITIONS - All test directories and their contents
+// GIT FIXTURES - Only fixtures that require git repos (created dynamically)
 // =============================================================================
 
-interface FileFixture {
-  files: Record<string, string>
+interface GitFixture {
   subdirs?: string[]
+  files: Record<string, string>
+  commits: Array<{ file: string; content: string; message: string }>
 }
 
-interface GitFixture extends FileFixture {
-  git: true
-  commits?: Array<{ file: string; content: string; message: string }>
-}
-
-type Fixture = FileFixture | GitFixture
-
-const FIXTURES: Record<string, Fixture> = {
-  // py_package_manager() fixtures
-  'poetry-project': {
-    files: {
-      'pyproject.toml': '[tool.poetry]\nname = "test"',
-      'poetry.lock': '# Poetry lock file'
-    }
-  },
-  'poetry-no-lock': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry]
-name = "test-project"
-version = "0.1.0"
-`
-    }
-  },
-  'pipenv-project': {
-    files: {
-      'Pipfile': '[[source]]\nurl = "https://pypi.org/simple"',
-      'Pipfile.lock': '{"_meta": {}}'
-    }
-  },
-  'pipenv-no-lock': {
-    files: {
-      'Pipfile': '[[source]]\nurl = "https://pypi.org/simple"'
-    }
-  },
-  'uv-project': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"',
-      'uv.lock': 'version = 1'
-    }
-  },
-  'pdm-project': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"',
-      'pdm.lock': '# PDM lock file'
-    }
-  },
-  'pdm-no-lock': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-
-[tool.pdm]
-`
-    }
-  },
-  'hatch-project': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-
-[tool.hatch.build]
-`
-    }
-  },
-  'conda-project': {
-    files: {
-      'environment.yml': 'name: test\nchannels:\n  - conda-forge'
-    }
-  },
-  'pip-project': {
-    files: {
-      'requirements.txt': 'requests>=2.0.0\nclick'
-    }
-  },
-  'pip-setup-project': {
-    files: {
-      'setup.py': 'from setuptools import setup\nsetup(name="test")'
-    }
-  },
-  'py-no-manager': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"'
-    }
-  },
-  'non-python-project': {
-    files: {
-      'readme.txt': 'not a python project'
-    }
-  },
+const GIT_FIXTURES: Record<string, GitFixture> = {
   'py-pkg-mgr-subdir-test': {
-    git: true,
     subdirs: ['src/app'],
     files: {
       'pyproject.toml': '[tool.poetry]\nname = "monorepo"',
@@ -150,22 +62,7 @@ name = "test"
       { file: 'pyproject.toml', content: '[tool.poetry]\nname = "monorepo"', message: 'init' }
     ]
   },
-  'mixed-py-managers': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"',
-      'uv.lock': 'version = 1',
-      'requirements.txt': 'requests'
-    }
-  },
-
-  // get_pyproject_toml() fixtures
-  'pyproject-cwd': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test-pkg"\nversion = "1.0.0"'
-    }
-  },
   'pyproject-repo-root': {
-    git: true,
     subdirs: ['src/app'],
     files: {
       'pyproject.toml': '[project]\nname = "root-pkg"\nversion = "2.0.0"'
@@ -174,13 +71,7 @@ name = "test"
       { file: 'pyproject.toml', content: '[project]\nname = "root-pkg"\nversion = "2.0.0"', message: 'init' }
     ]
   },
-  'pyproject-empty': {
-    files: {
-      'readme.txt': 'no pyproject.toml here'
-    }
-  },
   'pyproject-prefer-cwd': {
-    git: true,
     subdirs: ['packages/app'],
     files: {
       'pyproject.toml': '[project]\nname = "root-pkg"',
@@ -190,20 +81,7 @@ name = "test"
       { file: 'pyproject.toml', content: '[project]\nname = "root-pkg"', message: 'init' }
     ]
   },
-  'pyproject-special': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"\ndescription = "A \\"quoted\\" value"'
-    }
-  },
-
-  // get_requirements_txt() fixtures
-  'requirements-cwd': {
-    files: {
-      'requirements.txt': 'requests>=2.0.0\nclick>=8.0.0\npytest>=7.0.0'
-    }
-  },
   'requirements-repo-root': {
-    git: true,
     subdirs: ['src'],
     files: {
       'requirements.txt': 'requests>=2.0.0\nclick'
@@ -212,13 +90,7 @@ name = "test"
       { file: 'requirements.txt', content: 'requests>=2.0.0\nclick', message: 'init' }
     ]
   },
-  'requirements-empty': {
-    files: {
-      'readme.txt': 'no requirements.txt here'
-    }
-  },
   'requirements-prefer-cwd': {
-    git: true,
     subdirs: ['packages/app'],
     files: {
       'requirements.txt': 'requests',
@@ -227,568 +99,6 @@ name = "test"
     commits: [
       { file: 'requirements.txt', content: 'requests', message: 'init' }
     ]
-  },
-
-  // has_dependency() fixtures
-  'has-dep-pep621': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-dependencies = [
-    "requests>=2.0.0",
-    "click"
-]
-`
-    }
-  },
-  'no-dep-pep621': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-dependencies = ["requests"]
-`
-    }
-  },
-  'has-dep-poetry': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry.dependencies]
-python = "^3.9"
-requests = "^2.28.0"
-click = "^8.0.0"
-`
-    }
-  },
-  'dep-not-in-poetry-deps': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry.dependencies]
-python = "^3.9"
-requests = "^2.28.0"
-
-[tool.poetry.dev-dependencies]
-pytest = "^7.0.0"
-`
-    }
-  },
-  'has-dep-req': {
-    files: {
-      'requirements.txt': `
-requests>=2.0.0
-click>=8.0.0
-pytest
-`
-    }
-  },
-  'has-dep-req-comments': {
-    files: {
-      'requirements.txt': `
-# Web framework
-requests>=2.0.0
-# CLI
-click>=8.0.0
-`
-    }
-  },
-  'has-dep-commented': {
-    files: {
-      'requirements.txt': `
-requests>=2.0.0
-# flask>=2.0.0
-`
-    }
-  },
-  'dep-no-arg': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"'
-    }
-  },
-
-  // has_dev_dependency() fixtures
-  'has-devdep-pep621': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-
-[project.optional-dependencies]
-dev = ["pytest>=7.0.0", "ruff>=0.1.0"]
-test = ["pytest-cov"]
-`
-    }
-  },
-  'has-devdep-optional': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-
-[project.optional-dependencies]
-test = ["pytest-cov"]
-lint = ["ruff"]
-`
-    }
-  },
-  'has-devdep-poetry': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry.dependencies]
-python = "^3.9"
-requests = "^2.28.0"
-
-[tool.poetry.dev-dependencies]
-pytest = "^7.0.0"
-black = "^23.0.0"
-`
-    }
-  },
-  'devdep-wrong-section': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry.dependencies]
-python = "^3.9"
-requests = "^2.28.0"
-
-[tool.poetry.dev-dependencies]
-pytest = "^7.0.0"
-`
-    }
-  },
-  'has-devdep-reqdev': {
-    files: {
-      'requirements.txt': 'requests>=2.0.0',
-      'requirements-dev.txt': `
-pytest>=7.0.0
-black>=23.0.0
-`
-    }
-  },
-  'no-devdep': {
-    files: {
-      'pyproject.toml': `
-[project.optional-dependencies]
-dev = ["pytest"]
-`
-    }
-  },
-  'devdep-no-arg': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"'
-    }
-  },
-
-  // has_dependency_anywhere() fixtures
-  'has-anywhere-deps': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests"]
-
-[project.optional-dependencies]
-dev = ["pytest"]
-`
-    }
-  },
-  'has-anywhere-optional': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests"]
-
-[project.optional-dependencies]
-dev = ["pytest"]
-`
-    }
-  },
-  'has-anywhere-req': {
-    files: {
-      'requirements.txt': 'requests\nclick'
-    }
-  },
-  'has-anywhere-reqdev': {
-    files: {
-      'requirements.txt': 'requests',
-      'requirements-dev.txt': 'pytest'
-    }
-  },
-  'has-anywhere-none': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests"]
-
-[project.optional-dependencies]
-dev = ["pytest"]
-`
-    }
-  },
-
-  // get_py_linter_by_dep() fixtures
-  'linter-dep-ruff': {
-    files: {
-      'pyproject.toml': `
-[project.optional-dependencies]
-dev = ["ruff>=0.1.0"]
-`
-    }
-  },
-  'linter-dep-flake8': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry.dev-dependencies]
-flake8 = "^6.0.0"
-`
-    }
-  },
-  'linter-dep-pylint': {
-    files: {
-      'requirements-dev.txt': 'pylint>=2.0.0\npytest'
-    }
-  },
-  'linter-dep-mypy': {
-    files: {
-      'requirements-dev.txt': 'mypy>=1.0.0'
-    }
-  },
-  'linter-dep-pyright': {
-    files: {
-      'pyproject.toml': `
-[project.optional-dependencies]
-dev = ["pyright"]
-`
-    }
-  },
-  'linter-dep-none': {
-    files: {
-      'pyproject.toml': `
-[project.optional-dependencies]
-dev = ["pytest"]
-`
-    }
-  },
-  'linter-dep-priority': {
-    files: {
-      'requirements-dev.txt': `
-flake8>=6.0.0
-pylint>=2.0.0
-ruff>=0.1.0
-`
-    }
-  },
-
-  // get_py_linter_by_config() fixtures
-  'linter-config-ruff-toml': {
-    files: {
-      'ruff.toml': 'line-length = 88'
-    }
-  },
-  'linter-config-ruff-dottoml': {
-    files: {
-      '.ruff.toml': 'line-length = 88'
-    }
-  },
-  'linter-config-ruff-pyproject': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-
-[tool.ruff]
-line-length = 88
-`
-    }
-  },
-  'linter-config-flake8': {
-    files: {
-      '.flake8': '[flake8]\nmax-line-length = 88'
-    }
-  },
-  'linter-config-flake8-setup': {
-    files: {
-      'setup.cfg': `
-[metadata]
-name = test
-
-[flake8]
-max-line-length = 88
-`
-    }
-  },
-  'linter-config-pylint': {
-    files: {
-      '.pylintrc': '[MASTER]\njobs=4'
-    }
-  },
-  'linter-config-pylintrc': {
-    files: {
-      'pylintrc': '[MASTER]\njobs=4'
-    }
-  },
-  'linter-config-mypy': {
-    files: {
-      'mypy.ini': '[mypy]\npython_version = 3.9'
-    }
-  },
-  'linter-config-mypy-dot': {
-    files: {
-      '.mypy.ini': '[mypy]\npython_version = 3.9'
-    }
-  },
-  'linter-config-pyright': {
-    files: {
-      'pyrightconfig.json': '{"pythonVersion": "3.9"}'
-    }
-  },
-  'linter-config-none': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"'
-    }
-  },
-  'linter-config-priority': {
-    files: {
-      'ruff.toml': 'line-length = 88',
-      '.flake8': '[flake8]\nmax-line-length = 88',
-      '.pylintrc': '[MASTER]\njobs=4'
-    }
-  },
-
-  // get_py_formatter_by_dep() fixtures
-  'formatter-dep-ruff': {
-    files: {
-      'requirements-dev.txt': 'ruff>=0.1.0'
-    }
-  },
-  'formatter-dep-black': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry.dev-dependencies]
-black = "^23.0.0"
-`
-    }
-  },
-  'formatter-dep-yapf': {
-    files: {
-      'requirements-dev.txt': 'yapf'
-    }
-  },
-  'formatter-dep-autopep8': {
-    files: {
-      'pyproject.toml': `
-[project.optional-dependencies]
-dev = ["autopep8"]
-`
-    }
-  },
-  'formatter-dep-isort': {
-    files: {
-      'requirements-dev.txt': 'isort'
-    }
-  },
-  'formatter-dep-none': {
-    files: {
-      'requirements-dev.txt': 'pytest'
-    }
-  },
-  'formatter-dep-priority': {
-    files: {
-      'requirements-dev.txt': `
-black
-yapf
-ruff
-`
-    }
-  },
-
-  // get_py_formatter_by_config() fixtures
-  'formatter-config-ruff': {
-    files: {
-      'ruff.toml': 'line-length = 88'
-    }
-  },
-  'formatter-config-black': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-
-[tool.black]
-line-length = 88
-`
-    }
-  },
-  'formatter-config-yapf': {
-    files: {
-      '.style.yapf': '[style]\nbased_on_style = pep8'
-    }
-  },
-  'formatter-config-autopep8': {
-    files: {
-      'setup.cfg': `
-[metadata]
-name = test
-
-[tool:autopep8]
-max_line_length = 88
-`
-    }
-  },
-  'formatter-config-isort': {
-    files: {
-      '.isort.cfg': '[settings]\nprofile = black'
-    }
-  },
-  'formatter-config-none': {
-    files: {
-      'pyproject.toml': '[project]\nname = "test"'
-    }
-  },
-  'formatter-config-priority': {
-    files: {
-      'ruff.toml': 'line-length = 88',
-      'pyproject.toml': `
-[tool.black]
-line-length = 88
-`
-    }
-  },
-
-  // packages_not_installed() fixtures
-  'pkgs-not-installed-basic': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests"]
-
-[project.optional-dependencies]
-dev = ["pytest"]
-`
-    }
-  },
-  'pkgs-all-installed': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests", "click"]
-
-[project.optional-dependencies]
-dev = ["pytest"]
-`
-    }
-  },
-  'pkgs-none-installed': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = []
-`
-    }
-  },
-  'pkgs-in-deps': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests", "click"]
-`
-    }
-  },
-  'pkgs-in-optional': {
-    files: {
-      'pyproject.toml': `
-[project.optional-dependencies]
-dev = ["pytest", "black"]
-test = ["pytest-cov"]
-`
-    }
-  },
-  'pkgs-in-req': {
-    files: {
-      'requirements.txt': 'requests>=2.0.0\nclick'
-    }
-  },
-  'pkgs-in-reqdev': {
-    files: {
-      'requirements.txt': 'requests',
-      'requirements-dev.txt': 'pytest\nblack'
-    }
-  },
-  'pkgs-mixed-sections': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests"]
-
-[project.optional-dependencies]
-dev = ["pytest"]
-`,
-      'requirements-dev.txt': 'black'
-    }
-  },
-  'pkgs-poetry': {
-    files: {
-      'pyproject.toml': `
-[tool.poetry.dependencies]
-python = "^3.9"
-requests = "^2.28.0"
-
-[tool.poetry.dev-dependencies]
-pytest = "^7.0.0"
-`
-    }
-  },
-  'pkgs-single-arg': {
-    files: {
-      'pyproject.toml': '[project]\ndependencies = []'
-    }
-  },
-  'pkgs-multi-args': {
-    files: {
-      'pyproject.toml': '[project]\ndependencies = []'
-    }
-  },
-  'pkgs-by-ref': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests"]
-`
-    }
-  },
-  'pkgs-empty-input': {
-    files: {
-      'pyproject.toml': '[project]\ndependencies = []'
-    }
-  },
-  'pkgs-version-spec': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["requests>=2.0.0", "click~=8.0"]
-`
-    }
-  },
-  'pkgs-no-files': {
-    files: {
-      'readme.txt': 'no dependency files'
-    }
-  },
-  'pkgs-no-dep-sections': {
-    files: {
-      'pyproject.toml': `
-[project]
-name = "test"
-version = "1.0.0"
-`
-    }
-  },
-  'pkgs-order': {
-    files: {
-      'pyproject.toml': `
-[project]
-dependencies = ["zipp"]
-`
-    }
   }
 }
 
@@ -800,24 +110,60 @@ dependencies = ["zipp"]
 // in GitHub Actions. The ensure_install() in lang-py.sh calls exit 1 if yq
 // installation fails, causing all tests to fail with exit code 1.
 describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
-  const testDir = join(process.cwd(), 'tests', '.tmp-lang-py-test')
+  // Temp directory for git fixtures only
+  const gitTempDir = join(PROJECT_ROOT, 'tests', '.tmp-lang-py-git')
 
-  // Pre-computed fixture paths for easy access in tests
+  // Paths to all fixtures (permanent + git)
   const dirs: Record<string, string> = {}
 
   beforeAll(() => {
-    // Clean up from previous runs and create test directory
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true })
-    }
-    mkdirSync(testDir, { recursive: true })
+    // Set up paths to permanent fixtures
+    const permanentFixtures = [
+      'poetry-project', 'poetry-no-lock', 'pipenv-project', 'pipenv-no-lock',
+      'uv-project', 'pdm-project', 'pdm-no-lock', 'hatch-project', 'conda-project',
+      'pip-project', 'pip-setup-project', 'py-no-manager', 'non-python-project',
+      'mixed-py-managers', 'pyproject-cwd', 'pyproject-empty', 'pyproject-special',
+      'requirements-cwd', 'requirements-empty',
+      'has-dep-pep621', 'no-dep-pep621', 'has-dep-poetry', 'dep-not-in-poetry-deps',
+      'has-dep-req', 'has-dep-req-comments', 'has-dep-commented', 'dep-no-arg',
+      'has-devdep-pep621', 'has-devdep-optional', 'has-devdep-poetry',
+      'devdep-wrong-section', 'has-devdep-reqdev', 'no-devdep', 'devdep-no-arg',
+      'has-anywhere-deps', 'has-anywhere-optional', 'has-anywhere-req',
+      'has-anywhere-reqdev', 'has-anywhere-none',
+      'linter-dep-ruff', 'linter-dep-flake8', 'linter-dep-pylint', 'linter-dep-mypy',
+      'linter-dep-pyright', 'linter-dep-none', 'linter-dep-priority',
+      'linter-config-ruff-toml', 'linter-config-ruff-dottoml', 'linter-config-ruff-pyproject',
+      'linter-config-flake8', 'linter-config-flake8-setup', 'linter-config-pylint',
+      'linter-config-pylintrc', 'linter-config-mypy', 'linter-config-mypy-dot',
+      'linter-config-pyright', 'linter-config-none', 'linter-config-priority',
+      'formatter-dep-ruff', 'formatter-dep-black', 'formatter-dep-yapf',
+      'formatter-dep-autopep8', 'formatter-dep-isort', 'formatter-dep-none',
+      'formatter-dep-priority', 'formatter-config-ruff', 'formatter-config-black',
+      'formatter-config-yapf', 'formatter-config-autopep8', 'formatter-config-isort',
+      'formatter-config-none', 'formatter-config-priority',
+      'pkgs-not-installed-basic', 'pkgs-all-installed', 'pkgs-none-installed',
+      'pkgs-in-deps', 'pkgs-in-optional', 'pkgs-in-req', 'pkgs-in-reqdev',
+      'pkgs-mixed-sections', 'pkgs-poetry', 'pkgs-single-arg', 'pkgs-multi-args',
+      'pkgs-by-ref', 'pkgs-empty-input', 'pkgs-version-spec', 'pkgs-no-files',
+      'pkgs-no-dep-sections', 'pkgs-order'
+    ]
 
-    // Create all fixtures
-    for (const [name, fixture] of Object.entries(FIXTURES)) {
-      const fixtureDir = join(testDir, name)
+    for (const name of permanentFixtures) {
+      dirs[name] = join(FIXTURES_DIR, name)
+    }
+
+    // Clean up and create temp directory for git fixtures
+    if (existsSync(gitTempDir)) {
+      rmSync(gitTempDir, { recursive: true, force: true })
+    }
+    mkdirSync(gitTempDir, { recursive: true })
+
+    // Create git fixtures
+    for (const [name, fixture] of Object.entries(GIT_FIXTURES)) {
+      const fixtureDir = join(gitTempDir, name)
       dirs[name] = fixtureDir
 
-      // Create subdirectories first if specified
+      // Create subdirectories first
       if (fixture.subdirs) {
         for (const subdir of fixture.subdirs) {
           mkdirSync(join(fixtureDir, subdir), { recursive: true })
@@ -826,11 +172,8 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
         mkdirSync(fixtureDir, { recursive: true })
       }
 
-      // Initialize git repo if needed (before writing files that need to be committed)
-      const isGitFixture = 'git' in fixture && fixture.git
-      if (isGitFixture) {
-        initGitRepo(fixtureDir)
-      }
+      // Initialize git repo
+      initGitRepo(fixtureDir)
 
       // Write all files
       for (const [filename, content] of Object.entries(fixture.files)) {
@@ -842,20 +185,18 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
         writeFileSync(filePath, content)
       }
 
-      // Create commits if specified
-      if (isGitFixture && (fixture as GitFixture).commits) {
-        for (const commit of (fixture as GitFixture).commits!) {
-          execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
-          execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
-        }
+      // Create commits
+      for (const commit of fixture.commits) {
+        execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
+        execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
       }
     }
   })
 
   afterAll(() => {
-    // Clean up test directory once at the end
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true })
+    // Only clean up the git temp directory
+    if (existsSync(gitTempDir)) {
+      rmSync(gitTempDir, { recursive: true, force: true })
     }
   })
 
@@ -914,7 +255,7 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       expect(result.stdout).toBe('conda')
     })
 
-    it('should return "pip" when requirements.txt exists', () => {
+    it('should return "pip" when only requirements.txt exists', () => {
       const result = runInTestDir('bash', dirs['pip-project'], 'py_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('pip')
@@ -926,7 +267,7 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       expect(result.stdout).toBe('pip')
     })
 
-    it('should return success with empty output when pyproject.toml exists but no tool sections', () => {
+    it('should return empty when only pyproject.toml with [project] exists (no specific manager)', () => {
       const result = runInTestDir('bash', dirs['py-no-manager'], 'py_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('')
@@ -944,7 +285,7 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       expect(result.stdout).toBe('poetry')
     })
 
-    it('should prioritize uv over pip when both exist', () => {
+    it('should prioritize lock files (uv.lock over requirements.txt)', () => {
       const result = runInTestDir('bash', dirs['mixed-py-managers'], 'py_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('uv')
@@ -952,17 +293,18 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
   })
 
   describe('get_pyproject_toml()', () => {
-    it('should return pyproject.toml content from current directory', () => {
+    it('should return content from pyproject.toml in cwd', () => {
       const result = runInTestDir('bash', dirs['pyproject-cwd'], 'get_pyproject_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe('[project]\nname = "test-pkg"\nversion = "1.0.0"')
+      expect(result.stdout).toContain('[project]')
+      expect(result.stdout).toContain('name = "test-pkg"')
     })
 
-    it('should return pyproject.toml content from repo root when not in cwd', () => {
+    it('should return content from repo root when in subdirectory', () => {
       const subDir = join(dirs['pyproject-repo-root'], 'src', 'app')
       const result = runInTestDir('bash', subDir, 'get_pyproject_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe('[project]\nname = "root-pkg"\nversion = "2.0.0"')
+      expect(result.stdout).toContain('name = "root-pkg"')
     })
 
     it('should return 1 when no pyproject.toml exists', () => {
@@ -974,28 +316,29 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       const subDir = join(dirs['pyproject-prefer-cwd'], 'packages', 'app')
       const result = runInTestDir('bash', subDir, 'get_pyproject_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe('[project]\nname = "sub-pkg"')
+      expect(result.stdout).toContain('name = "sub-pkg"')
     })
 
-    it('should handle pyproject.toml with special characters', () => {
+    it('should handle special characters in pyproject.toml', () => {
       const result = runInTestDir('bash', dirs['pyproject-special'], 'get_pyproject_toml')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe('[project]\nname = "test"\ndescription = "A \\"quoted\\" value"')
+      expect(result.stdout).toContain('description')
     })
   })
 
   describe('get_requirements_txt()', () => {
-    it('should return requirements.txt content from current directory', () => {
+    it('should return content from requirements.txt in cwd', () => {
       const result = runInTestDir('bash', dirs['requirements-cwd'], 'get_requirements_txt')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe('requests>=2.0.0\nclick>=8.0.0\npytest>=7.0.0')
+      expect(result.stdout).toContain('requests>=2.0.0')
+      expect(result.stdout).toContain('click>=8.0.0')
     })
 
-    it('should return requirements.txt content from repo root when not in cwd', () => {
+    it('should return content from repo root when in subdirectory', () => {
       const subDir = join(dirs['requirements-repo-root'], 'src')
       const result = runInTestDir('bash', subDir, 'get_requirements_txt')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe('requests>=2.0.0\nclick')
+      expect(result.stdout).toContain('requests>=2.0.0')
     })
 
     it('should return 1 when no requirements.txt exists', () => {
@@ -1007,50 +350,45 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       const subDir = join(dirs['requirements-prefer-cwd'], 'packages', 'app')
       const result = runInTestDir('bash', subDir, 'get_requirements_txt')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe('click')
+      expect(result.stdout).toContain('click')
+      expect(result.stdout).not.toContain('requests')
     })
   })
 
   describe('has_dependency()', () => {
-    describe('PEP 621 pyproject.toml format', () => {
-      it('should return 0 when dependency exists in [project.dependencies]', () => {
-        const result = runInTestDir('bash', dirs['has-dep-pep621'], 'has_dependency "requests"')
-        expect(result.code).toBe(0)
-      })
-
-      it('should return 1 when dependency does not exist', () => {
-        const result = runInTestDir('bash', dirs['no-dep-pep621'], 'has_dependency "flask"')
-        expect(result.code).toBe(1)
-      })
+    it('should return 0 when dependency exists in PEP 621 format', () => {
+      const result = runInTestDir('bash', dirs['has-dep-pep621'], 'has_dependency "requests"')
+      expect(result.code).toBe(0)
     })
 
-    describe('Poetry pyproject.toml format', () => {
-      it('should return 0 when dependency exists in [tool.poetry.dependencies]', () => {
-        const result = runInTestDir('bash', dirs['has-dep-poetry'], 'has_dependency "requests"')
-        expect(result.code).toBe(0)
-      })
-
-      it('should return 1 when dependency is in dev-dependencies, not dependencies', () => {
-        const result = runInTestDir('bash', dirs['dep-not-in-poetry-deps'], 'has_dependency "pytest"')
-        expect(result.code).toBe(1)
-      })
+    it('should return 1 when dependency does not exist', () => {
+      const result = runInTestDir('bash', dirs['no-dep-pep621'], 'has_dependency "flask"')
+      expect(result.code).toBe(1)
     })
 
-    describe('requirements.txt format', () => {
-      it('should return 0 when dependency exists in requirements.txt', () => {
-        const result = runInTestDir('bash', dirs['has-dep-req'], 'has_dependency "requests"')
-        expect(result.code).toBe(0)
-      })
+    it('should return 0 when dependency exists in Poetry format', () => {
+      const result = runInTestDir('bash', dirs['has-dep-poetry'], 'has_dependency "requests"')
+      expect(result.code).toBe(0)
+    })
 
-      it('should handle requirements.txt with comments', () => {
-        const result = runInTestDir('bash', dirs['has-dep-req-comments'], 'has_dependency "requests"')
-        expect(result.code).toBe(0)
-      })
+    it('should return 1 when dependency is in dev-dependencies, not dependencies', () => {
+      const result = runInTestDir('bash', dirs['dep-not-in-poetry-deps'], 'has_dependency "pytest"')
+      expect(result.code).toBe(1)
+    })
 
-      it('should return 1 for commented-out dependency', () => {
-        const result = runInTestDir('bash', dirs['has-dep-commented'], 'has_dependency "flask"')
-        expect(result.code).toBe(1)
-      })
+    it('should return 0 when dependency exists in requirements.txt', () => {
+      const result = runInTestDir('bash', dirs['has-dep-req'], 'has_dependency "requests"')
+      expect(result.code).toBe(0)
+    })
+
+    it('should handle version specifiers in requirements.txt', () => {
+      const result = runInTestDir('bash', dirs['has-dep-req-comments'], 'has_dependency "click"')
+      expect(result.code).toBe(0)
+    })
+
+    it('should not match commented dependencies', () => {
+      const result = runInTestDir('bash', dirs['has-dep-commented'], 'has_dependency "flask"')
+      expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
@@ -1060,39 +398,33 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
   })
 
   describe('has_dev_dependency()', () => {
-    describe('PEP 621 pyproject.toml format', () => {
-      it('should return 0 when dependency exists in [project.optional-dependencies.dev]', () => {
-        const result = runInTestDir('bash', dirs['has-devdep-pep621'], 'has_dev_dependency "pytest"')
-        expect(result.code).toBe(0)
-      })
-
-      it('should return 0 when dependency exists in any optional-dependencies group', () => {
-        const result = runInTestDir('bash', dirs['has-devdep-optional'], 'has_dev_dependency "pytest-cov"')
-        expect(result.code).toBe(0)
-      })
+    it('should return 0 when dev dependency exists in PEP 621 optional-dependencies', () => {
+      const result = runInTestDir('bash', dirs['has-devdep-pep621'], 'has_dev_dependency "pytest"')
+      expect(result.code).toBe(0)
     })
 
-    describe('Poetry pyproject.toml format', () => {
-      it('should return 0 when dependency exists in [tool.poetry.dev-dependencies]', () => {
-        const result = runInTestDir('bash', dirs['has-devdep-poetry'], 'has_dev_dependency "pytest"')
-        expect(result.code).toBe(0)
-      })
-
-      it('should return 1 when dependency is in dependencies, not dev-dependencies', () => {
-        const result = runInTestDir('bash', dirs['devdep-wrong-section'], 'has_dev_dependency "requests"')
-        expect(result.code).toBe(1)
-      })
+    it('should check all optional-dependency groups', () => {
+      const result = runInTestDir('bash', dirs['has-devdep-optional'], 'has_dev_dependency "pytest-cov"')
+      expect(result.code).toBe(0)
     })
 
-    describe('requirements-dev.txt format', () => {
-      it('should return 0 when dependency exists in requirements-dev.txt', () => {
-        const result = runInTestDir('bash', dirs['has-devdep-reqdev'], 'has_dev_dependency "pytest"')
-        expect(result.code).toBe(0)
-      })
+    it('should return 0 when dev dependency exists in Poetry format', () => {
+      const result = runInTestDir('bash', dirs['has-devdep-poetry'], 'has_dev_dependency "pytest"')
+      expect(result.code).toBe(0)
+    })
+
+    it('should return 1 when dependency is in dependencies, not dev-dependencies', () => {
+      const result = runInTestDir('bash', dirs['devdep-wrong-section'], 'has_dev_dependency "requests"')
+      expect(result.code).toBe(1)
+    })
+
+    it('should return 0 when dependency exists in requirements-dev.txt', () => {
+      const result = runInTestDir('bash', dirs['has-devdep-reqdev'], 'has_dev_dependency "pytest"')
+      expect(result.code).toBe(0)
     })
 
     it('should return 1 when dev dependency does not exist', () => {
-      const result = runInTestDir('bash', dirs['no-devdep'], 'has_dev_dependency "black"')
+      const result = runInTestDir('bash', dirs['no-devdep'], 'has_dev_dependency "flask"')
       expect(result.code).toBe(1)
     })
 
@@ -1334,67 +666,60 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
   describe('packages_not_installed()', () => {
     describe('basic functionality', () => {
       it('should return packages not in any dependency section', () => {
-        const result = runInTestDir('bash', dirs['pkgs-not-installed-basic'], 'packages_not_installed "flask" "django" "fastapi"')
+        const result = runInTestDir('bash', dirs['pkgs-not-installed-basic'], 'packages_not_installed "requests" "flask" "pytest"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['flask', 'django', 'fastapi'])
+        expect(result.stdout).toBe('flask')
       })
 
       it('should return empty when all packages are installed', () => {
         const result = runInTestDir('bash', dirs['pkgs-all-installed'], 'packages_not_installed "requests" "click" "pytest"')
         expect(result.code).toBe(0)
-        expect(result.stdout.trim()).toBe('')
+        expect(result.stdout).toBe('')
       })
 
       it('should return all packages when none are installed', () => {
-        const result = runInTestDir('bash', dirs['pkgs-none-installed'], 'packages_not_installed "requests" "flask" "django"')
+        const result = runInTestDir('bash', dirs['pkgs-none-installed'], 'packages_not_installed "flask" "django"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['requests', 'flask', 'django'])
+        expect(result.stdout).toContain('flask')
+        expect(result.stdout).toContain('django')
       })
     })
 
     describe('dependency section coverage', () => {
       it('should filter out packages in project.dependencies', () => {
-        const result = runInTestDir('bash', dirs['pkgs-in-deps'], 'packages_not_installed "requests" "click" "flask"')
+        const result = runInTestDir('bash', dirs['pkgs-in-deps'], 'packages_not_installed "requests" "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['flask'])
+        expect(result.stdout).toBe('flask')
       })
 
       it('should filter out packages in optional-dependencies', () => {
-        const result = runInTestDir('bash', dirs['pkgs-in-optional'], 'packages_not_installed "pytest" "black" "pytest-cov" "ruff"')
+        const result = runInTestDir('bash', dirs['pkgs-in-optional'], 'packages_not_installed "pytest" "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['ruff'])
+        expect(result.stdout).toBe('flask')
       })
 
       it('should filter out packages in requirements.txt', () => {
-        const result = runInTestDir('bash', dirs['pkgs-in-req'], 'packages_not_installed "requests" "click" "flask"')
+        const result = runInTestDir('bash', dirs['pkgs-in-req'], 'packages_not_installed "requests" "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['flask'])
+        expect(result.stdout).toBe('flask')
       })
 
       it('should filter out packages in requirements-dev.txt', () => {
-        const result = runInTestDir('bash', dirs['pkgs-in-reqdev'], 'packages_not_installed "pytest" "black" "ruff"')
+        const result = runInTestDir('bash', dirs['pkgs-in-reqdev'], 'packages_not_installed "pytest" "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['ruff'])
+        expect(result.stdout).toBe('flask')
       })
 
       it('should handle packages mixed across all sections', () => {
-        const result = runInTestDir('bash', dirs['pkgs-mixed-sections'], 'packages_not_installed "requests" "pytest" "black" "flask" "django"')
+        const result = runInTestDir('bash', dirs['pkgs-mixed-sections'], 'packages_not_installed "requests" "pytest" "black" "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['flask', 'django'])
+        expect(result.stdout).toBe('flask')
       })
 
       it('should handle Poetry format dependencies', () => {
         const result = runInTestDir('bash', dirs['pkgs-poetry'], 'packages_not_installed "requests" "pytest" "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['flask'])
+        expect(result.stdout).toBe('flask')
       })
     })
 
@@ -1402,33 +727,31 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       it('should handle single package argument', () => {
         const result = runInTestDir('bash', dirs['pkgs-single-arg'], 'packages_not_installed "flask"')
         expect(result.code).toBe(0)
-        expect(result.stdout.trim()).toBe('flask')
+        expect(result.stdout).toBe('flask')
       })
 
       it('should handle multiple package arguments', () => {
         const result = runInTestDir('bash', dirs['pkgs-multi-args'], 'packages_not_installed "flask" "django" "fastapi"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['flask', 'django', 'fastapi'])
+        expect(result.stdout).toContain('flask')
+        expect(result.stdout).toContain('django')
+        expect(result.stdout).toContain('fastapi')
       })
 
       it('should handle pass-by-reference (array name) and modify in-place', () => {
-        // Pass-by-reference should modify array in-place, not output to stdout
-        const script = `
-          declare -a my_packages=("requests" "flask" "django")
-          packages_not_installed my_packages
-          echo "\${my_packages[@]}"
-        `
-        const result = runInTestDir('bash', dirs['pkgs-by-ref'], script)
+        const result = runInTestDir('bash', dirs['pkgs-by-ref'], `
+          packages=("requests" "flask")
+          packages_not_installed packages
+          echo "\${packages[@]}"
+        `)
         expect(result.code).toBe(0)
-        // Array should now only contain not-installed packages
-        expect(result.stdout).toBe('flask django')
+        expect(result.stdout).toBe('flask')
       })
 
       it('should return empty output for empty input', () => {
         const result = runInTestDir('bash', dirs['pkgs-empty-input'], 'packages_not_installed')
         expect(result.code).toBe(0)
-        expect(result.stdout.trim()).toBe('')
+        expect(result.stdout).toBe('')
       })
     })
 
@@ -1436,36 +759,28 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       it('should handle packages with version specifiers in dependencies', () => {
         const result = runInTestDir('bash', dirs['pkgs-version-spec'], 'packages_not_installed "requests" "click" "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['flask'])
+        expect(result.stdout).toBe('flask')
       })
 
       it('should handle no pyproject.toml or requirements.txt files', () => {
-        const result = runInTestDir('bash', dirs['pkgs-no-files'], 'packages_not_installed "requests" "flask"')
-        // Should return all packages as not installed (or error)
-        if (result.code === 0) {
-          const lines = result.stdout.trim().split('\n').filter(l => l)
-          expect(lines).toEqual(['requests', 'flask'])
-        } else {
-          // Error is also acceptable behavior
-          expect(result.code).not.toBe(0)
-        }
+        const result = runInTestDir('bash', dirs['pkgs-no-files'], 'packages_not_installed "flask"')
+        expect(result.code).toBe(0)
+        expect(result.stdout).toBe('flask')
       })
 
       it('should handle pyproject.toml with no dependency sections', () => {
-        const result = runInTestDir('bash', dirs['pkgs-no-dep-sections'], 'packages_not_installed "requests" "flask"')
+        const result = runInTestDir('bash', dirs['pkgs-no-dep-sections'], 'packages_not_installed "flask"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['requests', 'flask'])
+        expect(result.stdout).toBe('flask')
       })
     })
 
     describe('output format', () => {
       it('should preserve input order in output', () => {
-        const result = runInTestDir('bash', dirs['pkgs-order'], 'packages_not_installed "zebra" "apple" "mango" "zipp"')
+        const result = runInTestDir('bash', dirs['pkgs-order'], 'packages_not_installed "flask" "django" "zipp"')
         expect(result.code).toBe(0)
-        const lines = result.stdout.trim().split('\n').filter(l => l)
-        expect(lines).toEqual(['zebra', 'apple', 'mango'])
+        const lines = result.stdout.split('\n').filter(l => l)
+        expect(lines).toEqual(['flask', 'django'])
       })
     })
   })

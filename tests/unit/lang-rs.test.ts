@@ -7,6 +7,9 @@ import { runInShell, isWSL } from "../helpers"
 /** Project root for absolute path references */
 const PROJECT_ROOT = process.cwd()
 
+/** Path to permanent fixtures */
+const FIXTURES_DIR = join(PROJECT_ROOT, 'tests', 'fixtures', 'lang-rs')
+
 /**
  * Helper to initialize a git repo in a directory for testing
  */
@@ -14,15 +17,6 @@ function initGitRepo(dir: string): void {
   execSync('git init', { cwd: dir, stdio: 'pipe' })
   execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' })
   execSync('git config user.name "Test User"', { cwd: dir, stdio: 'pipe' })
-}
-
-/**
- * Helper to create and commit a file in a git repo
- */
-function commitFile(dir: string, filename: string, content: string, message: string): void {
-  writeFileSync(join(dir, filename), content)
-  execSync(`git add "${filename}"`, { cwd: dir, stdio: 'pipe' })
-  execSync(`git commit -m "${message}"`, { cwd: dir, stdio: 'pipe' })
 }
 
 /**
@@ -39,33 +33,17 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
 }
 
 // =============================================================================
-// FIXTURE DEFINITIONS - All test directories and their contents
+// GIT FIXTURES - Only fixtures that require git repos (created dynamically)
 // =============================================================================
 
-interface FileFixture {
-  files: Record<string, string>
+interface GitFixture {
   subdirs?: string[]
+  files: Record<string, string>
+  commits: Array<{ file: string; content: string; message: string }>
 }
 
-interface GitFixture extends FileFixture {
-  git: true
-  commits?: Array<{ file: string; content: string; message: string }>
-}
-
-type Fixture = FileFixture | GitFixture
-
-const FIXTURES: Record<string, Fixture> = {
-  // get_cargo_toml() fixtures
-  'cargo-cwd': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test-crate"
-version = "0.1.0"
-edition = "2021"`
-    }
-  },
+const GIT_FIXTURES: Record<string, GitFixture> = {
   'cargo-repo-root': {
-    git: true,
     subdirs: ['crates/app'],
     files: {
       'Cargo.toml': `[package]
@@ -76,13 +54,7 @@ version = "2.0.0"`
       { file: 'Cargo.toml', content: `[package]\nname = "root-crate"\nversion = "2.0.0"`, message: 'init' }
     ]
   },
-  'cargo-empty': {
-    files: {
-      'readme.txt': 'no Cargo.toml here'
-    }
-  },
   'cargo-prefer-cwd': {
-    git: true,
     subdirs: ['crates/app'],
     files: {
       'Cargo.toml': `[package]
@@ -94,405 +66,7 @@ name = "sub-crate"`
       { file: 'Cargo.toml', content: '[package]\nname = "root-crate"', message: 'init' }
     ]
   },
-  'cargo-special': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-description = "A \\"quoted\\" value"`
-    }
-  },
-
-  // has_dependency() fixtures
-  'has-dep-inline': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-tokio = "1.0"`
-    }
-  },
-  'has-dep-table': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-tokio = { version = "1.0", features = ["full"] }`
-    }
-  },
-  'no-dep': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`
-    }
-  },
-  'no-deps-section': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-version = "0.1.0"`
-    }
-  },
-  'dev-not-in-deps': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-
-[dev-dependencies]
-pretty_assertions = "1.0"`
-    }
-  },
-  'dep-no-arg': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`
-    }
-  },
-
-  // has_dev_dependency() fixtures
-  'has-dev-dep-inline': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-criterion = "0.5"`
-    }
-  },
-  'has-dev-dep-table': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }`
-    }
-  },
-  'no-dev-dep': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`
-    }
-  },
-  'no-dev-deps-section': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`
-    }
-  },
-  'dep-not-in-dev': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]`
-    }
-  },
-  'dev-dep-no-arg': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`
-    }
-  },
-
-  // has_build_dependency() fixtures
-  'has-build-dep-inline': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"
-bindgen = "0.65"`
-    }
-  },
-  'has-build-dep-table': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[build-dependencies]
-bindgen = { version = "0.65", features = ["runtime"] }`
-    }
-  },
-  'no-build-dep': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"`
-    }
-  },
-  'no-build-deps-section': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`
-    }
-  },
-  'dep-not-in-build': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[build-dependencies]`
-    }
-  },
-  'build-dep-no-arg': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`
-    }
-  },
-
-  // has_dependency_anywhere() fixtures
-  'dep-anywhere-deps': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`
-    }
-  },
-  'dep-anywhere-dev': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`
-    }
-  },
-  'dep-anywhere-build': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"`
-    }
-  },
-  'dep-nowhere': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-
-[build-dependencies]
-cc = "1.0"`
-    }
-  },
-  'dep-anywhere-no-arg': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`
-    }
-  },
-
-  // crates_not_installed() fixtures
-  'crates-not-installed-basic': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`
-    }
-  },
-  'crates-all-installed': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-tokio = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"`
-    }
-  },
-  'crates-none-installed': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-
-[dev-dependencies]`
-    }
-  },
-  'crates-in-deps': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-tokio = "1.0"`
-    }
-  },
-  'crates-in-devdeps': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-criterion = "0.5"`
-    }
-  },
-  'crates-in-builddeps': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[build-dependencies]
-cc = "1.0"
-bindgen = "0.65"`
-    }
-  },
-  'crates-mixed-sections': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"
-
-[dev-dependencies]
-pretty_assertions = "1.0"
-
-[build-dependencies]
-cc = "1.0"`
-    }
-  },
-  'crates-single-arg': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]`
-    }
-  },
-  'crates-multi-args': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]`
-    }
-  },
-  'crates-by-ref': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`
-    }
-  },
-  'crates-empty-input': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]`
-    }
-  },
-  'crates-naming': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde_json = "1.0"`
-    }
-  },
-  'crates-no-cargo': {
-    files: {
-      'readme.txt': 'no Cargo.toml'
-    }
-  },
-  'crates-no-dep-sections': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-version = "0.1.0"`
-    }
-  },
-  'crates-order': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-
-[dependencies]
-serde = "1.0"`
-    }
-  },
-
-  // get_rs_linter_by_config() fixtures
-  'linter-config-clippy': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`,
-      'clippy.toml': 'msrv = "1.70"'
-    }
-  },
-  'linter-config-dot-clippy': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`,
-      '.clippy.toml': 'msrv = "1.70"'
-    }
-  },
-  'linter-config-dylint': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`,
-      'dylint.toml': '[workspace]'
-    }
-  },
-  'linter-config-none': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`
-    }
-  },
   'linter-config-repo-root': {
-    git: true,
     subdirs: ['crates/app'],
     files: {
       'Cargo.toml': `[workspace]
@@ -502,31 +76,8 @@ members = ["crates/*"]`,
     commits: [
       { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
     ]
-  },
-
-  // get_rs_formatter_by_config() fixtures
-  'formatter-config-rustfmt': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`,
-      'rustfmt.toml': 'max_width = 100'
-    }
-  },
-  'formatter-config-dot-rustfmt': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`,
-      '.rustfmt.toml': 'max_width = 100'
-    }
-  },
-  'formatter-config-none': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"`
-    }
   },
   'formatter-config-repo-root': {
-    git: true,
     subdirs: ['crates/app'],
     files: {
       'Cargo.toml': `[workspace]
@@ -537,31 +88,7 @@ members = ["crates/*"]`,
       { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
     ]
   },
-
-  // is_cargo_workspace() fixtures
-  'is-workspace-yes': {
-    files: {
-      'Cargo.toml': `[workspace]
-members = [
-  "crates/*"
-]
-
-[workspace.dependencies]
-serde = "1.0"`
-    }
-  },
-  'is-workspace-no': {
-    files: {
-      'Cargo.toml': `[package]
-name = "test"
-version = "0.1.0"
-
-[dependencies]
-serde = "1.0"`
-    }
-  },
   'is-workspace-subdir': {
-    git: true,
     subdirs: ['crates/app'],
     files: {
       'Cargo.toml': `[workspace]
@@ -572,11 +99,6 @@ name = "app"`
     commits: [
       { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
     ]
-  },
-  'is-workspace-empty': {
-    files: {
-      'Cargo.toml': ''
-    }
   }
 }
 
@@ -588,24 +110,45 @@ name = "app"`
 // in GitHub Actions. The ensure_install() in lang-rs.sh calls exit 1 if yq
 // installation fails, causing all tests to fail with exit code 1.
 describe.skipIf(isWSL)("lang-rs", { concurrent: true }, () => {
-  const testDir = join(process.cwd(), 'tests', '.tmp-lang-rs-test')
+  // Temp directory for git fixtures only
+  const gitTempDir = join(PROJECT_ROOT, 'tests', '.tmp-lang-rs-git')
 
-  // Pre-computed fixture paths for easy access in tests
+  // Paths to all fixtures (permanent + git)
   const dirs: Record<string, string> = {}
 
   beforeAll(() => {
-    // Clean up from previous runs and create test directory
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true })
-    }
-    mkdirSync(testDir, { recursive: true })
+    // Set up paths to permanent fixtures
+    const permanentFixtures = [
+      'cargo-cwd', 'cargo-empty', 'cargo-special',
+      'has-dep-inline', 'has-dep-table', 'no-dep', 'no-deps-section', 'dev-not-in-deps', 'dep-no-arg',
+      'has-dev-dep-inline', 'has-dev-dep-table', 'no-dev-dep', 'no-dev-deps-section', 'dep-not-in-dev', 'dev-dep-no-arg',
+      'has-build-dep-inline', 'has-build-dep-table', 'no-build-dep', 'no-build-deps-section', 'dep-not-in-build', 'build-dep-no-arg',
+      'dep-anywhere-deps', 'dep-anywhere-dev', 'dep-anywhere-build', 'dep-nowhere', 'dep-anywhere-no-arg',
+      'crates-not-installed-basic', 'crates-all-installed', 'crates-none-installed',
+      'crates-in-deps', 'crates-in-devdeps', 'crates-in-builddeps', 'crates-mixed-sections',
+      'crates-single-arg', 'crates-multi-args', 'crates-by-ref', 'crates-empty-input',
+      'crates-naming', 'crates-no-cargo', 'crates-no-dep-sections', 'crates-order',
+      'linter-config-clippy', 'linter-config-dot-clippy', 'linter-config-dylint', 'linter-config-none',
+      'formatter-config-rustfmt', 'formatter-config-dot-rustfmt', 'formatter-config-none',
+      'is-workspace-yes', 'is-workspace-no', 'is-workspace-empty'
+    ]
 
-    // Create all fixtures
-    for (const [name, fixture] of Object.entries(FIXTURES)) {
-      const fixtureDir = join(testDir, name)
+    for (const name of permanentFixtures) {
+      dirs[name] = join(FIXTURES_DIR, name)
+    }
+
+    // Clean up and create temp directory for git fixtures
+    if (existsSync(gitTempDir)) {
+      rmSync(gitTempDir, { recursive: true, force: true })
+    }
+    mkdirSync(gitTempDir, { recursive: true })
+
+    // Create git fixtures
+    for (const [name, fixture] of Object.entries(GIT_FIXTURES)) {
+      const fixtureDir = join(gitTempDir, name)
       dirs[name] = fixtureDir
 
-      // Create subdirectories first if specified
+      // Create subdirectories first
       if (fixture.subdirs) {
         for (const subdir of fixture.subdirs) {
           mkdirSync(join(fixtureDir, subdir), { recursive: true })
@@ -614,11 +157,8 @@ describe.skipIf(isWSL)("lang-rs", { concurrent: true }, () => {
         mkdirSync(fixtureDir, { recursive: true })
       }
 
-      // Initialize git repo if needed (before writing files that need to be committed)
-      const isGitFixture = 'git' in fixture && fixture.git
-      if (isGitFixture) {
-        initGitRepo(fixtureDir)
-      }
+      // Initialize git repo
+      initGitRepo(fixtureDir)
 
       // Write all files
       for (const [filename, content] of Object.entries(fixture.files)) {
@@ -630,20 +170,18 @@ describe.skipIf(isWSL)("lang-rs", { concurrent: true }, () => {
         writeFileSync(filePath, content)
       }
 
-      // Create commits if specified
-      if (isGitFixture && (fixture as GitFixture).commits) {
-        for (const commit of (fixture as GitFixture).commits!) {
-          execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
-          execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
-        }
+      // Create commits
+      for (const commit of fixture.commits) {
+        execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
+        execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
       }
     }
   })
 
   afterAll(() => {
-    // Clean up test directory once at the end
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true })
+    // Only clean up the git temp directory
+    if (existsSync(gitTempDir)) {
+      rmSync(gitTempDir, { recursive: true, force: true })
     }
   })
 

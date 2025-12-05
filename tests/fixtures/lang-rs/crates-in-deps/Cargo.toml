@@ -1,0 +1,6 @@
+[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+tokio = "1.0"

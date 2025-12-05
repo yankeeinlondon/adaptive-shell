@@ -1,0 +1,5 @@
+[package]
+name = "test"
+
+[build-dependencies]
+cc = "1.0"

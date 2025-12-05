@@ -1,0 +1,5 @@
+[package]
+name = "test"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }

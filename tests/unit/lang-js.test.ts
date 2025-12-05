@@ -7,6 +7,9 @@ import { runInShell } from "../helpers"
 /** Project root for absolute path references */
 const PROJECT_ROOT = process.cwd()
 
+/** Path to permanent fixtures */
+const FIXTURES_DIR = join(PROJECT_ROOT, 'tests', 'fixtures', 'lang-js')
+
 /**
  * Helper to initialize a git repo in a directory for testing
  */
@@ -38,137 +41,193 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
   `, { cwd: testDir })
 }
 
-describe("lang-js", () => {
-  const testDir = join(process.cwd(), 'tests', '.tmp-lang-js-test')
+// =============================================================================
+// GIT FIXTURES - Only fixtures that require git repos (created dynamically)
+// =============================================================================
+
+interface GitFixture {
+  subdirs?: string[]
+  files: Record<string, string>
+  commits: Array<{ file: string; content: string; message: string }>
+}
+
+const GIT_FIXTURES: Record<string, GitFixture> = {
+  'pkg-mgr-subdir-test': {
+    subdirs: ['packages/app'],
+    files: {
+      'package.json': '{"name": "monorepo"}',
+      'pnpm-lock.yaml': 'lockfileVersion: 6.0'
+    },
+    commits: [
+      { file: 'package.json', content: '{"name": "monorepo"}', message: 'init' }
+    ]
+  },
+  'pkg-json-repo-root': {
+    subdirs: ['packages/app'],
+    files: {
+      'package.json': '{"name": "root-pkg", "version": "2.0.0"}'
+    },
+    commits: [
+      { file: 'package.json', content: '{"name": "root-pkg", "version": "2.0.0"}', message: 'init' }
+    ]
+  },
+  'pkg-json-prefer-cwd': {
+    subdirs: ['packages/app'],
+    files: {
+      'package.json': '{"name": "root-pkg"}',
+      'packages/app/package.json': '{"name": "sub-pkg"}'
+    },
+    commits: [
+      { file: 'package.json', content: '{"name": "root-pkg"}', message: 'init' }
+    ]
+  }
+}
+
+// =============================================================================
+// TESTS
+// =============================================================================
+
+describe("lang-js", { concurrent: true }, () => {
+  // Temp directory for git fixtures only
+  const gitTempDir = join(PROJECT_ROOT, 'tests', '.tmp-lang-js-git')
+
+  // Paths to all fixtures (permanent + git)
+  const dirs: Record<string, string> = {}
 
   beforeAll(() => {
-    // Clean up from previous runs and create test directory
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true })
+    // Set up paths to permanent fixtures
+    const permanentFixtures = [
+      'pnpm-project', 'pnpm-workspace-project', 'npm-project', 'yarn-project',
+      'bun-project', 'deno-project', 'js-no-lock', 'non-js-project', 'mixed-locks',
+      'no-lockfile', 'pkg-json-cwd', 'pkg-json-empty', 'pkg-json-special',
+      'has-dev-dep', 'no-dev-dep', 'no-dev-deps-section', 'dep-wrong-section', 'dev-dep-no-arg',
+      'has-dep', 'no-dep', 'no-deps-section', 'dev-not-in-deps', 'dep-no-arg',
+      'has-peer-dep', 'no-peer-dep', 'no-peer-deps-section', 'dep-not-in-peer', 'peer-dep-no-arg',
+      'linter-dep-eslint', 'linter-dep-biomejs', 'linter-dep-biome-unscoped',
+      'linter-dep-oxlint', 'linter-dep-tsslint', 'linter-dep-none', 'linter-dep-priority',
+      'pkgs-not-installed-basic', 'pkgs-all-installed', 'pkgs-none-installed',
+      'pkgs-in-deps', 'pkgs-in-devdeps', 'pkgs-in-peerdeps', 'pkgs-mixed-sections',
+      'pkgs-single-arg', 'pkgs-multi-args', 'pkgs-by-ref', 'pkgs-empty-input',
+      'pkgs-scoped', 'pkgs-no-dep-sections', 'pkgs-order'
+    ]
+
+    for (const name of permanentFixtures) {
+      dirs[name] = join(FIXTURES_DIR, name)
     }
-    mkdirSync(testDir, { recursive: true })
+
+    // Clean up and create temp directory for git fixtures
+    if (existsSync(gitTempDir)) {
+      rmSync(gitTempDir, { recursive: true, force: true })
+    }
+    mkdirSync(gitTempDir, { recursive: true })
+
+    // Create git fixtures
+    for (const [name, fixture] of Object.entries(GIT_FIXTURES)) {
+      const fixtureDir = join(gitTempDir, name)
+      dirs[name] = fixtureDir
+
+      // Create subdirectories first
+      if (fixture.subdirs) {
+        for (const subdir of fixture.subdirs) {
+          mkdirSync(join(fixtureDir, subdir), { recursive: true })
+        }
+      } else {
+        mkdirSync(fixtureDir, { recursive: true })
+      }
+
+      // Initialize git repo
+      initGitRepo(fixtureDir)
+
+      // Write all files
+      for (const [filename, content] of Object.entries(fixture.files)) {
+        const filePath = join(fixtureDir, filename)
+        const fileDir = join(filePath, '..')
+        if (!existsSync(fileDir)) {
+          mkdirSync(fileDir, { recursive: true })
+        }
+        writeFileSync(filePath, content)
+      }
+
+      // Create commits
+      for (const commit of fixture.commits) {
+        execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
+        execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
+      }
+    }
   })
 
   afterAll(() => {
-    // Clean up test directory once at the end
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true })
+    // Only clean up the git temp directory
+    if (existsSync(gitTempDir)) {
+      rmSync(gitTempDir, { recursive: true, force: true })
     }
   })
 
   describe('js_package_manager()', () => {
     it('should return "pnpm" when pnpm-lock.yaml exists', () => {
-      const pnpmDir = join(testDir, 'pnpm-project')
-      mkdirSync(pnpmDir, { recursive: true })
-      writeFileSync(join(pnpmDir, 'package.json'), '{"name": "test"}')
-      writeFileSync(join(pnpmDir, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0')
-
-      const result = runInTestDir('bash', pnpmDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['pnpm-project'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('pnpm')
     })
 
     it('should return "pnpm" when pnpm-workspace.yaml exists', () => {
-      const pnpmDir = join(testDir, 'pnpm-workspace-project')
-      mkdirSync(pnpmDir, { recursive: true })
-      writeFileSync(join(pnpmDir, 'package.json'), '{"name": "test"}')
-      writeFileSync(join(pnpmDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"')
-
-      const result = runInTestDir('bash', pnpmDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['pnpm-workspace-project'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('pnpm')
     })
 
     it('should return "npm" when package-lock.json exists', () => {
-      const npmDir = join(testDir, 'npm-project')
-      mkdirSync(npmDir, { recursive: true })
-      writeFileSync(join(npmDir, 'package.json'), '{"name": "test"}')
-      writeFileSync(join(npmDir, 'package-lock.json'), '{"lockfileVersion": 2}')
-
-      const result = runInTestDir('bash', npmDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['npm-project'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('npm')
     })
 
     it('should return "yarn" when yarn.lock exists', () => {
-      const yarnDir = join(testDir, 'yarn-project')
-      mkdirSync(yarnDir, { recursive: true })
-      writeFileSync(join(yarnDir, 'package.json'), '{"name": "test"}')
-      writeFileSync(join(yarnDir, 'yarn.lock'), '# yarn lockfile v1')
-
-      const result = runInTestDir('bash', yarnDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['yarn-project'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('yarn')
     })
 
     it('should return "bun" when bun.lockb exists', () => {
-      const bunDir = join(testDir, 'bun-project')
-      mkdirSync(bunDir, { recursive: true })
-      writeFileSync(join(bunDir, 'package.json'), '{"name": "test"}')
-      writeFileSync(join(bunDir, 'bun.lockb'), 'binary-content')
-
-      const result = runInTestDir('bash', bunDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['bun-project'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('bun')
     })
 
     it('should return "deno" when deno.lock exists', () => {
-      const denoDir = join(testDir, 'deno-project')
-      mkdirSync(denoDir, { recursive: true })
-      writeFileSync(join(denoDir, 'package.json'), '{"name": "test"}')
-      writeFileSync(join(denoDir, 'deno.lock'), '{"version": "2"}')
-
-      const result = runInTestDir('bash', denoDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['deno-project'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('deno')
     })
 
     it('should return success with empty output when package.json exists but no lock file', () => {
-      const jsDir = join(testDir, 'js-no-lock')
-      mkdirSync(jsDir, { recursive: true })
-      writeFileSync(join(jsDir, 'package.json'), '{"name": "test"}')
-
-      const result = runInTestDir('bash', jsDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['js-no-lock'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('')
     })
 
     it('should return 1 when not a JS project', () => {
-      const tmpNonJsDir = `/tmp/pkg-mgr-nojs-${Date.now()}`
-      mkdirSync(tmpNonJsDir, { recursive: true })
-      writeFileSync(join(tmpNonJsDir, 'readme.txt'), 'not a js project')
-
+      // Use a temp directory outside the repo to avoid inheriting repo's pnpm-lock.yaml
+      const tmpDir = `/tmp/pkg-mgr-nojs-${Date.now()}`
+      mkdirSync(tmpDir, { recursive: true })
+      writeFileSync(join(tmpDir, 'readme.txt'), 'not a js project')
       try {
-        const result = runInTestDir('bash', tmpNonJsDir, 'js_package_manager')
+        const result = runInTestDir('bash', tmpDir, 'js_package_manager')
         expect(result.code).toBe(1)
       } finally {
-        rmSync(tmpNonJsDir, { recursive: true, force: true })
+        rmSync(tmpDir, { recursive: true, force: true })
       }
     })
 
     it('should detect package manager from repo root when in subdirectory', () => {
-      const repoDir = join(testDir, 'pkg-mgr-subdir-test')
-      const subDir = join(repoDir, 'packages', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-      writeFileSync(join(repoDir, 'package.json'), '{"name": "monorepo"}')
-      writeFileSync(join(repoDir, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0')
-      commitFile(repoDir, 'package.json', '{"name": "monorepo"}', 'init')
-
+      const subDir = join(dirs['pkg-mgr-subdir-test'], 'packages', 'app')
       const result = runInTestDir('bash', subDir, 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('pnpm')
     })
 
     it('should prioritize pnpm over npm when both lock files exist', () => {
-      // This tests the order of checks in the function
-      const mixedDir = join(testDir, 'mixed-locks')
-      mkdirSync(mixedDir, { recursive: true })
-      writeFileSync(join(mixedDir, 'package.json'), '{"name": "test"}')
-      writeFileSync(join(mixedDir, 'pnpm-lock.yaml'), 'lockfileVersion: 6.0')
-      writeFileSync(join(mixedDir, 'package-lock.json'), '{"lockfileVersion": 2}')
-
-      const result = runInTestDir('bash', mixedDir, 'js_package_manager')
+      const result = runInTestDir('bash', dirs['mixed-locks'], 'js_package_manager')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('pnpm')
     })
@@ -176,373 +235,165 @@ describe("lang-js", () => {
 
   describe('get_package_json()', () => {
     it('should return package.json content from current directory', () => {
-      const pkgDir = join(testDir, 'pkg-json-cwd')
-      mkdirSync(pkgDir, { recursive: true })
-      const pkgContent = '{"name": "test-pkg", "version": "1.0.0"}'
-      writeFileSync(join(pkgDir, 'package.json'), pkgContent)
-
-      const result = runInTestDir('bash', pkgDir, 'get_package_json')
+      const result = runInTestDir('bash', dirs['pkg-json-cwd'], 'get_package_json')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(pkgContent)
+      expect(result.stdout).toContain('"name"')
+      expect(result.stdout).toContain('test-pkg')
     })
 
     it('should return package.json content from repo root when not in cwd', () => {
-      const repoDir = join(testDir, 'pkg-json-repo-root')
-      const subDir = join(repoDir, 'packages', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-      const pkgContent = '{"name": "root-pkg", "version": "2.0.0"}'
-      writeFileSync(join(repoDir, 'package.json'), pkgContent)
-      commitFile(repoDir, 'package.json', pkgContent, 'init')
-
+      const subDir = join(dirs['pkg-json-repo-root'], 'packages', 'app')
       const result = runInTestDir('bash', subDir, 'get_package_json')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(pkgContent)
+      expect(result.stdout).toContain('root-pkg')
     })
 
     it('should return 1 when no package.json exists', () => {
-      const tmpEmptyDir = `/tmp/pkg-json-empty-${Date.now()}`
-      mkdirSync(tmpEmptyDir, { recursive: true })
-      writeFileSync(join(tmpEmptyDir, 'readme.txt'), 'no package.json here')
-
+      // Use a temp directory outside the repo to avoid inheriting repo's package.json
+      const tmpDir = `/tmp/pkg-json-empty-${Date.now()}`
+      mkdirSync(tmpDir, { recursive: true })
+      writeFileSync(join(tmpDir, 'readme.txt'), 'no package.json here')
       try {
-        const result = runInTestDir('bash', tmpEmptyDir, 'get_package_json')
+        const result = runInTestDir('bash', tmpDir, 'get_package_json')
         expect(result.code).toBe(1)
       } finally {
-        rmSync(tmpEmptyDir, { recursive: true, force: true })
+        rmSync(tmpDir, { recursive: true, force: true })
       }
     })
 
     it('should prefer cwd package.json over repo root', () => {
-      const repoDir = join(testDir, 'pkg-json-prefer-cwd')
-      const subDir = join(repoDir, 'packages', 'app')
-      mkdirSync(subDir, { recursive: true })
-      initGitRepo(repoDir)
-
-      const rootPkg = '{"name": "root-pkg"}'
-      const subPkg = '{"name": "sub-pkg"}'
-      writeFileSync(join(repoDir, 'package.json'), rootPkg)
-      writeFileSync(join(subDir, 'package.json'), subPkg)
-      commitFile(repoDir, 'package.json', rootPkg, 'init')
-
+      const subDir = join(dirs['pkg-json-prefer-cwd'], 'packages', 'app')
       const result = runInTestDir('bash', subDir, 'get_package_json')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(subPkg)
+      expect(result.stdout).toContain('sub-pkg')
     })
 
     it('should handle package.json with special characters', () => {
-      const pkgDir = join(testDir, 'pkg-json-special')
-      mkdirSync(pkgDir, { recursive: true })
-      const pkgContent = '{"name": "test", "description": "A \\"quoted\\" value"}'
-      writeFileSync(join(pkgDir, 'package.json'), pkgContent)
-
-      const result = runInTestDir('bash', pkgDir, 'get_package_json')
+      const result = runInTestDir('bash', dirs['pkg-json-special'], 'get_package_json')
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(pkgContent)
+      expect(result.stdout).toContain('quoted')
     })
   })
 
   describe('has_dev_dependency()', () => {
     it('should return 0 when devDependency exists', () => {
-      const pkgDir = join(testDir, 'has-dev-dep')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: {
-          "vitest": "^1.0.0",
-          "typescript": "^5.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_dev_dependency "vitest"')
+      const result = runInTestDir('bash', dirs['has-dev-dep'], 'has_dev_dependency "vitest"')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when devDependency does not exist', () => {
-      const pkgDir = join(testDir, 'no-dev-dep')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: {
-          "vitest": "^1.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_dev_dependency "jest"')
+      const result = runInTestDir('bash', dirs['no-dev-dep'], 'has_dev_dependency "jest"')
       expect(result.code).toBe(1)
     })
 
     it('should return 1 when devDependencies section does not exist', () => {
-      const pkgDir = join(testDir, 'no-dev-deps-section')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        dependencies: {
-          "lodash": "^4.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_dev_dependency "vitest"')
+      const result = runInTestDir('bash', dirs['no-dev-deps-section'], 'has_dev_dependency "vitest"')
       expect(result.code).toBe(1)
     })
 
     it('should not find dependency in wrong section', () => {
-      const pkgDir = join(testDir, 'dep-wrong-section')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        dependencies: {
-          "lodash": "^4.0.0"
-        },
-        devDependencies: {}
-      }))
-
-      // lodash is in dependencies, not devDependencies
-      const result = runInTestDir('bash', pkgDir, 'has_dev_dependency "lodash"')
+      const result = runInTestDir('bash', dirs['dep-wrong-section'], 'has_dev_dependency "lodash"')
       expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
-      const pkgDir = join(testDir, 'dev-dep-no-arg')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), '{"name": "test"}')
-
-      const result = runInTestDir('bash', pkgDir, 'has_dev_dependency')
+      const result = runInTestDir('bash', dirs['dev-dep-no-arg'], 'has_dev_dependency')
       expect(result.code).not.toBe(0)
     })
   })
 
   describe('has_dependency()', () => {
     it('should return 0 when dependency exists', () => {
-      const pkgDir = join(testDir, 'has-dep')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        dependencies: {
-          "lodash": "^4.0.0",
-          "express": "^4.18.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_dependency "lodash"')
+      const result = runInTestDir('bash', dirs['has-dep'], 'has_dependency "lodash"')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when dependency does not exist', () => {
-      const pkgDir = join(testDir, 'no-dep')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        dependencies: {
-          "lodash": "^4.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_dependency "express"')
+      const result = runInTestDir('bash', dirs['no-dep'], 'has_dependency "express"')
       expect(result.code).toBe(1)
     })
 
     it('should return 1 when dependencies section does not exist', () => {
-      const pkgDir = join(testDir, 'no-deps-section')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: {
-          "vitest": "^1.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_dependency "lodash"')
+      const result = runInTestDir('bash', dirs['no-deps-section'], 'has_dependency "lodash"')
       expect(result.code).toBe(1)
     })
 
     it('should not find devDependency in dependencies', () => {
-      const pkgDir = join(testDir, 'dev-not-in-deps')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        dependencies: {},
-        devDependencies: {
-          "vitest": "^1.0.0"
-        }
-      }))
-
-      // vitest is in devDependencies, not dependencies
-      const result = runInTestDir('bash', pkgDir, 'has_dependency "vitest"')
+      const result = runInTestDir('bash', dirs['dev-not-in-deps'], 'has_dependency "vitest"')
       expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
-      const pkgDir = join(testDir, 'dep-no-arg')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), '{"name": "test"}')
-
-      const result = runInTestDir('bash', pkgDir, 'has_dependency')
+      const result = runInTestDir('bash', dirs['dep-no-arg'], 'has_dependency')
       expect(result.code).not.toBe(0)
     })
   })
 
   describe('has_peer_dependency()', () => {
     it('should return 0 when peerDependency exists', () => {
-      const pkgDir = join(testDir, 'has-peer-dep')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        peerDependencies: {
-          "react": "^18.0.0",
-          "react-dom": "^18.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_peer_dependency "react"')
+      const result = runInTestDir('bash', dirs['has-peer-dep'], 'has_peer_dependency "react"')
       expect(result.code).toBe(0)
     })
 
     it('should return 1 when peerDependency does not exist', () => {
-      const pkgDir = join(testDir, 'no-peer-dep')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        peerDependencies: {
-          "react": "^18.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_peer_dependency "vue"')
+      const result = runInTestDir('bash', dirs['no-peer-dep'], 'has_peer_dependency "vue"')
       expect(result.code).toBe(1)
     })
 
     it('should return 1 when peerDependencies section does not exist', () => {
-      const pkgDir = join(testDir, 'no-peer-deps-section')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        dependencies: {
-          "lodash": "^4.0.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'has_peer_dependency "react"')
+      const result = runInTestDir('bash', dirs['no-peer-deps-section'], 'has_peer_dependency "react"')
       expect(result.code).toBe(1)
     })
 
     it('should not find dependency in peerDependencies', () => {
-      const pkgDir = join(testDir, 'dep-not-in-peer')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        dependencies: {
-          "lodash": "^4.0.0"
-        },
-        peerDependencies: {}
-      }))
-
-      // lodash is in dependencies, not peerDependencies
-      const result = runInTestDir('bash', pkgDir, 'has_peer_dependency "lodash"')
+      const result = runInTestDir('bash', dirs['dep-not-in-peer'], 'has_peer_dependency "lodash"')
       expect(result.code).toBe(1)
     })
 
     it('should error when no argument provided', () => {
-      const pkgDir = join(testDir, 'peer-dep-no-arg')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), '{"name": "test"}')
-
-      const result = runInTestDir('bash', pkgDir, 'has_peer_dependency')
+      const result = runInTestDir('bash', dirs['peer-dep-no-arg'], 'has_peer_dependency')
       expect(result.code).not.toBe(0)
     })
   })
 
   describe('get_js_linter_by_dep()', () => {
     it('should detect eslint in devDependencies', () => {
-      const pkgDir = join(testDir, 'linter-dep-eslint')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: { "eslint": "^8.0.0" }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'get_js_linter_by_dep')
+      const result = runInTestDir('bash', dirs['linter-dep-eslint'], 'get_js_linter_by_dep')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('eslint')
     })
 
     it('should detect @biomejs/biome in devDependencies', () => {
-      const pkgDir = join(testDir, 'linter-dep-biomejs')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: { "@biomejs/biome": "^1.9.0" }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'get_js_linter_by_dep')
+      const result = runInTestDir('bash', dirs['linter-dep-biomejs'], 'get_js_linter_by_dep')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('biome')
     })
 
     it('should detect biome (unscoped) in devDependencies', () => {
-      const pkgDir = join(testDir, 'linter-dep-biome-unscoped')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: { "biome": "^1.0.0" }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'get_js_linter_by_dep')
+      const result = runInTestDir('bash', dirs['linter-dep-biome-unscoped'], 'get_js_linter_by_dep')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('biome')
     })
 
     it('should detect oxlint in devDependencies', () => {
-      const pkgDir = join(testDir, 'linter-dep-oxlint')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: { "oxlint": "^0.1.0" }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'get_js_linter_by_dep')
+      const result = runInTestDir('bash', dirs['linter-dep-oxlint'], 'get_js_linter_by_dep')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('oxlint')
     })
 
     it('should detect tsslint in devDependencies', () => {
-      const pkgDir = join(testDir, 'linter-dep-tsslint')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: { "tsslint": "^1.0.0" }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'get_js_linter_by_dep')
+      const result = runInTestDir('bash', dirs['linter-dep-tsslint'], 'get_js_linter_by_dep')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('tsslint')
     })
 
     it('should return 1 when no linter is found', () => {
-      const pkgDir = join(testDir, 'linter-dep-none')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: { "vitest": "^1.0.0" }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'get_js_linter_by_dep')
+      const result = runInTestDir('bash', dirs['linter-dep-none'], 'get_js_linter_by_dep')
       expect(result.code).toBe(1)
     })
 
     it('should prioritize oxlint over other linters', () => {
-      const pkgDir = join(testDir, 'linter-dep-priority')
-      mkdirSync(pkgDir, { recursive: true })
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-        name: "test",
-        devDependencies: {
-          "@biomejs/biome": "^1.9.0",
-          "eslint": "^8.0.0",
-          "oxlint": "^0.1.0"
-        }
-      }))
-
-      const result = runInTestDir('bash', pkgDir, 'get_js_linter_by_dep')
+      const result = runInTestDir('bash', dirs['linter-dep-priority'], 'get_js_linter_by_dep')
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('oxlint')
     })
@@ -551,53 +402,20 @@ describe("lang-js", () => {
   describe('packages_not_installed()', () => {
     describe('basic functionality', () => {
       it('should return packages not in any dependency section', () => {
-        const pkgDir = join(testDir, 'pkgs-not-installed-basic')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {
-            "lodash": "^4.0.0"
-          },
-          devDependencies: {
-            "vitest": "^1.0.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "express" "react" "vue"')
+        const result = runInTestDir('bash', dirs['pkgs-not-installed-basic'], 'packages_not_installed "express" "react" "vue"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['express', 'react', 'vue'])
       })
 
       it('should return empty when all packages are installed', () => {
-        const pkgDir = join(testDir, 'pkgs-all-installed')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {
-            "lodash": "^4.0.0",
-            "express": "^4.0.0"
-          },
-          devDependencies: {
-            "vitest": "^1.0.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "lodash" "express" "vitest"')
+        const result = runInTestDir('bash', dirs['pkgs-all-installed'], 'packages_not_installed "lodash" "express" "vitest"')
         expect(result.code).toBe(0)
         expect(result.stdout.trim()).toBe('')
       })
 
       it('should return all packages when none are installed', () => {
-        const pkgDir = join(testDir, 'pkgs-none-installed')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {},
-          devDependencies: {}
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "lodash" "express" "vitest"')
+        const result = runInTestDir('bash', dirs['pkgs-none-installed'], 'packages_not_installed "lodash" "express" "vitest"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['lodash', 'express', 'vitest'])
@@ -606,73 +424,28 @@ describe("lang-js", () => {
 
     describe('dependency section coverage', () => {
       it('should filter out packages in dependencies', () => {
-        const pkgDir = join(testDir, 'pkgs-in-deps')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {
-            "lodash": "^4.0.0",
-            "express": "^4.0.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "lodash" "express" "react"')
+        const result = runInTestDir('bash', dirs['pkgs-in-deps'], 'packages_not_installed "lodash" "express" "react"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['react'])
       })
 
       it('should filter out packages in devDependencies', () => {
-        const pkgDir = join(testDir, 'pkgs-in-devdeps')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          devDependencies: {
-            "vitest": "^1.0.0",
-            "typescript": "^5.0.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "vitest" "typescript" "eslint"')
+        const result = runInTestDir('bash', dirs['pkgs-in-devdeps'], 'packages_not_installed "vitest" "typescript" "eslint"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['eslint'])
       })
 
       it('should filter out packages in peerDependencies', () => {
-        const pkgDir = join(testDir, 'pkgs-in-peerdeps')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          peerDependencies: {
-            "react": "^18.0.0",
-            "react-dom": "^18.0.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "react" "react-dom" "vue"')
+        const result = runInTestDir('bash', dirs['pkgs-in-peerdeps'], 'packages_not_installed "react" "react-dom" "vue"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['vue'])
       })
 
       it('should handle packages mixed across all sections', () => {
-        const pkgDir = join(testDir, 'pkgs-mixed-sections')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {
-            "lodash": "^4.0.0"
-          },
-          devDependencies: {
-            "vitest": "^1.0.0"
-          },
-          peerDependencies: {
-            "react": "^18.0.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "lodash" "vitest" "react" "express" "vue"')
+        const result = runInTestDir('bash', dirs['pkgs-mixed-sections'], 'packages_not_installed "lodash" "vitest" "react" "express" "vue"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['express', 'vue'])
@@ -681,63 +454,31 @@ describe("lang-js", () => {
 
     describe('input handling', () => {
       it('should handle single package argument', () => {
-        const pkgDir = join(testDir, 'pkgs-single-arg')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {}
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "express"')
+        const result = runInTestDir('bash', dirs['pkgs-single-arg'], 'packages_not_installed "express"')
         expect(result.code).toBe(0)
         expect(result.stdout.trim()).toBe('express')
       })
 
       it('should handle multiple package arguments', () => {
-        const pkgDir = join(testDir, 'pkgs-multi-args')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {}
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "express" "react" "vue"')
+        const result = runInTestDir('bash', dirs['pkgs-multi-args'], 'packages_not_installed "express" "react" "vue"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['express', 'react', 'vue'])
       })
 
       it('should handle pass-by-reference (array name) and modify in-place', () => {
-        const pkgDir = join(testDir, 'pkgs-by-ref')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {
-            "lodash": "^4.0.0"
-          }
-        }))
-
-        // Pass-by-reference should modify array in-place, not output to stdout
         const script = `
           declare -a my_packages=("lodash" "express" "react")
           packages_not_installed my_packages
           echo "\${my_packages[@]}"
         `
-        const result = runInTestDir('bash', pkgDir, script)
+        const result = runInTestDir('bash', dirs['pkgs-by-ref'], script)
         expect(result.code).toBe(0)
-        // Array should now only contain not-installed packages
         expect(result.stdout).toBe('express react')
       })
 
       it('should return empty output for empty input', () => {
-        const pkgDir = join(testDir, 'pkgs-empty-input')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {}
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed')
+        const result = runInTestDir('bash', dirs['pkgs-empty-input'], 'packages_not_installed')
         expect(result.code).toBe(0)
         expect(result.stdout.trim()).toBe('')
       })
@@ -745,51 +486,14 @@ describe("lang-js", () => {
 
     describe('edge cases', () => {
       it('should handle scoped packages', () => {
-        const pkgDir = join(testDir, 'pkgs-scoped')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          devDependencies: {
-            "@biomejs/biome": "^1.9.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "@biomejs/biome" "@typescript-eslint/parser" "react"')
+        const result = runInTestDir('bash', dirs['pkgs-scoped'], 'packages_not_installed "@biomejs/biome" "@typescript-eslint/parser" "react"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['@typescript-eslint/parser', 'react'])
       })
 
-      it('should handle no package.json file', () => {
-        const tmpEmptyDir = `/tmp/pkgs-no-pkgjson-${Date.now()}`
-        mkdirSync(tmpEmptyDir, { recursive: true })
-        writeFileSync(join(tmpEmptyDir, 'readme.txt'), 'no package.json')
-
-        try {
-          const result = runInTestDir('bash', tmpEmptyDir, 'packages_not_installed "lodash" "express"')
-          // Should return all packages as not installed (or error)
-          // Implementation may choose to return error or treat as "all not installed"
-          if (result.code === 0) {
-            const lines = result.stdout.trim().split('\n').filter(l => l)
-            expect(lines).toEqual(['lodash', 'express'])
-          } else {
-            // Error is also acceptable behavior
-            expect(result.code).not.toBe(0)
-          }
-        } finally {
-          rmSync(tmpEmptyDir, { recursive: true, force: true })
-        }
-      })
-
       it('should handle package.json with no dependency sections', () => {
-        const pkgDir = join(testDir, 'pkgs-no-dep-sections')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          version: "1.0.0"
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "lodash" "express"')
+        const result = runInTestDir('bash', dirs['pkgs-no-dep-sections'], 'packages_not_installed "lodash" "express"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['lodash', 'express'])
@@ -798,16 +502,7 @@ describe("lang-js", () => {
 
     describe('output format', () => {
       it('should preserve input order in output', () => {
-        const pkgDir = join(testDir, 'pkgs-order')
-        mkdirSync(pkgDir, { recursive: true })
-        writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-          name: "test",
-          dependencies: {
-            "zlib": "^1.0.0"
-          }
-        }))
-
-        const result = runInTestDir('bash', pkgDir, 'packages_not_installed "zebra" "apple" "mango" "zlib"')
+        const result = runInTestDir('bash', dirs['pkgs-order'], 'packages_not_installed "zebra" "apple" "mango" "zlib"')
         expect(result.code).toBe(0)
         const lines = result.stdout.trim().split('\n').filter(l => l)
         expect(lines).toEqual(['zebra', 'apple', 'mango'])

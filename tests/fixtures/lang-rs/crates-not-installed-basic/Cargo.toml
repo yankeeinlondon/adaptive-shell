@@ -1,0 +1,8 @@
+[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.0"

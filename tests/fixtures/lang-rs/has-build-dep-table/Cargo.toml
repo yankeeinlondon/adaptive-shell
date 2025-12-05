@@ -1,0 +1,5 @@
+[package]
+name = "test"
+
+[build-dependencies]
+bindgen = { version = "0.65", features = ["runtime"] }
