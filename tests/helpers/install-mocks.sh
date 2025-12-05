@@ -218,9 +218,10 @@ logc() {
     # Silent during tests
 }
 
-# Mock link function (used in installed_*) 
+# Mock link function (used in installed_*)
+# Use printf for cross-platform compatibility (echo -e behaves inconsistently on Windows bash)
 link() {
-    echo -e "\033]8;;$2\007$1\033]8;;\007"
+    printf "\\033]8;;%s\\007%s\\033]8;;\\007" "$2" "$1"
 }
 
 # Mock brew
