@@ -16,6 +16,9 @@ else
     UTILS="${ROOT}/utils"
 fi
 
+# shellcheck source="./install.sh"
+source "${UTILS}/install.sh"
+
 # is_dns_name <name>
 #
 # Validates whether the given string is a valid DNS hostname
@@ -249,7 +252,8 @@ function is_ip6_address() {
 #
 # Get's the host's WAN IP address.
 function get_wan_ip {
-    local -r wan=$(curl ifconfig.me)
+    ensure_install curl install_curl
+    local -r wan=$(curl -s ifconfig.me)
 
     echo "${wan}"
 }

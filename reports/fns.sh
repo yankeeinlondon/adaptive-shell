@@ -59,6 +59,12 @@ function report_fns_to_console() {
         ROOT="${ADAPTIVE_SHELL}"
         UTILS="${ROOT}/utils"
     fi
+
+    # shellcheck source="../utils/install.sh"
+    source "${ROOT}/utils/install.sh"
+    # Ensure jq is available (used for JSON parsing)
+    ensure_install jq install_jq
+
     # get a the JSON payload defining the functions which
     # matches the type `FunctionSummary` defined in `/static-types.ts`
     local -r fns="$("${ROOT}/static.sh" "${UTILS}")"

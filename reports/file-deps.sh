@@ -16,6 +16,11 @@ fi
 source "${ROOT}/static.sh"
 # shellcheck source="../utils/typeof.sh"
 source "${ROOT}/utils.sh"
+# shellcheck source="../utils/install.sh"
+source "${ROOT}/utils/install.sh"
+
+# Ensure jq is available (used for JSON parsing)
+ensure_install jq install_jq
 
 
 # report_file_dependencies <file 1> <...files> [--json]

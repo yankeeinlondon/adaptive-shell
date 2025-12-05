@@ -8,6 +8,12 @@ else
     ROOT="${ADAPTIVE_SHELL}"
 fi
 
+# shellcheck source="utils/install.sh"
+source "${ROOT}/utils/install.sh"
+
+# Ensure jq is available (used for JSON parsing throughout)
+ensure_install jq install_jq
+
 # __get_function_registry()
 #
 # Returns a function map by scanning all bash files.

@@ -32,4 +32,5 @@ jobs:
         with:
             transpile: false
             nodeVersion: '["22.x"]'
-            choco_install: "jq yq curl"
+            # choco_install: "jq yq curl"
+            use_wsl: true
