@@ -15,6 +15,9 @@ describe.skipIf(isWindows)('file dependency analysis', () => {
   let cachedReportJsonResult: any
 
   beforeAll(() => {
+    // Skip setup on Windows - Vitest's skipIf doesn't prevent beforeAll from running
+    if (isWindows) return
+
     // Create a temporary test file with known dependencies
     tempTestFile = join(tmpdir(), `test-file-deps-${Date.now()}.sh`)
     writeFileSync(tempTestFile, `#!/usr/bin/env bash
@@ -98,6 +101,9 @@ rgb_text "255 0 0" "red text"
   })
 
   afterAll(() => {
+    // Skip cleanup on Windows
+    if (isWindows) return
+
     // Clean up temp file
     try {
       unlinkSync(tempTestFile)
