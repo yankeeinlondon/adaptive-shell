@@ -4,15 +4,10 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { execSync } from 'child_process'
 
-// Skip on Windows/WSL - this test relies on Unix bash features and environment
-// variable passing that doesn't work correctly in Windows bash environments
+// Skip on native Windows - bash script testing requires Unix environment
+// WSL provides a full Linux environment and should work fine
 const isWindows = process.platform === 'win32'
-const isWSL = process.platform === 'linux' && (
-  !!process.env.WSL_DISTRO_NAME ||
-  !!process.env.WSL_INTEROP ||
-  process.cwd().startsWith('/mnt/c')
-)
-const skipTest = isWindows || isWSL
+const skipTest = isWindows
 
 describe.skipIf(skipTest)('file dependency analysis', () => {
   let tempTestFile: string
