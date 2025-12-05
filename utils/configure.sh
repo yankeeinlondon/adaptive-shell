@@ -25,10 +25,13 @@ source "${UTILS}/logging.sh"
 function configure_git() {
     source "${UTILS}/text.sh"
     source "${UTILS}/empty.sh"
+    source "${UTILS}/ssh.sh"
 
     local -r name=$(strip_trailing "$(git config --global user.name)" "\n")
     local -r email=$(strip_trailing "$(git config --global user.email)" "\n")
     local -r signingkey=$(strip_trailing "$(git config --global user.signingkey)" "\n")
+
+    git config set --global advice.addIgnoredFile false
 
     if not_empty "${name}" || not_empty "${email}" || not_empty "${signingkey}"; then
         logc "- {{BOLD}}{{BLUE}}git{{RESET}}{{BOLD}} is configured:"
@@ -39,6 +42,12 @@ function configure_git() {
         logc "- your {{BOLD}}{{GREEN}}git{{RESET}} configuration is taken from the {{BLUE}}~/.config/git/config{{RESET}} file"
         logc "- if you've linked your config to a shared directory or are using a git dotfiles to sync across machines then you should have this set but it doesn't look like that has been done on this host yet."
         logc ""
+    fi
+    local user
+    if user=$(github_auth_test); then
+        logc "    - SSH Token: ✅ {{ITALIC}}connects as{{RESET}}{{BOLD}} ${user}"
+    else
+        logc "    - SSH Token: ❌ unable to connect to github"
     fi
 
 }

@@ -4,7 +4,11 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { execSync } from 'child_process'
 
-describe('file dependency analysis', () => {
+// Skip on Windows - this test relies on Unix bash features and environment
+// variable passing that doesn't work correctly in Windows bash environments
+const isWindows = process.platform === 'win32'
+
+describe.skipIf(isWindows)('file dependency analysis', () => {
   let tempTestFile: string
   let cachedFileDepsResult: any
   let cachedReportConsoleOutput: string
