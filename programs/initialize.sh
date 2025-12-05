@@ -12,10 +12,17 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="../color.sh"
-source "${ROOT}/color.sh"
-# shellcheck source="../utils.sh"
-source "${ROOT}/utils.sh"
+source "${UTILS}/color.sh";
+source "${UTILS}/typeof.sh"
+source "${UTILS}/logging.sh"
+source "${UTILS}/errors.sh"
+source "${UTILS}/text.sh"
+source "${UTILS}/filesystem.sh"
+source "${UTILS}/os.sh"
+source "${UTILS}/functions.sh"
+source "${UTILS}/lists.sh"
+source "${UTILS}/detection.sh"
+source "${UTILS}/link.sh"
 
 # os_initialized()
 #

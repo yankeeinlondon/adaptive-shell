@@ -12,11 +12,8 @@ else
     UTILS="${ROOT}/utils"
 fi
 
-# shellcheck source="../color.sh"
-source "${ROOT}/color.sh"
-# shellcheck source="../utils.sh"
 source "${ROOT}/utils.sh"
-# shellcheck source="../utils/errors.sh"
+source "${UTILS}/color.sh"
 source "${UTILS}/errors.sh"
 allow_errors
 
