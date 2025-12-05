@@ -1,32 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs'
+import { mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { execSync } from 'child_process'
-import { runInShell } from "../helpers"
+import { runInShell, GitFixtureManager, GitFixtureDef, COMMON_GIT_PATTERNS } from "../helpers"
 
 /** Project root for absolute path references */
 const PROJECT_ROOT = process.cwd()
 
 /** Path to permanent fixtures */
 const FIXTURES_DIR = join(PROJECT_ROOT, 'tests', 'fixtures', 'lang-js')
-
-/**
- * Helper to initialize a git repo in a directory for testing
- */
-function initGitRepo(dir: string): void {
-  execSync('git init', { cwd: dir, stdio: 'pipe' })
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' })
-  execSync('git config user.name "Test User"', { cwd: dir, stdio: 'pipe' })
-}
-
-/**
- * Helper to create and commit a file in a git repo
- */
-function commitFile(dir: string, filename: string, content: string, message: string): void {
-  writeFileSync(join(dir, filename), content)
-  execSync(`git add "${filename}"`, { cwd: dir, stdio: 'pipe' })
-  execSync(`git commit --no-gpg-sign -m "${message}"`, { cwd: dir, stdio: 'pipe' })
-}
 
 /**
  * Helper to run shell script in a test directory while sourcing scripts from project root
@@ -45,42 +26,23 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
 // GIT FIXTURES - Only fixtures that require git repos (created dynamically)
 // =============================================================================
 
-interface GitFixture {
-  subdirs?: string[]
-  files: Record<string, string>
-  commits: Array<{ file: string; content: string; message: string }>
-}
-
-const GIT_FIXTURES: Record<string, GitFixture> = {
-  'pkg-mgr-subdir-test': {
-    subdirs: ['packages/app'],
-    files: {
-      'package.json': '{"name": "monorepo"}',
-      'pnpm-lock.yaml': 'lockfileVersion: 6.0'
-    },
-    commits: [
-      { file: 'package.json', content: '{"name": "monorepo"}', message: 'init' }
-    ]
-  },
-  'pkg-json-repo-root': {
-    subdirs: ['packages/app'],
-    files: {
-      'package.json': '{"name": "root-pkg", "version": "2.0.0"}'
-    },
-    commits: [
-      { file: 'package.json', content: '{"name": "root-pkg", "version": "2.0.0"}', message: 'init' }
-    ]
-  },
-  'pkg-json-prefer-cwd': {
-    subdirs: ['packages/app'],
-    files: {
-      'package.json': '{"name": "root-pkg"}',
-      'packages/app/package.json': '{"name": "sub-pkg"}'
-    },
-    commits: [
-      { file: 'package.json', content: '{"name": "root-pkg"}', message: 'init' }
-    ]
-  }
+const GIT_FIXTURES: Record<string, GitFixtureDef> = {
+  'pkg-mgr-subdir-test': COMMON_GIT_PATTERNS.pkgMgrSubdir(
+    'package.json', '{"name": "monorepo"}',
+    'pnpm-lock.yaml', 'lockfileVersion: 6.0',
+    'packages/app'
+  ),
+  'pkg-json-repo-root': COMMON_GIT_PATTERNS.repoRoot(
+    'package.json',
+    '{"name": "root-pkg", "version": "2.0.0"}',
+    'packages/app'
+  ),
+  'pkg-json-prefer-cwd': COMMON_GIT_PATTERNS.preferCwd(
+    'package.json',
+    '{"name": "root-pkg"}',
+    'packages/app',
+    '{"name": "sub-pkg"}'
+  )
 }
 
 // =============================================================================
@@ -88,8 +50,8 @@ const GIT_FIXTURES: Record<string, GitFixture> = {
 // =============================================================================
 
 describe("lang-js", { concurrent: true }, () => {
-  // Temp directory for git fixtures only
-  const gitTempDir = join(PROJECT_ROOT, 'tests', '.tmp-lang-js-git')
+  // Git fixture manager
+  const gitManager = new GitFixtureManager('lang-js-git')
 
   // Paths to all fixtures (permanent + git)
   const dirs: Record<string, string> = {}
@@ -115,52 +77,13 @@ describe("lang-js", { concurrent: true }, () => {
       dirs[name] = join(FIXTURES_DIR, name)
     }
 
-    // Clean up and create temp directory for git fixtures
-    if (existsSync(gitTempDir)) {
-      rmSync(gitTempDir, { recursive: true, force: true })
-    }
-    mkdirSync(gitTempDir, { recursive: true })
-
-    // Create git fixtures
-    for (const [name, fixture] of Object.entries(GIT_FIXTURES)) {
-      const fixtureDir = join(gitTempDir, name)
-      dirs[name] = fixtureDir
-
-      // Create subdirectories first
-      if (fixture.subdirs) {
-        for (const subdir of fixture.subdirs) {
-          mkdirSync(join(fixtureDir, subdir), { recursive: true })
-        }
-      } else {
-        mkdirSync(fixtureDir, { recursive: true })
-      }
-
-      // Initialize git repo
-      initGitRepo(fixtureDir)
-
-      // Write all files
-      for (const [filename, content] of Object.entries(fixture.files)) {
-        const filePath = join(fixtureDir, filename)
-        const fileDir = join(filePath, '..')
-        if (!existsSync(fileDir)) {
-          mkdirSync(fileDir, { recursive: true })
-        }
-        writeFileSync(filePath, content)
-      }
-
-      // Create commits
-      for (const commit of fixture.commits) {
-        execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
-        execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
-      }
-    }
+    // Create git fixtures using the manager
+    const gitDirs = gitManager.setup(GIT_FIXTURES)
+    Object.assign(dirs, gitDirs)
   })
 
   afterAll(() => {
-    // Only clean up the git temp directory
-    if (existsSync(gitTempDir)) {
-      rmSync(gitTempDir, { recursive: true, force: true })
-    }
+    gitManager.teardown()
   })
 
   describe('js_package_manager()', () => {

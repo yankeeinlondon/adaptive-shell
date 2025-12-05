@@ -1,11 +1,27 @@
 /**
- * Script to generate permanent fixture directories from test FIXTURES definitions.
+ * Fixture Generator & Documentation
  *
- * Run with: npx tsx tests/fixtures/generate-fixtures.ts
+ * This script defines the canonical fixture structures for lang-js, lang-py, and lang-rs tests.
+ * It generates the permanent (static) fixture directories from the FIXTURES definitions below.
  *
- * This reads the FIXTURES objects from the test files and creates the actual
- * file structure in tests/fixtures/. Git-based fixtures are skipped as they
- * need to be created dynamically.
+ * Usage:
+ *   npx tsx tests/fixtures/generate-fixtures.ts
+ *
+ * When to run:
+ *   - After adding new fixture definitions to regenerate the fixture directories
+ *   - To verify fixture structure matches definitions
+ *   - If fixtures become corrupted or need updates
+ *
+ * Architecture:
+ *   - Static fixtures: Created once and committed to the repository (~178 fixtures)
+ *   - Git fixtures: Must be created dynamically in tests because they require actual
+ *     git repository initialization (cannot include .git/ in version control)
+ *
+ * The TypeScript interfaces (FileFixture, GitFixture) serve as documentation
+ * for the expected fixture schema.
+ *
+ * Note: Git-based fixtures are skipped when running this script; they must be
+ * created dynamically in test beforeAll() hooks using the GitFixtureManager utility.
  */
 
 import { mkdirSync, writeFileSync, existsSync } from 'fs'

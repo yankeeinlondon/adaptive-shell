@@ -1,23 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { execSync } from 'child_process'
-import { runInShell, isWSL } from "../helpers"
+import { runInShell, isWSL, GitFixtureManager, GitFixtureDef, COMMON_GIT_PATTERNS } from "../helpers"
 
 /** Project root for absolute path references */
 const PROJECT_ROOT = process.cwd()
 
 /** Path to permanent fixtures */
 const FIXTURES_DIR = join(PROJECT_ROOT, 'tests', 'fixtures', 'lang-rs')
-
-/**
- * Helper to initialize a git repo in a directory for testing
- */
-function initGitRepo(dir: string): void {
-  execSync('git init', { cwd: dir, stdio: 'pipe' })
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' })
-  execSync('git config user.name "Test User"', { cwd: dir, stdio: 'pipe' })
-}
 
 /**
  * Helper to run shell script in a test directory while sourcing scripts from project root
@@ -36,70 +25,33 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
 // GIT FIXTURES - Only fixtures that require git repos (created dynamically)
 // =============================================================================
 
-interface GitFixture {
-  subdirs?: string[]
-  files: Record<string, string>
-  commits: Array<{ file: string; content: string; message: string }>
-}
-
-const GIT_FIXTURES: Record<string, GitFixture> = {
-  'cargo-repo-root': {
-    subdirs: ['crates/app'],
-    files: {
-      'Cargo.toml': `[package]
-name = "root-crate"
-version = "2.0.0"`
-    },
-    commits: [
-      { file: 'Cargo.toml', content: `[package]\nname = "root-crate"\nversion = "2.0.0"`, message: 'init' }
-    ]
-  },
-  'cargo-prefer-cwd': {
-    subdirs: ['crates/app'],
-    files: {
-      'Cargo.toml': `[package]
-name = "root-crate"`,
-      'crates/app/Cargo.toml': `[package]
-name = "sub-crate"`
-    },
-    commits: [
-      { file: 'Cargo.toml', content: '[package]\nname = "root-crate"', message: 'init' }
-    ]
-  },
-  'linter-config-repo-root': {
-    subdirs: ['crates/app'],
-    files: {
-      'Cargo.toml': `[workspace]
-members = ["crates/*"]`,
-      'clippy.toml': 'msrv = "1.70"'
-    },
-    commits: [
-      { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
-    ]
-  },
-  'formatter-config-repo-root': {
-    subdirs: ['crates/app'],
-    files: {
-      'Cargo.toml': `[workspace]
-members = ["crates/*"]`,
-      'rustfmt.toml': 'max_width = 100'
-    },
-    commits: [
-      { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
-    ]
-  },
-  'is-workspace-subdir': {
-    subdirs: ['crates/app'],
-    files: {
-      'Cargo.toml': `[workspace]
-members = ["crates/*"]`,
-      'crates/app/Cargo.toml': `[package]
-name = "app"`
-    },
-    commits: [
-      { file: 'Cargo.toml', content: '[workspace]', message: 'init' }
-    ]
-  }
+const GIT_FIXTURES: Record<string, GitFixtureDef> = {
+  'cargo-repo-root': COMMON_GIT_PATTERNS.repoRoot(
+    'Cargo.toml',
+    '[package]\nname = "root-crate"\nversion = "2.0.0"',
+    'crates/app'
+  ),
+  'cargo-prefer-cwd': COMMON_GIT_PATTERNS.preferCwd(
+    'Cargo.toml',
+    '[package]\nname = "root-crate"',
+    'crates/app',
+    '[package]\nname = "sub-crate"'
+  ),
+  'linter-config-repo-root': COMMON_GIT_PATTERNS.configAtRoot(
+    'Cargo.toml', '[workspace]\nmembers = ["crates/*"]',
+    'clippy.toml', 'msrv = "1.70"',
+    'crates/app'
+  ),
+  'formatter-config-repo-root': COMMON_GIT_PATTERNS.configAtRoot(
+    'Cargo.toml', '[workspace]\nmembers = ["crates/*"]',
+    'rustfmt.toml', 'max_width = 100',
+    'crates/app'
+  ),
+  'is-workspace-subdir': COMMON_GIT_PATTERNS.workspace(
+    'Cargo.toml', '[workspace]\nmembers = ["crates/*"]',
+    'crates/app',
+    'Cargo.toml', '[package]\nname = "app"'
+  )
 }
 
 // =============================================================================
@@ -110,8 +62,8 @@ name = "app"`
 // in GitHub Actions. The ensure_install() in lang-rs.sh calls exit 1 if yq
 // installation fails, causing all tests to fail with exit code 1.
 describe.skipIf(isWSL)("lang-rs", { concurrent: true }, () => {
-  // Temp directory for git fixtures only
-  const gitTempDir = join(PROJECT_ROOT, 'tests', '.tmp-lang-rs-git')
+  // Git fixture manager
+  const gitManager = new GitFixtureManager('lang-rs-git')
 
   // Paths to all fixtures (permanent + git)
   const dirs: Record<string, string> = {}
@@ -137,52 +89,13 @@ describe.skipIf(isWSL)("lang-rs", { concurrent: true }, () => {
       dirs[name] = join(FIXTURES_DIR, name)
     }
 
-    // Clean up and create temp directory for git fixtures
-    if (existsSync(gitTempDir)) {
-      rmSync(gitTempDir, { recursive: true, force: true })
-    }
-    mkdirSync(gitTempDir, { recursive: true })
-
-    // Create git fixtures
-    for (const [name, fixture] of Object.entries(GIT_FIXTURES)) {
-      const fixtureDir = join(gitTempDir, name)
-      dirs[name] = fixtureDir
-
-      // Create subdirectories first
-      if (fixture.subdirs) {
-        for (const subdir of fixture.subdirs) {
-          mkdirSync(join(fixtureDir, subdir), { recursive: true })
-        }
-      } else {
-        mkdirSync(fixtureDir, { recursive: true })
-      }
-
-      // Initialize git repo
-      initGitRepo(fixtureDir)
-
-      // Write all files
-      for (const [filename, content] of Object.entries(fixture.files)) {
-        const filePath = join(fixtureDir, filename)
-        const fileDir = join(filePath, '..')
-        if (!existsSync(fileDir)) {
-          mkdirSync(fileDir, { recursive: true })
-        }
-        writeFileSync(filePath, content)
-      }
-
-      // Create commits
-      for (const commit of fixture.commits) {
-        execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
-        execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
-      }
-    }
+    // Create git fixtures using the manager
+    const gitDirs = gitManager.setup(GIT_FIXTURES)
+    Object.assign(dirs, gitDirs)
   })
 
   afterAll(() => {
-    // Only clean up the git temp directory
-    if (existsSync(gitTempDir)) {
-      rmSync(gitTempDir, { recursive: true, force: true })
-    }
+    gitManager.teardown()
   })
 
   describe('get_cargo_toml()', () => {

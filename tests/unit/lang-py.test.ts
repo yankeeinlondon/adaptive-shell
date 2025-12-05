@@ -1,32 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { execSync } from 'child_process'
-import { runInShell, isWSL } from "../helpers"
+import { runInShell, isWSL, GitFixtureManager, GitFixtureDef, COMMON_GIT_PATTERNS } from "../helpers"
 
 /** Project root for absolute path references */
 const PROJECT_ROOT = process.cwd()
 
 /** Path to permanent fixtures */
 const FIXTURES_DIR = join(PROJECT_ROOT, 'tests', 'fixtures', 'lang-py')
-
-/**
- * Helper to initialize a git repo in a directory for testing
- */
-function initGitRepo(dir: string): void {
-  execSync('git init', { cwd: dir, stdio: 'pipe' })
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' })
-  execSync('git config user.name "Test User"', { cwd: dir, stdio: 'pipe' })
-}
-
-/**
- * Helper to create and commit a file in a git repo
- */
-function commitFile(dir: string, filename: string, content: string, message: string): void {
-  writeFileSync(join(dir, filename), content)
-  execSync(`git add "${filename}"`, { cwd: dir, stdio: 'pipe' })
-  execSync(`git commit -m "${message}"`, { cwd: dir, stdio: 'pipe' })
-}
 
 /**
  * Helper to run shell script in a test directory while sourcing scripts from project root
@@ -45,61 +25,34 @@ function runInTestDir(shell: 'bash' | 'zsh', testDir: string, script: string) {
 // GIT FIXTURES - Only fixtures that require git repos (created dynamically)
 // =============================================================================
 
-interface GitFixture {
-  subdirs?: string[]
-  files: Record<string, string>
-  commits: Array<{ file: string; content: string; message: string }>
-}
-
-const GIT_FIXTURES: Record<string, GitFixture> = {
-  'py-pkg-mgr-subdir-test': {
-    subdirs: ['src/app'],
-    files: {
-      'pyproject.toml': '[tool.poetry]\nname = "monorepo"',
-      'poetry.lock': '# Poetry lock file'
-    },
-    commits: [
-      { file: 'pyproject.toml', content: '[tool.poetry]\nname = "monorepo"', message: 'init' }
-    ]
-  },
-  'pyproject-repo-root': {
-    subdirs: ['src/app'],
-    files: {
-      'pyproject.toml': '[project]\nname = "root-pkg"\nversion = "2.0.0"'
-    },
-    commits: [
-      { file: 'pyproject.toml', content: '[project]\nname = "root-pkg"\nversion = "2.0.0"', message: 'init' }
-    ]
-  },
-  'pyproject-prefer-cwd': {
-    subdirs: ['packages/app'],
-    files: {
-      'pyproject.toml': '[project]\nname = "root-pkg"',
-      'packages/app/pyproject.toml': '[project]\nname = "sub-pkg"'
-    },
-    commits: [
-      { file: 'pyproject.toml', content: '[project]\nname = "root-pkg"', message: 'init' }
-    ]
-  },
-  'requirements-repo-root': {
-    subdirs: ['src'],
-    files: {
-      'requirements.txt': 'requests>=2.0.0\nclick'
-    },
-    commits: [
-      { file: 'requirements.txt', content: 'requests>=2.0.0\nclick', message: 'init' }
-    ]
-  },
-  'requirements-prefer-cwd': {
-    subdirs: ['packages/app'],
-    files: {
-      'requirements.txt': 'requests',
-      'packages/app/requirements.txt': 'click'
-    },
-    commits: [
-      { file: 'requirements.txt', content: 'requests', message: 'init' }
-    ]
-  }
+const GIT_FIXTURES: Record<string, GitFixtureDef> = {
+  'py-pkg-mgr-subdir-test': COMMON_GIT_PATTERNS.pkgMgrSubdir(
+    'pyproject.toml', '[tool.poetry]\nname = "monorepo"',
+    'poetry.lock', '# Poetry lock file',
+    'src/app'
+  ),
+  'pyproject-repo-root': COMMON_GIT_PATTERNS.repoRoot(
+    'pyproject.toml',
+    '[project]\nname = "root-pkg"\nversion = "2.0.0"',
+    'src/app'
+  ),
+  'pyproject-prefer-cwd': COMMON_GIT_PATTERNS.preferCwd(
+    'pyproject.toml',
+    '[project]\nname = "root-pkg"',
+    'packages/app',
+    '[project]\nname = "sub-pkg"'
+  ),
+  'requirements-repo-root': COMMON_GIT_PATTERNS.repoRoot(
+    'requirements.txt',
+    'requests>=2.0.0\nclick',
+    'src'
+  ),
+  'requirements-prefer-cwd': COMMON_GIT_PATTERNS.preferCwd(
+    'requirements.txt',
+    'requests',
+    'packages/app',
+    'click'
+  )
 }
 
 // =============================================================================
@@ -110,8 +63,8 @@ const GIT_FIXTURES: Record<string, GitFixture> = {
 // in GitHub Actions. The ensure_install() in lang-py.sh calls exit 1 if yq
 // installation fails, causing all tests to fail with exit code 1.
 describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
-  // Temp directory for git fixtures only
-  const gitTempDir = join(PROJECT_ROOT, 'tests', '.tmp-lang-py-git')
+  // Git fixture manager
+  const gitManager = new GitFixtureManager('lang-py-git')
 
   // Paths to all fixtures (permanent + git)
   const dirs: Record<string, string> = {}
@@ -152,52 +105,13 @@ describe.skipIf(isWSL)("lang-py", { concurrent: true }, () => {
       dirs[name] = join(FIXTURES_DIR, name)
     }
 
-    // Clean up and create temp directory for git fixtures
-    if (existsSync(gitTempDir)) {
-      rmSync(gitTempDir, { recursive: true, force: true })
-    }
-    mkdirSync(gitTempDir, { recursive: true })
-
-    // Create git fixtures
-    for (const [name, fixture] of Object.entries(GIT_FIXTURES)) {
-      const fixtureDir = join(gitTempDir, name)
-      dirs[name] = fixtureDir
-
-      // Create subdirectories first
-      if (fixture.subdirs) {
-        for (const subdir of fixture.subdirs) {
-          mkdirSync(join(fixtureDir, subdir), { recursive: true })
-        }
-      } else {
-        mkdirSync(fixtureDir, { recursive: true })
-      }
-
-      // Initialize git repo
-      initGitRepo(fixtureDir)
-
-      // Write all files
-      for (const [filename, content] of Object.entries(fixture.files)) {
-        const filePath = join(fixtureDir, filename)
-        const fileDir = join(filePath, '..')
-        if (!existsSync(fileDir)) {
-          mkdirSync(fileDir, { recursive: true })
-        }
-        writeFileSync(filePath, content)
-      }
-
-      // Create commits
-      for (const commit of fixture.commits) {
-        execSync(`git add "${commit.file}"`, { cwd: fixtureDir, stdio: 'pipe' })
-        execSync(`git commit --no-gpg-sign -m "${commit.message}"`, { cwd: fixtureDir, stdio: 'pipe' })
-      }
-    }
+    // Create git fixtures using the manager
+    const gitDirs = gitManager.setup(GIT_FIXTURES)
+    Object.assign(dirs, gitDirs)
   })
 
   afterAll(() => {
-    // Only clean up the git temp directory
-    if (existsSync(gitTempDir)) {
-      rmSync(gitTempDir, { recursive: true, force: true })
-    }
+    gitManager.teardown()
   })
 
   describe('py_package_manager()', () => {
