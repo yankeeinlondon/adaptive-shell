@@ -54,6 +54,8 @@ export function runInShell(
     CI: 'true',
     ROOT: process.cwd(),
     ADAPTIVE_SHELL: process.cwd(),
+    // Ensure ~/.local/bin is in PATH for user-installed tools (e.g., yq on WSL)
+    PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
     ...options?.env
   }
 

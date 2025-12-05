@@ -1499,15 +1499,50 @@ _install_mikefarah_yq() {
         fi
     fi
 
-    # Make executable and move to /usr/local/bin
+    # Make executable
     chmod +x "$tmp_file"
-    if ! ${SUDO} mv "$tmp_file" /usr/local/bin/yq; then
-        rm -f "$tmp_file"
-        logc "{{RED}}ERROR{{RESET}}: failed to install yq to /usr/local/bin"
-        return 1
+
+    # Determine install location:
+    # - Root users: /usr/local/bin
+    # - Non-root users: ~/.local/bin (no sudo required, works in non-interactive contexts like WSL tests)
+    local install_dir
+    if [[ "$(whoami)" == "root" ]]; then
+        install_dir="/usr/local/bin"
+    else
+        install_dir="${HOME}/.local/bin"
+        # Ensure ~/.local/bin exists
+        if [[ ! -d "$install_dir" ]]; then
+            mkdir -p "$install_dir" || {
+                rm -f "$tmp_file"
+                logc "{{RED}}ERROR{{RESET}}: failed to create $install_dir"
+                return 1
+            }
+        fi
     fi
 
-    logc "- {{BOLD}}{{BLUE}}yq{{RESET}} installed successfully"
+    # Move binary to install location
+    if [[ "$install_dir" == "/usr/local/bin" ]]; then
+        if ! ${SUDO} mv "$tmp_file" "${install_dir}/yq"; then
+            rm -f "$tmp_file"
+            logc "{{RED}}ERROR{{RESET}}: failed to install yq to ${install_dir}"
+            return 1
+        fi
+    else
+        if ! mv "$tmp_file" "${install_dir}/yq"; then
+            rm -f "$tmp_file"
+            logc "{{RED}}ERROR{{RESET}}: failed to install yq to ${install_dir}"
+            return 1
+        fi
+    fi
+
+    logc "- {{BOLD}}{{BLUE}}yq{{RESET}} installed successfully to ${install_dir}"
+
+    # Warn if ~/.local/bin is not in PATH
+    if [[ "$install_dir" == "${HOME}/.local/bin" ]] && [[ ":$PATH:" != *":${install_dir}:"* ]]; then
+        logc "{{YELLOW}}NOTE{{RESET}}: ${install_dir} is not in your PATH. Add it with:"
+        logc "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+
     return 0
 }
 

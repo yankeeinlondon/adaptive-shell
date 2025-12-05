@@ -1,6 +1,7 @@
 export * from "./asArray"
 export * from "./deprecated"
 export * from "./link"
+export * from "./platform"
 export * from "./TestOptions"
 export * from "./TestResult"
 export * from "./TestUtil"

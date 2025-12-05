@@ -26,6 +26,8 @@ export function toSpawnOption<T extends TestOptions>(opt: T): ToSpawnOptions<T> 
             CI: 'true',
             ROOT: cwd(),
             ADAPTIVE_SHELL: cwd(),
+            // Ensure ~/.local/bin is in PATH for user-installed tools (e.g., yq on WSL)
+            PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
             ...opt.env
         },
         timeout: fallback(opt.timeout, DEFAULT_TIMEOUT),

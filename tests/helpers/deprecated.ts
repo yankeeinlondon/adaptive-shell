@@ -39,6 +39,8 @@ export function bash(script: string, options?: TestOptions): string {
                 CI: 'true',
                 ROOT: process.cwd(),
                 ADAPTIVE_SHELL: process.cwd(),
+                // Ensure ~/.local/bin is in PATH for user-installed tools (e.g., yq on WSL)
+                PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
                 ...options?.env
             }
         }).trim()
@@ -114,6 +116,7 @@ export function bashWithStderr(script: string, options?: TestOptions): string {
                 CI: 'true',
                 ROOT: process.cwd(),
                 ADAPTIVE_SHELL: process.cwd(),
+                PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
                 ...options?.env
             }
         })
@@ -160,6 +163,7 @@ export function bashNoTrimStart(script: string, options?: TestOptions): string {
                 CI: 'true',
                 ROOT: process.cwd(),
                 ADAPTIVE_SHELL: process.cwd(),
+                PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
                 ...options?.env
             }
         })
