@@ -4,12 +4,17 @@
 __UTILS_SH_LOADED=1
 
 if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
-    UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ "${UTILS}" == *"/utils" ]];then
-        ROOT="${UTILS%"/utils"}"
+    __UTILS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "${__UTILS_SCRIPT_DIR}" == *"/utils" ]];then
+        # Script is in the utils/ subdirectory
+        UTILS="${__UTILS_SCRIPT_DIR}"
+        ROOT="${__UTILS_SCRIPT_DIR%"/utils"}"
     else
-        ROOT="$UTILS"
+        # Script is in the project root - set UTILS to the utils/ subdirectory
+        ROOT="${__UTILS_SCRIPT_DIR}"
+        UTILS="${ROOT}/utils"
     fi
+    unset __UTILS_SCRIPT_DIR
 else
     ROOT="${ADAPTIVE_SHELL}"
     UTILS="${ROOT}/utils"
@@ -21,7 +26,7 @@ else
     export SUDO="sudo"
 fi
 
-# shellcheck source="./color.sh"
+# shellcheck source="./utils/color.sh"
 source "${UTILS}/color.sh";
 # shellcheck source="./utils/typeof.sh"
 source "${UTILS}/typeof.sh"
