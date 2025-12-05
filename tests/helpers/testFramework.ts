@@ -19,7 +19,15 @@ export function toSpawnOption<T extends TestOptions>(opt: T): ToSpawnOptions<T> 
     return {
         encoding: "utf-8",
         cwd: fallback(opt.cwd, cwd()),
-        env: fallback(opt.env, {}),
+        env: {
+            ...process.env,
+            // Set CI=true to prevent _query_terminal_osc from trying to read from /dev/tty
+            // which can hang indefinitely on WSL when running tests
+            CI: 'true',
+            ROOT: cwd(),
+            ADAPTIVE_SHELL: cwd(),
+            ...opt.env
+        },
         timeout: fallback(opt.timeout, DEFAULT_TIMEOUT),
         stdio: [
             fallback(opt.stdin, "pipe"),

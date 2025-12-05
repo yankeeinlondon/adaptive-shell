@@ -34,7 +34,11 @@ export function bash(script: string, options?: TestOptions): string {
             timeout,
             env: {
                 ...process.env,
+                // Set CI=true to prevent _query_terminal_osc from trying to read from /dev/tty
+                // which can hang indefinitely on WSL when running tests
+                CI: 'true',
                 ROOT: process.cwd(),
+                ADAPTIVE_SHELL: process.cwd(),
                 ...options?.env
             }
         }).trim()
@@ -107,7 +111,9 @@ export function bashWithStderr(script: string, options?: TestOptions): string {
             timeout,
             env: {
                 ...process.env,
+                CI: 'true',
                 ROOT: process.cwd(),
+                ADAPTIVE_SHELL: process.cwd(),
                 ...options?.env
             }
         })
@@ -151,7 +157,9 @@ export function bashNoTrimStart(script: string, options?: TestOptions): string {
             timeout,
             env: {
                 ...process.env,
+                CI: 'true',
                 ROOT: process.cwd(),
+                ADAPTIVE_SHELL: process.cwd(),
                 ...options?.env
             }
         })

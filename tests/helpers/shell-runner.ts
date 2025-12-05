@@ -49,6 +49,9 @@ export function runInShell(
 
   const env = {
     ...process.env,
+    // Set CI=true to prevent _query_terminal_osc from trying to read from /dev/tty
+    // which can hang indefinitely on WSL when running tests
+    CI: 'true',
     ROOT: process.cwd(),
     ADAPTIVE_SHELL: process.cwd(),
     ...options?.env
