@@ -65,6 +65,11 @@ function is_mac() {
 }
 
 function is_windows() {
+    # WSL should be treated as Linux, not Windows (even though cmd.exe is accessible)
+    # Check WSL first to avoid false positives
+    if [[ -f /proc/version ]] && grep -qi microsoft /proc/version 2>/dev/null; then
+        return 1
+    fi
     [[ $(uname -s) == CYGWIN* || $(uname -s) == MINGW* ]] || command -v cmd.exe &>/dev/null;
 }
 

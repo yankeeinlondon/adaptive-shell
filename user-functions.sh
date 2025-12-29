@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-
-
 if [ -z "${ADAPTIVE_SHELL}" ] || [[ "${ADAPTIVE_SHELL}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "${UTILS}" == *"/utils" ]];then
@@ -129,6 +127,35 @@ function vitesse_ext() {
   npx degit antfu/vitesse-webext "$1" --force
 }
 
+# markdownlint()
+#
+# adds a `.markdownlint.jsonc` file to the current working directory (or $1 if set)
+# if no configuration file was already there.
+function markdownlint() {
+    local -r dir="${1:-${PWD}}"
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/color.sh"
+    source "${UTILS}/detection.sh"
+
+    if [ ! -f "./.markdownlint.jsonc" ] && [ ! -f "./.markdownlint.json" ]; then
+        logc "- creating {{BLUE}}.markdownlint.jsonc{{RESET}} file"
+        logc ""
+        if is_windows; then
+            logc "- not implemented for Windows yet! Consider running in WSL.\n"
+            return 1
+        else
+            cp "${ROOT}/resources/.markdownlint.jsonc" "${dir}" >/dev/null 2>/dev/null || error "problems copying the file!"
+        fi
+    else
+        if [ ! -f "./.markdownlint.jsonc" ]; then
+            logc "- lint file {{BLUE}}./markdownlint.json{{RESET}} already exists; skipping ..."
+        else
+            logc "- lint file {{BLUE}}./markdownlint.jsonc{{RESET}} already exists; skipping ..."
+        fi
+    fi
+
+}
+
 
 function gitignore() {
     source "${UTILS}/logging.sh"
@@ -195,6 +222,10 @@ frontend/.vite-ssg-dist/**
 .tsbuildinfo
 trace/*
 .trace/*
+.ai/logs
+.ai/plans/archived
+.ai/code-reviews/archived
+
 EOF
   else
     logc "- the {{BLUE}}.gitignore{{RESET}} file already exists, {{ITALIC}}skipping{{RESET}}"
@@ -374,5 +405,43 @@ if ! has_command "claude"; then
             logc "Ok.\n"
             return 1
         fi
+    }
+
+else
+    source "${UTILS}/detection.sh" || error "discovery utilities not found!"
+    if is_zsh; then
+        CLAUDE_CLI="$(whence -p claude)"
+    else
+        CLAUDE_CLI="$(which claude)"
+    fi
+    export CLAUDE_CLI
+
+    # Claude is installed so wrap executable with
+    # function which clears the screen before entering
+    # shellcheck disable=SC2155
+    function claude() {
+        source "${UTILS}/logging.sh" || error "logging utilities not found!"
+        source "${UTILS}/filesystem.sh" || error "discovery utilities not found!"
+        local -r prompt_filepath="${PWD}/docs/system-prompt.md"
+
+        if file_exists "${prompt_filepath}"; then
+            local prompt="$(get_file "${prompt_filepath}")"
+
+            (
+                clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with system prompt{{RESET}}-- exited."
+            ) || error "Problem starting Claude Code (with system prompt)."
+            logc ""
+            logc "{{BOLD}}System Prompt:{{RESET}}"
+            if has_command "bat"; then
+                bat "${prompt_filepath}" --no-pager
+            else
+                logc "${prompt}"
+            fi
+            logc ""
+        else
+            clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session exited {{ITALIC}}{{DIM}}no system prompt{{RESET}})."
+        fi
+
+
     }
 fi

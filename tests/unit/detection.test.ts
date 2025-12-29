@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, chmodSync } from 'fs'
 import { join } from 'path'
 import { execSync } from 'child_process'
 import { sourceScript, bashExitCode, runInShell, runInBothShells, isShellAvailable } from "../helpers"
@@ -1116,6 +1116,242 @@ describe('detection utilities', () => {
       } finally {
         rmSync(tmpEmptyDir, { recursive: true, force: true })
       }
+    })
+  })
+
+  describe('has_package_json_script()', () => {
+    let cachedScriptTestDir: string | null = null
+
+    function getOrCreateScriptTestDir() {
+      if (!cachedScriptTestDir) {
+        cachedScriptTestDir = join(testDir, 'cached-script-test')
+        mkdirSync(cachedScriptTestDir, { recursive: true })
+        initGitRepo(cachedScriptTestDir)
+        writeFileSync(join(cachedScriptTestDir, 'package.json'), JSON.stringify({
+          name: "test-project",
+          scripts: {
+            test: "vitest",
+            build: "tsc",
+            "test:watch": "vitest --watch"
+          }
+        }, null, 2))
+      }
+      return cachedScriptTestDir
+    }
+
+    it('should return 0 when script exists in package.json', () => {
+      const scriptDir = getOrCreateScriptTestDir()
+      const result = runInTestDir('bash', scriptDir, `has_package_json_script 'test'`)
+      expect(result.code).toBe(0)
+    })
+
+    it('should return 0 for script with colon in name', () => {
+      const scriptDir = getOrCreateScriptTestDir()
+      const result = runInTestDir('bash', scriptDir, `has_package_json_script 'test:watch'`)
+      expect(result.code).toBe(0)
+    })
+
+    it('should return 1 when script does not exist', () => {
+      const scriptDir = getOrCreateScriptTestDir()
+      const result = runInTestDir('bash', scriptDir, `has_package_json_script 'nonexistent'`)
+      expect(result.code).toBe(1)
+    })
+
+    it('should return 1 when no package.json exists', () => {
+      const tmpNoPackage = `/tmp/script-no-package-${Date.now()}`
+      mkdirSync(tmpNoPackage, { recursive: true })
+
+      try {
+        const result = runInTestDir('bash', tmpNoPackage, `has_package_json_script 'test'`)
+        expect(result.code).toBe(1)
+      } finally {
+        rmSync(tmpNoPackage, { recursive: true, force: true })
+      }
+    })
+
+    it('should work from subdirectory when repo root has package.json', () => {
+      const scriptDir = getOrCreateScriptTestDir()
+      const subDir = join(scriptDir, 'src', 'nested')
+      mkdirSync(subDir, { recursive: true })
+
+      const result = runInTestDir('bash', subDir, `has_package_json_script 'test'`)
+      expect(result.code).toBe(0)
+    })
+
+    it('should return 1 when package.json exists but has no scripts section', () => {
+      const tmpNoScripts = `/tmp/script-no-scripts-${Date.now()}`
+      mkdirSync(tmpNoScripts, { recursive: true })
+      writeFileSync(join(tmpNoScripts, 'package.json'), JSON.stringify({
+        name: "test-project",
+        dependencies: {}
+      }))
+
+      try {
+        const result = runInTestDir('bash', tmpNoScripts, `has_package_json_script 'test'`)
+        expect(result.code).toBe(1)
+      } finally {
+        rmSync(tmpNoScripts, { recursive: true, force: true })
+      }
+    })
+
+    it('should error when no script name provided', () => {
+      const scriptDir = getOrCreateScriptTestDir()
+      const result = runInTestDir('bash', scriptDir, `has_package_json_script`)
+      expect(result.code).not.toBe(0)
+    })
+  })
+
+  describe('inject_package_json_script()', () => {
+    let injectTestDir: string
+
+    beforeEach(() => {
+      // Create a fresh directory for each test
+      injectTestDir = join(testDir, `inject-test-${Date.now()}`)
+      mkdirSync(injectTestDir, { recursive: true })
+    })
+
+    afterEach(() => {
+      if (existsSync(injectTestDir)) {
+        rmSync(injectTestDir, { recursive: true, force: true })
+      }
+    })
+
+    it('should add script to existing scripts section', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), JSON.stringify({
+        name: "test-project",
+        scripts: {
+          test: "vitest"
+        }
+      }, null, 2))
+
+      const result = runInTestDir('bash', injectTestDir, `inject_package_json_script 'build' 'tsc'`)
+      expect(result.code).toBe(0)
+
+      // Verify the script was added
+      const pkg = JSON.parse(readFileSync(join(injectTestDir, 'package.json'), 'utf-8'))
+      expect(pkg.scripts.build).toBe('tsc')
+      expect(pkg.scripts.test).toBe('vitest') // Original script preserved
+    })
+
+    it('should update existing script with new value', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), JSON.stringify({
+        name: "test-project",
+        scripts: {
+          test: "old-value"
+        }
+      }, null, 2))
+
+      const result = runInTestDir('bash', injectTestDir, `inject_package_json_script 'test' 'new-value'`)
+      expect(result.code).toBe(0)
+
+      const pkg = JSON.parse(readFileSync(join(injectTestDir, 'package.json'), 'utf-8'))
+      expect(pkg.scripts.test).toBe('new-value')
+    })
+
+    it('should create scripts section if it does not exist', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), JSON.stringify({
+        name: "test-project",
+        dependencies: {}
+      }, null, 2))
+
+      const result = runInTestDir('bash', injectTestDir, `inject_package_json_script 'test' 'vitest'`)
+      expect(result.code).toBe(0)
+
+      const pkg = JSON.parse(readFileSync(join(injectTestDir, 'package.json'), 'utf-8'))
+      expect(pkg.scripts).toBeDefined()
+      expect(pkg.scripts.test).toBe('vitest')
+    })
+
+    it('should handle scripts with complex paths', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), JSON.stringify({
+        name: "test-project"
+      }, null, 2))
+
+      const result = runInTestDir('bash', injectTestDir,
+        `inject_package_json_script 'custom' 'node ./scripts/custom.js --arg'`)
+      expect(result.code).toBe(0)
+
+      const pkg = JSON.parse(readFileSync(join(injectTestDir, 'package.json'), 'utf-8'))
+      expect(pkg.scripts.custom).toBe('node ./scripts/custom.js --arg')
+    })
+
+    it('should handle scripts with special characters in name', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), JSON.stringify({
+        name: "test-project"
+      }, null, 2))
+
+      const result = runInTestDir('bash', injectTestDir,
+        `inject_package_json_script 'test:watch' 'vitest --watch'`)
+      expect(result.code).toBe(0)
+
+      const pkg = JSON.parse(readFileSync(join(injectTestDir, 'package.json'), 'utf-8'))
+      expect(pkg.scripts['test:watch']).toBe('vitest --watch')
+    })
+
+    it('should work from subdirectory when repo has package.json', () => {
+      initGitRepo(injectTestDir)
+      writeFileSync(join(injectTestDir, 'package.json'), JSON.stringify({
+        name: "test-project"
+      }, null, 2))
+
+      const subDir = join(injectTestDir, 'src', 'nested')
+      mkdirSync(subDir, { recursive: true })
+
+      const result = runInTestDir('bash', subDir, `inject_package_json_script 'test' 'vitest'`)
+      expect(result.code).toBe(0)
+
+      // Verify it was written to repo root package.json
+      const pkg = JSON.parse(readFileSync(join(injectTestDir, 'package.json'), 'utf-8'))
+      expect(pkg.scripts.test).toBe('vitest')
+    })
+
+    it('should return 1 when no package.json exists', () => {
+      const tmpNoPackage = `/tmp/inject-no-package-${Date.now()}`
+      mkdirSync(tmpNoPackage, { recursive: true })
+
+      try {
+        const result = runInTestDir('bash', tmpNoPackage, `inject_package_json_script 'test' 'vitest'`)
+        expect(result.code).toBe(1)
+      } finally {
+        rmSync(tmpNoPackage, { recursive: true, force: true })
+      }
+    })
+
+    it('should preserve existing package.json structure', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), JSON.stringify({
+        name: "test-project",
+        version: "1.0.0",
+        description: "A test project",
+        dependencies: {
+          lodash: "^4.17.21"
+        },
+        scripts: {
+          start: "node index.js"
+        }
+      }, null, 2))
+
+      const result = runInTestDir('bash', injectTestDir, `inject_package_json_script 'test' 'vitest'`)
+      expect(result.code).toBe(0)
+
+      const pkg = JSON.parse(readFileSync(join(injectTestDir, 'package.json'), 'utf-8'))
+      expect(pkg.name).toBe('test-project')
+      expect(pkg.version).toBe('1.0.0')
+      expect(pkg.description).toBe('A test project')
+      expect(pkg.dependencies.lodash).toBe('^4.17.21')
+      expect(pkg.scripts.start).toBe('node index.js')
+      expect(pkg.scripts.test).toBe('vitest')
+    })
+
+    it('should error when no script name provided', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), '{"name": "test"}')
+      const result = runInTestDir('bash', injectTestDir, `inject_package_json_script`)
+      expect(result.code).not.toBe(0)
+    })
+
+    it('should error when no script path provided', () => {
+      writeFileSync(join(injectTestDir, 'package.json'), '{"name": "test"}')
+      const result = runInTestDir('bash', injectTestDir, `inject_package_json_script 'test'`)
+      expect(result.code).not.toBe(0)
     })
   })
 })

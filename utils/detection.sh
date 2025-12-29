@@ -687,6 +687,95 @@ function in_package_json() {
     fi
 }
 
+# has_package_json_script <script_name>
+#
+# Checks if a script with the given name exists in the "scripts"
+# section of package.json in the current directory or repo root.
+# Returns 0 if found, 1 otherwise.
+function has_package_json_script() {
+    local -r script_name="${1:?script name is missing}"
+    local path="${PWD}"
+    local pkg_path=""
+
+    # Find package.json
+    if [[ -f "${path}/package.json" ]]; then
+        pkg_path="${path}/package.json"
+    elif is_git_repo "${path}"; then
+        local root
+        root="$(repo_root "${path}")"
+        if [[ -f "${root}/package.json" ]]; then
+            pkg_path="${root}/package.json"
+        fi
+    fi
+
+    # No package.json found
+    if [[ -z "${pkg_path}" ]]; then
+        return 1
+    fi
+
+    # Try jq first (most reliable)
+    if has_command "jq"; then
+        jq -e ".scripts.\"${script_name}\"" "${pkg_path}" >/dev/null 2>&1
+        return $?
+    fi
+
+    # Fallback to grep - look for script in scripts section
+    if grep -A 100 '"scripts"[[:space:]]*:' "${pkg_path}" 2>/dev/null | \
+       grep -q "\"${script_name}\"[[:space:]]*:"; then
+        return 0
+    fi
+
+    return 1
+}
+
+# inject_package_json_script <script_name> <script_path>
+#
+# Adds or updates a script in package.json's "scripts" section.
+# Creates the "scripts" section if it doesn't exist.
+# Returns 0 on success, 1 on failure.
+function inject_package_json_script() {
+    local -r script_name="${1:?script name is missing}"
+    local -r script_path="${2:?script path is missing}"
+    local path="${PWD}"
+    local pkg_path=""
+
+    # Find package.json
+    if [[ -f "${path}/package.json" ]]; then
+        pkg_path="${path}/package.json"
+    elif is_git_repo "${path}"; then
+        local root
+        root="$(repo_root "${path}")"
+        if [[ -f "${root}/package.json" ]]; then
+            pkg_path="${root}/package.json"
+        fi
+    fi
+
+    # No package.json found
+    if [[ -z "${pkg_path}" ]]; then
+        return 1
+    fi
+
+    # Require jq for reliable JSON manipulation
+    if ! has_command "jq"; then
+        return 1
+    fi
+
+    # Create temporary file
+    local tmp_file
+    tmp_file="$(mktemp)"
+
+    # Ensure .scripts exists and set the script value
+    # Using // {} creates an empty object if .scripts is null/missing
+    if jq ".scripts //= {} | .scripts.\"${script_name}\" = \"${script_path}\"" "${pkg_path}" > "${tmp_file}"; then
+        # Replace original file
+        mv "${tmp_file}" "${pkg_path}"
+        return 0
+    else
+        rm -f "${tmp_file}"
+        return 1
+    fi
+}
+
 # CLI invocation handler - allows running script directly with a function name
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Set up paths for sourcing dependencies

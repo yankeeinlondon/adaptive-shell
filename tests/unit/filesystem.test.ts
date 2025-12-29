@@ -205,4 +205,228 @@ describe('filesystem utilities', () => {
       expect(api).toFail()
     })
   })
+
+  describe('join()', () => {
+    it('should join two path segments with single slash', () => {
+      const api = sourceScript('./utils.sh')('join')('/usr', 'local')
+      expect(api).toReturn('/usr/local')
+    })
+
+    it('should handle trailing slash on first segment', () => {
+      const api = sourceScript('./utils.sh')('join')('/usr/', 'local')
+      expect(api).toReturn('/usr/local')
+    })
+
+    it('should handle leading slash on second segment', () => {
+      const api = sourceScript('./utils.sh')('join')('/usr', '/local')
+      expect(api).toReturn('/usr/local')
+    })
+
+    it('should handle both trailing and leading slashes', () => {
+      const api = sourceScript('./utils.sh')('join')('/usr/', '/local')
+      expect(api).toReturn('/usr/local')
+    })
+
+    it('should handle multiple trailing slashes', () => {
+      const api = sourceScript('./utils.sh')('join')('/usr///', 'local')
+      expect(api).toReturn('/usr/local')
+    })
+
+    it('should handle multiple leading slashes', () => {
+      const api = sourceScript('./utils.sh')('join')('/usr', '///local')
+      expect(api).toReturn('/usr/local')
+    })
+
+    it('should return second segment when first is empty', () => {
+      const api = sourceScript('./utils.sh')('join')('', 'local')
+      expect(api).toReturn('local')
+    })
+
+    it('should return first segment when second is empty', () => {
+      const api = sourceScript('./utils.sh')('join')('/usr', '')
+      expect(api).toReturn('/usr')
+    })
+
+    it('should return empty string when both segments are empty', () => {
+      const api = sourceScript('./utils.sh')('join')('', '')
+      expect(api).toReturn('')
+    })
+
+    it('should handle relative paths', () => {
+      const api = sourceScript('./utils.sh')('join')('foo', 'bar')
+      expect(api).toReturn('foo/bar')
+    })
+
+    it('should handle mixed absolute and relative paths', () => {
+      const api = sourceScript('./utils.sh')('join')('/absolute', 'relative')
+      expect(api).toReturn('/absolute/relative')
+    })
+  })
+
+  describe('absolute_path()', () => {
+    it('should return absolute path when already absolute and exists', () => {
+      writeFileSync(testFile, 'test')
+      const api = sourceScript('./utils.sh')('absolute_path')(testFile)
+      expect(api).toReturn(testFile)
+    })
+
+    it('should resolve relative path from PWD', () => {
+      const relPath = 'tests/.tmp-filesystem-test/test-file.txt'
+      writeFileSync(testFile, 'test')
+      const api = sourceScript('./utils.sh')('absolute_path')(relPath)
+      expect(api).toBeSuccessful()
+      // Account for symlink resolution (.config vs config)
+      expect(api.result.stdout).toContain('tests/.tmp-filesystem-test/test-file.txt')
+    })
+
+    it('should fail when absolute path does not exist', () => {
+      const nonExistent = '/non/existent/path.txt'
+      const api = sourceScript('./utils.sh')('absolute_path')(nonExistent)
+      expect(api).toFail()
+    })
+
+    it('should fail when relative path cannot be resolved', () => {
+      const api = sourceScript('./utils.sh')('absolute_path')('non/existent/file.txt')
+      expect(api).toFail()
+    })
+
+    it('should resolve path from repo_root when not in PWD', () => {
+      // package.json exists at repo root
+      const api = sourceScript('./utils.sh')('absolute_path')('package.json')
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toContain('package.json')
+    })
+
+    it('should fail when no path provided', () => {
+      const api = sourceScript('./utils.sh')('absolute_path')()
+      expect(api).toFail()
+    })
+
+    it('should handle directory paths', () => {
+      const api = sourceScript('./utils.sh')('absolute_path')(testDir)
+      expect(api).toReturn(testDir)
+    })
+  })
+
+  describe('relative_path()', () => {
+    it('should return relative path when already relative', () => {
+      writeFileSync(testFile, 'test')
+      const relPath = 'tests/.tmp-filesystem-test/test-file.txt'
+      const api = sourceScript('./utils.sh')('relative_path')(relPath)
+      expect(api).toReturn(relPath)
+    })
+
+    it('should convert absolute path to relative from PWD', () => {
+      writeFileSync(testFile, 'test')
+      const api = sourceScript('./utils.sh')('relative_path')(testFile)
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toContain('tests/.tmp-filesystem-test/test-file.txt')
+    })
+
+    it('should fail when path does not exist', () => {
+      const api = sourceScript('./utils.sh')('relative_path')('/non/existent/path.txt')
+      expect(api).toFail()
+    })
+
+    it('should fail when no path provided', () => {
+      const api = sourceScript('./utils.sh')('relative_path')()
+      expect(api).toFail()
+    })
+
+    it('should handle directory paths', () => {
+      const api = sourceScript('./utils.sh')('relative_path')(testDir)
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toContain('tests/.tmp-filesystem-test')
+    })
+
+    it('should handle paths that need resolution', () => {
+      writeFileSync(testFile, 'test')
+      const relPath = 'tests/.tmp-filesystem-test/test-file.txt'
+      const api = sourceScript('./utils.sh')('relative_path')(relPath)
+      expect(api).toReturn(relPath)
+    })
+  })
+
+  describe('get_file_path()', () => {
+    const subDir = join(testDir, 'sub1')
+    // Create a deep directory that puts the file at exactly depth 5 from repo root
+    // testDir is at depth 2 (./tests/.tmp-filesystem-test)
+    // Adding 2 more levels (a/b) puts file at depth 5: ./tests/.tmp-filesystem-test/a/b/deep.txt
+    const deepDir = join(testDir, 'a', 'b')
+    const fileInPwd = join(process.cwd(), 'example.txt')
+    const fileInSubDir = join(subDir, 'nested.txt')
+    const fileInDeepDir = join(deepDir, 'deep.txt')
+
+    afterEach(() => {
+      // Clean up any files created in CWD
+      if (existsSync(fileInPwd)) {
+        rmSync(fileInPwd, { force: true })
+      }
+    })
+
+    it('should find file in current working directory', () => {
+      writeFileSync(fileInPwd, 'test')
+      const api = sourceScript('./utils.sh')('get_file_path')('example.txt')
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toBe(fileInPwd)
+    })
+
+    it('should find file in repository root when not in PWD', () => {
+      // package.json exists at repo root
+      const api = sourceScript('./utils.sh')('get_file_path')('package.json')
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toContain('package.json')
+    })
+
+    it('should find file in subdirectory of PWD', () => {
+      mkdirSync(subDir, { recursive: true })
+      writeFileSync(fileInSubDir, 'nested content')
+      const api = sourceScript('./utils.sh')('get_file_path')('nested.txt')
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toBe(fileInSubDir)
+    })
+
+    it('should find file up to depth 5', () => {
+      mkdirSync(deepDir, { recursive: true })
+      writeFileSync(fileInDeepDir, 'deep content')
+      const api = sourceScript('./utils.sh')('get_file_path')('deep.txt')
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toBe(fileInDeepDir)
+    })
+
+    it('should fail when file not found', () => {
+      const api = sourceScript('./utils.sh')('get_file_path')('nonexistent.txt')
+      expect(api).toFail()
+      expect(api).toContainInStdErr('not found')
+    })
+
+    it('should fail when no filename provided', () => {
+      const api = sourceScript('./utils.sh')('get_file_path')()
+      expect(api).toFail()
+    })
+
+    it('should strip directory components from filename', () => {
+      writeFileSync(fileInPwd, 'test')
+      const api = sourceScript('./utils.sh')('get_file_path')('some/path/example.txt')
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toBe(fileInPwd)
+    })
+
+    it('should prioritize PWD over repo root when file exists in both', () => {
+      // Create file in PWD
+      writeFileSync(fileInPwd, 'in pwd')
+      const api = sourceScript('./utils.sh')('get_file_path')('example.txt')
+      expect(api).toBeSuccessful()
+      expect(api.result.stdout).toBe(fileInPwd)
+    })
+
+    it('should return first match when multiple files exist in subdirectories', () => {
+      mkdirSync(subDir, { recursive: true })
+      writeFileSync(fileInSubDir, 'nested')
+      const api = sourceScript('./utils.sh')('get_file_path')('nested.txt')
+      expect(api).toBeSuccessful()
+      // Should find the file (exact path may vary based on find order)
+      expect(api.result.stdout).toContain('nested.txt')
+    })
+  })
 })

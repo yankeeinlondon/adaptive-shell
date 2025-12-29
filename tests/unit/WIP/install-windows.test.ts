@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { sourceScript } from "../../helpers"
-import { execSync } from 'child_process'
+import { spawnSync } from 'child_process'
 
 /**
  * Helper to run install tests with mocks
@@ -47,22 +47,25 @@ echo "---EXIT_CODE---"
 echo "$exit_code"
 `
 
-  let output = ''
-  try {
-    output = execSync(fullScript, {
-      shell: 'bash',
-      encoding: 'utf-8',
-      cwd: process.cwd(),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ROOT: process.cwd()
-      }
-    })
-  } catch (error: any) {
-    output = error.stdout?.toString() || ''
-  }
+  // Use spawnSync for consistency with runInShell and proper WSL support
+  const result = spawnSync('bash', ['-c', fullScript], {
+    encoding: 'utf-8',
+    cwd: process.cwd(),
+    timeout: 30000,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      // Set CI=true to prevent terminal queries that hang on WSL
+      CI: 'true',
+      ROOT: process.cwd(),
+      // ADAPTIVE_SHELL is critical for path resolution in shell scripts
+      ADAPTIVE_SHELL: process.cwd(),
+      // Ensure ~/.local/bin is in PATH for user-installed tools on WSL
+      PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`
+    }
+  })
 
+  const output = (result.stdout || '').toString()
   const lines = output.trim().split('\n')
 
   const exitCodeIndex = lines.indexOf('---EXIT_CODE---')

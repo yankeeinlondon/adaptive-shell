@@ -196,6 +196,7 @@ function init_js() {
     source "${UTILS}/empty.sh"
     source "${UTILS}/install.sh"
     source "${UTILS}/lang-js.sh"
+    source "${UTILS}/filesystem.sh"
 
     logc "\nInitializing a {{BOLD}}{{BLUE}}JS{{RESET}}/{{BOLD}}{{BLUE}}TS{{RESET}} project"
     local -r dir="$(pwd)"
@@ -203,6 +204,11 @@ function init_js() {
     if ! [[ -f "./package.json" ]]; then
         cd "$(repo_root ".")" > /dev/null || error "problem finding root directory while trying initialize the JS/TS project" 1
         logc "{{DIM}}- moving temporarily to repo root"
+    fi
+
+    if ! has_package_json_script "rpe" && file_exists "./.claude/scripts/review-plan-execute.ts"; then
+        inject_script "rpe" "./.claude/scripts/review-plan-execute.ts"
+        logc "- added a {{BOLD}}{{BLUE}}rpe{{RESET}} script to the {{GREEN}}package.json{{RESET}} file to have Claude Code:\n\t- convert a review into a plan\n\t- execute the plan"
     fi
 
     if has_function "gitignore"; then
