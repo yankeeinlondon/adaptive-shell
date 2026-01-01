@@ -422,10 +422,11 @@ else
     function claude() {
         source "${UTILS}/logging.sh" || error "logging utilities not found!"
         source "${UTILS}/filesystem.sh" || error "discovery utilities not found!"
-        local -r prompt_filepath="${PWD}/docs/system-prompt.md"
+        local -r prompt_filepath_md="${PWD}/docs/system-prompt.md"
+        local -r prompt_filepath_xml="${PWD}/docs/system-prompt.md"
 
-        if file_exists "${prompt_filepath}"; then
-            local prompt="$(get_file "${prompt_filepath}")"
+        if file_exists "${prompt_filepath_md}"; then
+            local prompt="$(get_file "${prompt_filepath_md}")"
 
             (
                 clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with system prompt{{RESET}}-- exited."
@@ -433,7 +434,21 @@ else
             logc ""
             logc "{{BOLD}}System Prompt:{{RESET}}"
             if has_command "bat"; then
-                bat "${prompt_filepath}" --no-pager
+                bat "${prompt_filepath_md}" --no-pager
+            else
+                logc "${prompt}"
+            fi
+            logc ""
+        elif file_exists "${prompt_filepath_xml}"; then
+            local prompt="$(get_file "${prompt_filepath_xml}")"
+
+            (
+                clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with system prompt{{RESET}}-- exited."
+            ) || error "Problem starting Claude Code (with system prompt)."
+            logc ""
+            logc "{{BOLD}}System Prompt [{{DIM}}xml{{RESET}}{{BOLD}}]:{{RESET}}"
+            if has_command "bat"; then
+                bat "${prompt_filepath_xml}" --no-pager
             else
                 logc "${prompt}"
             fi
