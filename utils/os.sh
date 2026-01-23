@@ -25,7 +25,10 @@ function os() {
     # shellcheck source="./text.sh"
     source "${UTILS}/text.sh"
 
-    local -r os_type=$(lc "${OSTYPE}") || "$(lc "$(uname)")" || "unknown"
+    local os_type
+    os_type=$(lc "${OSTYPE:-}")
+    [[ -z "$os_type" ]] && os_type=$(lc "$(uname)")
+    [[ -z "$os_type" ]] && os_type="unknown"
     case "$os_type" in
         'linux'*)
            echo "linux"
@@ -564,6 +567,35 @@ function is_debian() {
         local lc_distro
         lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
         if [[ "${lc_distro}" == *"debian"* ]]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+function is_mint() {
+    if is_linux; then
+        local distro_name lc_distro
+        distro_name="$(distro)"
+        lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
+
+        # Prefer explicit "linux mint" match; otherwise match common identifiers.
+        if [[ "${lc_distro}" == *"linux mint"* ]] || [[ "${lc_distro}" == "mint" ]] || [[ "${lc_distro}" == linuxmint* ]]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+function is_opensuse() {
+    if is_linux; then
+        local distro_name
+        distro_name="$(distro)"
+        local lc_distro
+        lc_distro="$(echo "${distro_name}" | tr '[:upper:]' '[:lower:]')"
+
+        # Match openSUSE specifically (Leap/Tumbleweed) and common renderings.
+        if [[ "${lc_distro}" == *"opensuse"* ]] || [[ "${lc_distro}" == *"open suse"* ]] || [[ "${lc_distro}" == *"tumbleweed"* ]] || [[ "${lc_distro}" == *"leap"* ]]; then
             return 0
         fi
     fi

@@ -62,6 +62,14 @@ function is_pve_host() {
     fi
 }
 
+
+# is_root_user()
+#
+# Returns 0 if the current user is root (UID 0), 1 otherwise.
+function is_root_user() {
+    [ "$(id -u)" -eq 0 ]
+}
+
 # is_pve_container
 #
 # Test whether current host is an LXC container or KVM VM
@@ -72,6 +80,7 @@ function is_pve_host() {
 # Proxmox/KVM virtualization rather than any hypervisor (which would
 # match Azure, VMware, Hyper-V, etc.)
 function is_pve_container() {
+    source "${UTILS}/pve.sh"
     # Must be running in an LXC container or KVM VM (Proxmox-specific)
     if ! is_lxc && ! is_kvm_vm; then
         return 1
