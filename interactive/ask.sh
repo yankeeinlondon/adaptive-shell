@@ -220,7 +220,7 @@ function ask_inputbox() {
     if [[ "$tool" == "dialog" ]]; then 
         cmd=$(eval "dialog ${params[*]} || echo ${CANCELLED}")
     elif [[ "$tool" == "whiptail" ]]; then
-        cmd=$(whiptail "${params[*]}") || "${CANCELLED}"
+        cmd=$(eval "whiptail ${params[*]} || echo ${CANCELLED}")
     else
         error "can't ask for password as no TUI is available [${tool}]"
         exit 1

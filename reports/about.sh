@@ -5,16 +5,13 @@ if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     if [[ "${REPORTS}" == *"/utils" ]];then
         ROOT="${REPORTS%"/utils"}"
         UTILS="${ROOT}/utils"
-        PROGRAMS="${ROOT}/programs"
     else
         ROOT="${REPORTS}/.."
         UTILS="${ROOT}/utils"
-        PROGRAMS="${ROOT}/programs"
     fi
 else
     ROOT="${ADAPTIVE_SHELL}"
     REPORTS="${ROOT}/reports"
-    PROGRAMS="${ROOT}/programs"
     UTILS="${ROOT}/utils"
 fi
 
@@ -40,7 +37,7 @@ function report_about() {
 
     DEFAULT_DESC="${DIM}This system uses the ${ITALIC}adaptive shell{{RESET}}${DIM} bootstrap which provides functions, aliases, and installers based on the detected environment.{{RESET}}"
 
-    CUSTOM_DESC="$(colorize "${MACHINE_DESC}")"
+    CUSTOM_DESC="$(colorize "${MACHINE_DESCi:-"${DESC}"}")"
 
     DESC="$(newline_on_word_boundary "${CUSTOM_DESC:-${DEFAULT_DESC}}")"
 
