@@ -368,6 +368,7 @@ function main() {
                 if is_debian || is_ubuntu; then
                     install_nala || error "Failed to install Nala!" 1
                 fi
+                configure_ssh_keys
                 install_git
                 install_openssh
                 install_gpg
@@ -388,7 +389,7 @@ function main() {
                 configure_git
                 ;;
             macos)
-
+                configure_ssh_keys
                 install_git
                 configure_git
                 install_openssh

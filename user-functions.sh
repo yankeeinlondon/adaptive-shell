@@ -266,6 +266,132 @@ function track() {
     bash "${file}" "${params[@]}"
 }
 
+if has_command "ffmpeg"; then
+
+    # Convert one-or-more files (or globs) to ProRes 422 .mov for Final Cut Pro.
+    # Usage:
+    #   to_prores input.mp4
+    #   to_prores *.mp4
+    #   to_prores "/path/with spaces/*.mp4"
+    #   to_prores --hq *.mp4
+    #   to_prores --lt *.mp4
+    #   to_prores --dry-run *.mp4
+    to_prores() {
+        local profile=3              # 1=LT, 3=422, 4=422HQ
+        local suffix="_prores422"
+        local timescale=30000        # 0 disables
+        local overwrite=0
+        local dry_run=0
+        local input_dir=""
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+            --lt) profile=1; suffix="_proresLT"; shift ;;
+            --422) profile=3; suffix="_prores422"; shift ;;
+            --hq) profile=4; suffix="_prores422HQ"; shift ;;
+            --timescale=*) timescale="${1#*=}"; shift ;;
+            --no-timescale) timescale=0; shift ;;
+            --in) input_dir="$2"; shift 2 ;;
+            -y|--overwrite) overwrite=1; shift ;;
+            -n|--dry-run) dry_run=1; shift ;;
+            -h|--help)
+                cat <<'EOF'
+to_prores [options] <file-or-glob>...
+
+Works in both bash and zsh.
+
+Important:
+- To use shell globs, do NOT quote them:
+    to_prores *.mp4
+- If you need quoting, use --in DIR to discover files:
+    to_prores --in .   (converts *.mp4 in current dir)
+
+Options:
+--lt            ProRes LT
+--422           ProRes 422 (default)
+--hq            ProRes 422 HQ
+--timescale=N   Set video track timescale (default 30000)
+--no-timescale  Disable timescale adjustment
+--in DIR        Convert all *.mp4 in DIR (portable alternative to quoted globs)
+-y, --overwrite Overwrite existing outputs
+-n, --dry-run   Print ffmpeg commands without running
+-h, --help      Show this help
+EOF
+                return 0
+                ;;
+            --) shift; break ;;
+            -*) echo "to_prores: unknown option: $1" >&2; return 2 ;;
+            *) break ;;
+            esac
+        done
+
+        command -v ffmpeg >/dev/null 2>&1 || { echo "to_prores: ffmpeg not found in PATH" >&2; return 127; }
+
+        local -a files=()
+
+        if [[ -n "$input_dir" ]]; then
+            [[ -d "$input_dir" ]] || { echo "to_prores: --in expects a directory: $input_dir" >&2; return 2; }
+            # Portable file discovery (no eval; works in bash+zsh)
+            while IFS= read -r -d '' f; do
+            files+=("$f")
+            done < <(find "$input_dir" -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.m4v' \) -print0)
+        else
+            [[ $# -ge 1 ]] || { echo "to_prores: provide at least one file (or use --in DIR)" >&2; return 2; }
+            # In both bash and zsh, unquoted globs will already be expanded by the shell.
+            # Quoted patterns will arrive literally and (correctly) be treated as literal filenames.
+            files=( "$@" )
+        fi
+
+        local f base out ret=0 count=0
+        local -a cmd
+
+        for f in "${files[@]}"; do
+            [[ -e "$f" ]] || { echo "to_prores: skipping (not found): $f" >&2; ret=1; continue; }
+            [[ -d "$f" ]] && { echo "to_prores: skipping (directory): $f" >&2; ret=1; continue; }
+
+            base="${f%.*}"
+            out="${base}${suffix}.mov"
+
+            if [[ -e "$out" && $overwrite -ne 1 ]]; then
+            echo "to_prores: output exists (use -y to overwrite): $out" >&2
+            ret=1
+            continue
+            fi
+
+            cmd=( ffmpeg )
+            (( overwrite )) && cmd+=( -y )
+            cmd+=(
+            -err_detect ignore_err
+            -fflags +genpts
+            -i "$f"
+            -map 0:v:0
+            -map '0:a?'              # quoted => safe in zsh AND bash
+            -c:v prores_ks
+            -profile:v "$profile"
+            -pix_fmt yuv422p10le
+            -vendor apl0
+            -movflags +faststart
+            )
+            [[ "$timescale" != "0" ]] && cmd+=( -video_track_timescale "$timescale" )
+            cmd+=( "$out" )
+
+            ((count++))
+            if (( dry_run )); then
+            printf 'DRY RUN [%d]: ' "$count"
+            printf '%q ' "${cmd[@]}"
+            printf '\n'
+            else
+            echo "[$count] $f -> $out"
+            # Extra safety in zsh: prevent any further glob expansion
+            noglob "${cmd[@]}" 2>/dev/null || "${cmd[@]}" || ret=$?
+            fi
+        done
+
+        return "$ret"
+        }
+
+fi
+
 
 # about()
 #
@@ -351,44 +477,22 @@ if ! has_command "cargo"; then
     }
 fi
 
-if ! has_command "make"; then
-    function make() {
-        logc "The {{BOLD}}{{BLUE}}make{{RESET}} utility is not installed on this system."
-        # shellcheck source="./utils/interactive.sh"
+
+if ! has_command "starship"; then
+
+    function starship() {
+        source "${UTILS}/logging.sh"
         source "${UTILS}/interactive.sh"
-        if confirm "Install make and other build tools now?"; then
-            # shellcheck source="./utils/install.sh"
-            source "${UTILS}/install.sh"
-            install_build_tools && ( unset -f make && unset -f cmake && unset -f gcc)
+        source "${UTILS}/install.sh"
+
+        logc "The {{BOLD}}{{GREEN}}starship{{RESET}} program for managing your prompt is not\ninstalled on this host.\n\n"
+        if confirm "Install now?"; then
+            install_starship && ( unset -f starship )
         fi
     }
+
 fi
 
-if ! has_command "cmake"; then
-    function cmake() {
-        logc "The {{BOLD}}{{BLUE}}cmake{{RESET}} utility is not installed on this system."
-        # shellcheck source="./utils/interactive.sh"
-        source "${UTILS}/interactive.sh"
-        if confirm "Install cmake and other build tools now?"; then
-            # shellcheck source="./utils/install.sh"
-            source "${UTILS}/install.sh"
-            install_build_tools && ( unset -f cmake && unset -f make && unset -f gcc)
-        fi
-    }
-fi
-
-if ! has_command "gcc"; then
-    function gcc() {
-        logc "The {{BOLD}}{{BLUE}}gcc{{RESET}} utility is not installed on this system."
-        # shellcheck source="./utils/interactive.sh"
-        source "${UTILS}/interactive.sh"
-        if confirm "Install gcc and other build tools now?"; then
-            # shellcheck source="./utils/install.sh"
-            source "${UTILS}/install.sh"
-            install_build_tools && ( unset -f cmake && unset -f make && unset -f gcc )
-        fi
-    }
-fi
 
 if ! has_command "claude"; then
     function claude() {
@@ -407,6 +511,13 @@ if ! has_command "claude"; then
         fi
     }
 
+    if ! has_command "cc"; then
+        function cc() {
+            logc "⚠️ the {{BOLD}}{{RED}}cc{{RESET}} alias was used but Claude Code is not installed\n"
+            claude
+        }
+    fi
+
 else
     source "${UTILS}/detection.sh" || error "discovery utilities not found!"
     if is_zsh; then
@@ -419,18 +530,34 @@ else
     # Claude is installed so wrap executable with
     # function which clears the screen before entering
     # shellcheck disable=SC2155
-    function claude() {
+    function cc() {
         source "${UTILS}/logging.sh" || error "logging utilities not found!"
         source "${UTILS}/filesystem.sh" || error "discovery utilities not found!"
         local -r prompt_filepath_md="${PWD}/docs/system-prompt.md"
-        local -r prompt_filepath_xml="${PWD}/docs/system-prompt.md"
+        local -r prompt_filepath_xml="${PWD}/docs/system-prompt.xml"
 
         if file_exists "${prompt_filepath_md}"; then
             local prompt="$(get_file "${prompt_filepath_md}")"
 
-            (
-                clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with system prompt{{RESET}}-- exited."
-            ) || error "Problem starting Claude Code (with system prompt)."
+            if [[ "$1" == "--version" ]];then
+                "${CLAUDE_CLI}" --version
+                return
+            fi
+
+            if [[ "$1" == "--help" ]];then
+                "${CLAUDE_CLI}" --help
+                return
+            fi
+
+            if has_cli_switch "--dangerously-skip-permissions"; then
+                (
+                    clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with system prompt{{RESET}}-- exited."
+                ) || error "Problem starting Claude Code (with system prompt)."
+            else
+                (
+                    clear && "${CLAUDE_CLI}" --dangerously-skip-permissions "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with system prompt{{RESET}}-- exited."
+                ) || error "Problem starting Claude Code (with system prompt)."
+            fi
             logc ""
             logc "{{BOLD}}System Prompt:{{RESET}}"
             if has_command "bat"; then
@@ -442,21 +569,42 @@ else
         elif file_exists "${prompt_filepath_xml}"; then
             local prompt="$(get_file "${prompt_filepath_xml}")"
 
-            (
-                clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with system prompt{{RESET}}-- exited."
-            ) || error "Problem starting Claude Code (with system prompt)."
+            if [[ "$1" == "--version" ]];then
+                "${CLAUDE_CLI}" --version
+                return
+            fi
+
+            if [[ "$1" == "--help" ]];then
+                "${CLAUDE_CLI}" --help
+                return
+            fi
+
+            if has_cli_switch "--dangerously-skip-permissions"; then
+                (
+                    clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with XML system prompt{{RESET}}-- exited."
+                ) || error "Problem starting Claude Code (with system prompt)."
+            else
+                (
+                    clear && "${CLAUDE_CLI}" --dangerously-skip-permissions "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session -- {{ITALIC}}with XML system prompt{{RESET}}-- exited."
+                ) || error "Problem starting Claude Code (with system prompt)."
+            fi
             logc ""
             logc "{{BOLD}}System Prompt [{{DIM}}xml{{RESET}}{{BOLD}}]:{{RESET}}"
             if has_command "bat"; then
                 bat "${prompt_filepath_xml}" --no-pager
+                logc ""
+                "${CLAUDE_CLI}" --version
             else
                 logc "${prompt}"
+                logc ""
+                "${CLAUDE_CLI}" --version
             fi
             logc ""
         else
-            clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session exited {{ITALIC}}{{DIM}}no system prompt{{RESET}})."
+            clear && "${CLAUDE_CLI}" "${@}" && clear && logc "\n- {{BLUE}}{{BOLD}}Claude{{RESET}} session exited ({{ITALIC}}{{DIM}}no system prompt{{RESET}})."
         fi
 
 
     }
+
 fi

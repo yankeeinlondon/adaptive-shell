@@ -204,6 +204,163 @@ function install_on_macos() {
     return 1
 }
 
+function install_ninja_build {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
+
+
+    if has_command "ninja"; then
+        logc "- the {{BLUE}}ninja{{RESET}} build tool is already installed on this host"
+
+        return 0
+    fi
+
+    if is_debian; then
+        apt install -y ninja-build || error "failed to install the ninja build tool"
+
+        logc "- installed the {{BOLD}}{{BLUE}}ninja{{RESET}} build tool on Debian"
+
+        return 0
+    fi
+
+    if is_nixos; then
+        logc "nixos package for the ninja build tool is 'ninja'"
+
+        return 0
+    fi
+
+    if has_command "brew"; then
+        brew install ninja || error "Failed to install ninja with Homebrew"
+        logc "- installed the {{BLUE}}ninja{{RESET}} build tool via {{BOLD}}homebrew{{RESET}}"
+
+        return 0
+    fi
+
+
+    logc "- automated installs of the ninja build tool on your OS/distro is not yet supported"
+
+    return 1
+}
+
+# install_build_tools
+#
+# Installs essential build tools (compilers, make, cmake) on the current system.
+# Uses OS-appropriate meta-packages where available for comprehensive coverage.
+function install_build_tools {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
+    local SUDO
+    if is_root_user; then
+        SUDO="sudo"
+    else
+        SUDO=""
+    fi
+
+    if is_debian; then
+        "${SUDO}" apt install -y build-essential make cmake ninja-build pkgconf unzip xz-utils zip file gettext openssl || error "failed to install base build tools ccache"
+    elif is_ubuntu; then
+        sudo apt install -y "build-essential make cmake ninja-build pkgconf unzip xz-utils zip file gettext openssl ccache" || error "failed to install base build tools"
+    elif is_mint; then
+        "${SUDO}" apt install -y "build-essential make cmake ninja-build pkgconf unzip xz-utils zip file gettext openssl ccache" || error "failed to install base build tools"
+    elif is_alpine; then
+        "${SUDO}" apk add --no-cache "build-base ca-certificates pkgconf unzip zip xz file gettext openssl-dev" || error "failed to install base build tools"
+    elif is_opensuse; then
+        "${SUDO}" zypper install "-y pattern devel_basis gcc gcc-c++ make cmake ninja pkg-config ca-certificates unzip zip xz file gettext-tools libopenssl-devel" || error "failed to install base build tools"
+    elif is_fedora; then
+        sudo dnf install -y @development-tools || error "failed to install base build tools"
+        sudo dnf install -y \
+        gcc gcc-c++ make \
+        cmake ninja-build pkgconf-pkg-config \
+        git curl wget ca-certificates \
+        python3 python3-pip \
+        unzip zip xz \
+        file gettext \
+        openssl-devel autoconf automake libtool meson gcb strace || error "failed to install base build tools"
+
+    elif is_arch; then
+        "${SUDO}" pacman -Syu --needed \
+            base-devel \
+            git curl wget ca-certificates \
+            cmake ninja \
+            pkgconf \
+            python python-pip \
+            unzip zip xz \
+            file gettext \
+            openssl || error "failed to install base build tools"
+    elif is_mac; then
+        if has_command "brew"; then
+            brew install -y autoconf automake libtool meson openssl ninja ca-certificates pkg-config coreutils gnu-sed gnu-tar unzip zip || error "failed to install base build tools"
+        elif has_command "port"; then
+            port install "-N ca-certificates cmake ninja pkgconfig gmake unzip zip xz gettext openssl"
+        else
+            error "can not install the build tools on macOS when neither Homebrew or MacPorts are installed!"
+        fi
+    elif is_windows; then
+        winget install -e --id Microsoft.VisualStudio.2022.BuildTools || error "failed to install base build tools"
+        winget install -e --id Kitware.CMake || error "failed to install base build tools"
+        winget install -e --id Ninja-build.Ninja || error "failed to install base build tools"
+        winget install -e --id Git.Git || error "failed to install base build tools"
+    fi
+
+
+
+}
+
+
+function compile_neovim() {
+    local -r release="v0.11.5"
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/detection.sh"
+    source "${UTILS}/filesystem.sh"
+
+    if ! has_command "git"; then
+        logc "{{RED}}{{BOLD}}Warn:{{RESET}} this system does not have 'git' installed so the compile option"
+        logc "for {{GREEN}}neovim{{RESET}} is not available!"
+
+        return 1
+    fi
+
+    logc "- Cloning repo to {{BLUE}}~/neovim{{RESET}}"
+
+    if dir_exists "${HOME}/neovim"; then
+        if file_exists "${HOME}/neovim/Makefile" && dir_exists "${HOME}/neovim/.git"; then
+            logc "- it appears that neovim has already be cloned in {{BLUE}}~/neovim{{RESET}}"
+            cd "${HOME}/neovim" >/dev/null || error "unable to move into neovim source directory"
+            git pull >/dev/null || error "unable to pull latest version of Neovim repo"
+            cd - >/dev/null || error "unable to change back to prior directory"
+        fi
+    else
+        git clone https://github.com/neovim/neovim "${HOME}/neovim" || error "failed to clone neovim"
+    fi
+
+    if dir_exists "${HOME}/neovim"; then
+
+        cd "${HOME}/neovim" || error "Failed to move into just cloned neovim directory"
+
+        logc "- insuring build tools are in place"
+
+        if install_build_tools; then
+            git checkout "${release}" || error "failed to checkout release ${release} of Neovim"
+            logc "- Building Neovim ..."
+            make CMAKE_BUILD_TYPE=Release >/dev/null || error "failed to build the Neovim source code (using ninja)"
+            make install >/dev/null || error "Failed to install the neovim build!"
+
+            logc "- {{BOLD}}Neovim{{RESET}} has been built and the executable {{BLUE}}{{BOLD}}nvim{{RESET}} should be in the path!\n"
+
+            if has_file "${HOME}/.config/nvim/restore_plugins.sh"; then
+                bash -e "${HOME}/.config/nvim/restore_plugins.sh" || error "problems syncing the neovim plugins to the correct version"
+            fi
+
+            return 0
+        else
+            error "unable to install ninja build tool, cannot compile neovim" 1
+            return 1
+        fi
+    else
+        error "Unable to build neovim"
+    fi
+}
+
 # install_on_debian [--prefer-nix] [--prefer-cargo] [--prefer-snap] <pkg> [<pkg2>] [<pkg3>] ...
 #
 # Attempts to install a named package on Debian/Ubuntu. Accepts multiple package name
@@ -214,6 +371,9 @@ function install_on_debian() {
     local prefer_cargo=false
     local prefer_snap=false
     local pkg_names=()
+
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/interactive.sh"
 
     # Parse flags from arguments
     while [[ $# -gt 0 ]]; do
@@ -240,6 +400,26 @@ function install_on_debian() {
     if [[ ${#pkg_names[@]} -eq 0 ]]; then
         logc "{{RED}}ERROR{{RESET}}: no package provided to install_on_debian()!"
         return 1
+    fi
+
+    # Check if any package is "neovim" - offer compile option only for neovim
+    local is_neovim=false
+    for pkg in "${pkg_names[@]}"; do
+        if [[ "$pkg" == "neovim" ]]; then
+            is_neovim=true
+            break
+        fi
+    done
+
+    if [[ "$is_neovim" == true ]]; then
+        logc "The Debian distro (even version 13) has an old'ish versions of Neovim (pre 0.11)."
+        logc "Do you want to {{ITALIC}}compile{{RESET}} to get the latest version instead of installing from a"
+        logc "package manager.\n"
+
+        if confirm "Compile instead of install?"; then
+            compile_neovim
+            return $?
+        fi
     fi
 
     # Try cargo first if preferred
@@ -1104,58 +1284,7 @@ function install_bat() {
     fi
 }
 
-# install_build_tools
-#
-# Installs essential build tools (compilers, make, cmake) on the current system.
-# Uses OS-appropriate meta-packages where available for comprehensive coverage.
-function install_build_tools() {
-    if has_command "make"; then
-        logc "- {{BOLD}}{{BLUE}}Build Tools{{RESET}} are already installed"
-        return 0
-    fi
 
-    logc "- installing {{BOLD}}{{BLUE}}Build Tools{{RESET}}"
-
-    if is_mac; then
-        # xcode-select provides clang, make, git, and other dev tools
-        if ! xcode-select -p &>/dev/null; then
-            logc "- installing {{BOLD}}Xcode Command Line Tools{{RESET}}..."
-            xcode-select --install
-            # Wait for installation to complete (user interaction required)
-            logc "- {{DIM}}please complete the Xcode tools installation dialog{{RESET}}"
-        fi
-        # Additional build tools via Homebrew
-        install_on_macos "cmake"
-        install_just
-    elif is_debian || is_ubuntu; then
-        # build-essential includes gcc, g++, make, libc-dev
-        install_on_debian "build-essential"
-        install_on_debian "cmake"
-        install_on_debian "ninja-build"
-        install_just
-    elif is_alpine; then
-        # alpine-sdk is a meta-package with build essentials
-        install_on_alpine "alpine-sdk"
-        install_on_alpine "cmake"
-        install_just
-    elif is_fedora; then
-        # Individual packages for Fedora/RHEL
-        install_on_fedora "make"
-        install_on_fedora "cmake"
-        install_on_fedora "gcc"
-        install_on_fedora "gcc-c++"
-        install_just
-    elif is_arch; then
-        # base-devel is a meta-package with build essentials
-        install_on_arch "base-devel"
-        install_on_arch "cmake"
-        install_on_arch "ninja"
-        install_just
-    else
-        logc "{{RED}}ERROR:{{RESET}} Unable to automate the install of {{BOLD}}{{BLUE}}Build Tools{{RESET}} on this system"
-        return 1
-    fi
-}
 
 function install_delta() {
     if has_command "delta"; then

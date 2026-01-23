@@ -31,7 +31,7 @@ function configure_git() {
     local -r email=$(strip_trailing "$(git config --global user.email)" "\n")
     local -r signingkey=$(strip_trailing "$(git config --global user.signingkey)" "\n")
 
-    git config set --global advice.addIgnoredFile false
+    git config set --global advice.addIgnoredFile false 2>/dev/null || true
 
     if not_empty "${name}" || not_empty "${email}" || not_empty "${signingkey}"; then
         logc "- {{BOLD}}{{BLUE}}git{{RESET}}{{BOLD}} is configured:"
@@ -54,7 +54,45 @@ function configure_git() {
 
 
 function configure_ssh_keys() {
-    :
+    source "${UTILS}/filesystem.sh"
+    source "${UTILS}/interactive.sh"
+
+    local -r ssh_dir="${HOME}/.ssh"
+    local has_keypair=false
+
+    # Check for common SSH keypair types
+    if file_exists "${ssh_dir}/id_ed25519" || file_exists "${ssh_dir}/id_rsa" || file_exists "${ssh_dir}/id_ecdsa"; then
+        has_keypair=true
+    fi
+
+    if [[ "${has_keypair}" == true ]]; then
+        logc "- an {{BOLD}}{{BLUE}}SSH keypair{{RESET}} already exists on this host:"
+        if file_exists "${ssh_dir}/id_ed25519"; then
+            logc "    - {{YELLOW}}${ssh_dir}/id_ed25519{{RESET}}"
+        fi
+        if file_exists "${ssh_dir}/id_rsa"; then
+            logc "    - {{YELLOW}}${ssh_dir}/id_rsa{{RESET}}"
+        fi
+        if file_exists "${ssh_dir}/id_ecdsa"; then
+            logc "    - {{YELLOW}}${ssh_dir}/id_ecdsa{{RESET}}"
+        fi
+        return 0
+    fi
+
+    logc "- no {{BOLD}}{{BLUE}}SSH keypair{{RESET}} found on this host"
+    if confirm "Create a new SSH keypair?"; then
+        # Ensure .ssh directory exists with correct permissions
+        if [[ ! -d "${ssh_dir}" ]]; then
+            mkdir -p "${ssh_dir}"
+            chmod 700 "${ssh_dir}"
+        fi
+
+        logc "- generating {{BOLD}}ed25519{{RESET}} keypair..."
+        ssh-keygen -t ed25519 -f "${ssh_dir}/id_ed25519" || return 1
+        logc "- {{BOLD}}{{GREEN}}SSH keypair created{{RESET}}"
+    else
+        logc "- skipping SSH keypair creation"
+    fi
 }
 
 # CLI invocation handler - allows running script directly with a function name
