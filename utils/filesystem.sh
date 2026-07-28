@@ -29,6 +29,25 @@ function file_exists() {
     fi
 }
 
+# file_contains <filepath> <str>
+#
+# Checks if the file at <filepath> contains the string <str>.
+# Returns 0 if found, 1 if not found or file doesn't exist.
+function file_contains() {
+    local filepath="${1:?filepath is missing in call to file_contains!}"
+    local str="${2:?string is missing in call to file_contains!}"
+
+    if ! file_exists "${filepath}"; then
+        return 1
+    fi
+
+    if grep -q "${str}" "${filepath}"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # dir_exists <filepath>
 #
 # tests whether a given directory path exists in the filesystem
