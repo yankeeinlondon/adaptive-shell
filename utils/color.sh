@@ -1014,6 +1014,7 @@ colorize() {
 
         if [ -n "${ZSH_VERSION:-}" ]; then
             if (( ${+parameters[$tag]} )); then
+                # shellcheck disable=SC2296
                 result+="${(P)tag}"
             else
                 result+="{{${tag}}}"
