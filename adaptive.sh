@@ -23,7 +23,7 @@ __adaptive_resolve_root() {
 }
 
 ADAPTIVE_SHELL="$(__adaptive_resolve_root)"
-export ADAPTIVE_SHELL;
+export ADAPTIVE_SHELL
 unset -f __adaptive_resolve_root
 
 ROOT="${ADAPTIVE_SHELL}"
@@ -33,21 +33,116 @@ REPORTS="${ROOT}/reports"
 CONFIG_LOCATION="${HOME}/.config/sh"
 COMPLETIONS="${HOME}/.completions"
 
-
-function completions() {
-    # Skip completion setup in non-interactive shells
-    if [[ "$-" == *i* ]]; then
-
-    :
-
+# ensure_autoload
+#
+# Ensures that autoload -Uz compinit && compinit is properly configured
+# in ~/.zshrc for zsh shells. Removes all existing autoload -Uz lines
+# and adds a single consolidated line at the end.
+function ensure_autoload() {
+    # Only proceed if running in zsh
+    if ! is_zsh; then
+        return 0
     fi
+
+    local zshrc="${HOME}/.zshrc"
+
+    # Remove all lines containing 'autoload -Uz' from .zshrc
+    if file_exists "${zshrc}"; then
+        # Create a temporary file
+        local tmpfile
+        tmpfile=$(mktemp)
+
+        # Filter out lines with autoload -Uz
+        grep -v "autoload -Uz" "${zshrc}" >"${tmpfile}" 2>/dev/null || true
+
+        # Replace the original file
+        mv "${tmpfile}" "${zshrc}"
+    fi
+
+    # Add the autoload line at the end
+    echo "autoload -Uz compinit && compinit" >>"${zshrc}"
 }
 
-function setup_env() {
-    :
+# add_to_fpath <path>
+#
+# Adds the given path to the fpath in ~/.zshrc if not already present.
+# Only operates in zsh shells.
+function add_to_fpath() {
+    local -r path="${1:?path is missing in call to add_to_fpath!}"
+
+    # Only proceed if running in zsh
+    if ! is_zsh; then
+        return 0
+    fi
+
+    local zshrc="${HOME}/.zshrc"
+
+    # Check if path is already in fpath in .zshrc
+    if file_exists "${zshrc}"; then
+        if grep -q "fpath.*${path}" "${zshrc}" 2>/dev/null; then
+            # Path already present
+            return 0
+        fi
+    fi
+
+    # Add the path to fpath
+    echo "fpath+=( \"${path}\" )" >>"${zshrc}"
 }
 
+# offer_starship_install
+#
+# Offers -- at most once per host -- to install the starship prompt.
+#
+# Declining writes a marker file so later shells stay silent; delete it
+# (or run `install_starship`) to revisit the decision.
+function offer_starship_install() {
+    local -r marker="${HOME}/.adaptive-no-starship"
 
+    if has_command "starship"; then
+        return 0
+    fi
+
+    # Only ever prompt from an interactive shell with a terminal
+    # attached. A prompt raised during a non-interactive startup (an
+    # editor capturing the environment, scp, cron) blocks forever with
+    # nothing on screen explaining why.
+    case "$-" in
+        *i*) ;;
+        *) return 0 ;;
+    esac
+    if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
+        return 0
+    fi
+    if file_exists "${marker}"; then
+        return 0
+    fi
+
+    # shellcheck source="./utils/interactive.sh"
+    source "${UTILS}/interactive.sh"
+
+    log ""
+    logc "{{BOLD}}{{GREEN}}starship{{RESET}} -- the prompt this config expects -- is not installed on this host."
+
+    if ! confirm "Install it now?"; then
+        : > "${marker}"
+        logc "{{DIM}}- ok, not asking again{{RESET}}"
+        logc "{{DIM}}- run {{BOLD}}{{BLUE}}install_starship{{RESET}}{{DIM}} whenever you change your mind{{RESET}}"
+        return 0
+    fi
+
+    # shellcheck source="./utils/install.sh"
+    source "${UTILS}/install.sh"
+
+    if ! install_starship; then
+        logc "{{DIM}}- run {{BOLD}}{{BLUE}}install_starship{{RESET}}{{DIM}} to try again{{RESET}}"
+        return 1
+    fi
+
+    # user-functions.sh defines a `starship` wrapper when the binary is
+    # missing, and functions shadow executables -- drop it or the real
+    # starship stays unreachable for the rest of this shell.
+    unset -f starship 2> /dev/null || true
+}
 
 function adaptive_setup() {
 
@@ -66,10 +161,9 @@ function adaptive_setup() {
     # shellcheck source="./reports/aliases.sh"
     source "${REPORTS}/aliases.sh"
 
-
     # Set up aliases and PATH variables
     set_aliases
-    append_to_path  # Add detected paths (e.g., ~/.local/bin, ~/.cargo/bin) to PATH
+    append_to_path # Add detected paths (e.g., ~/.local/bin, ~/.cargo/bin) to PATH
 
     if is_zsh; then
         emulate zsh -R
@@ -93,7 +187,7 @@ function adaptive_setup() {
         fi
     fi
 
-    if type uv &>/dev/null; then
+    if has_command "uv"; then
         if is_fish; then
             uv generate-shell-completion fish
         else
@@ -109,12 +203,12 @@ function adaptive_setup() {
     if has_command "pyenv"; then
         add_to_rc "PYENV_ROOT=${HOME}/.pyenv"
         if dir_exists "${HOME}/.pyenv/bin"; then
-            add_to_path "${HOME}/.pyenv/bin"
+            append_to_path
         fi
         if ! file_exists "${COMPLETIONS}/_pyenv"; then
             echo "- adding $(get_shell) completions for pyenv to ${BLUE}${COMPLETIONS}${RESET} directory"
             echo ""
-            pyenv init - "$(get_shell)" >> "${COMPLETIONS}/_pyenv"
+            pyenv init - "$(get_shell)" >>"${COMPLETIONS}/_pyenv"
         fi
         # if file_exists "${COMPLETIONS}/_pyenv.zsh"; then
         #     if if_zsh; then
@@ -143,11 +237,11 @@ function adaptive_setup() {
     if has_command "brew"; then
         HOMEBREW_PREFIX=$(brew --prefix)
         if is_zsh; then
-            fpath+=( "$HOMEBREW_PREFIX/share/zsh/site-functions" )
+            fpath+=("$HOMEBREW_PREFIX/share/zsh/site-functions")
         elif is_bash; then
             if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]; then
-                    # shellcheck disable=SC1091
-                    source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
+                # shellcheck disable=SC1091
+                source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
             else
                 for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*; do
                     # shellcheck disable=SC1090
@@ -176,7 +270,7 @@ function adaptive_setup() {
         fi
         unsetopt beep
 
-        fpath+=( "${HOME}/.completions" )
+        fpath+=("${HOME}/.completions")
         autoload -Uz compinit && compinit
         autoload -U add-zsh-hook
     fi
@@ -241,7 +335,6 @@ function adaptive_setup() {
         set +a
     fi
 
-
     if has_command "gpg"; then
         TTY="$(tty)"
         export GPG_TTY="$TTY"
@@ -252,9 +345,213 @@ function adaptive_setup() {
         export LC_ALL="C.UTF-8"
     fi
 
+    # Completion loading below spawns each CLI via `source <(...)`. In a
+    # TTY-less shell (e.g. Zed/IDE environment capture: `$SHELL -l -i -c`
+    # with pipes) that combination can deadlock zsh, wedging the editor's
+    # env capture so its language servers never start. Completions are
+    # useless without a terminal, so skip the whole region.
+    if [ -t 0 ] || [ -t 1 ]; then
+
+        if has_command "just"; then
+
+            if is_zsh; then
+                if file_exists "${HOME}/.zsh/completion/_just"; then
+                    logc "- {{BOLD}}just{{RESET}} completions loaded"
+                else
+                    logc "- {{ITALIC}}adding {{RESET}}{{BOLD}}just{{RESET}} completions"
+                    just --completions zsh >"${HOME}/.zsh/completion/_just"
+                    add_to_fpath "_just"
+                    ensure_autoload
+                fi
+            elif is_bash; then
+                if file_exists "${HOME}/.local/share/bash-completion/completions"; then
+                    if file_contains "${HOME}/.local/share/bash-completion/completions" "_just() {"; then
+                        logc "- {{BOLD}}just{{RESET}} completions loaded"
+                    else
+                        logc "- {{ITALIC}}adding {{RESET}}{{BOLD}}just{{RESET}} completions"
+                        just --completions bash >>"${HOME}/.local/share/bash-completion/completions"
+                    fi
+                fi
+            fi
+        fi
+
+        if has_command "hug"; then
+
+            if is_zsh; then
+                if file_exists "${HOME}/.zsh/completion/_hug"; then
+                    logc "- {{BOLD}}hug{{RESET}} ({{DIM}}{{ITALIC}}tree-hugger{{RESET}}) completions loaded"
+                else
+                    logc "- {{ITALIC}}adding {{RESET}}{{BOLD}}hug{{RESET}} ({{DIM}}{{ITALIC}}tree-hugger{{RESET}}) completions"
+                    hug completions zsh >"${HOME}/.zsh/completion/_hug"
+                    add_to_fpath "_hug"
+                    ensure_autoload
+                fi
+            elif is_bash; then
+                if file_exists "${HOME}/.local/share/bash-completion/completions"; then
+                    if file_contains "${HOME}/.local/share/bash-completion/completions" "_hug() {"; then
+                        logc "- {{BOLD}}hug{{RESET}} completions loaded"
+                    else
+                        logc "- {{ITALIC}}adding {{RESET}}{{BOLD}}hug{{RESET}} ({{DIM}}{{ITALIC}}tree-hugger{{RESET}}) completions"
+                        hug completions bash >>"${HOME}/.local/share/bash-completion/completions"
+                    fi
+                fi
+            fi
+        fi
+        if has_command "homey"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh homey)
+                logc "- {{BOLD}}homey{{RESET}} ({{DIM}}{{ITALIC}}homelab{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash homey)
+                logc "- {{BOLD}}homey{{RESET}} ({{DIM}}{{ITALIC}}homelab{{RESET}}) completions loaded"
+            fi
+        fi
+
+        if has_command "messenger"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh messenger)
+                logc "- {{BOLD}}messenger{{RESET}} completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash messenger)
+                logc "- {{BOLD}}messenger{{RESET}} completions loaded"
+            fi
+        fi
+
+        if has_command "md"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh md)
+                logc "- {{BOLD}}md{{RESET}} ({{DIM}}{{ITALIC}}darkmatter{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash md)
+                logc "- {{BOLD}}md{{RESET}} ({{DIM}}{{ITALIC}}darkmatter{{RESET}}) completions loaded"
+            fi
+        fi
+
+        if has_command "bt"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh bt)
+                logc "- {{BOLD}}bt{{RESET}} ({{DIM}}{{ITALIC}}biscuit-terminal{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash bt)
+                logc "- {{BOLD}}bt{{RESET}} ({{DIM}}{{ITALIC}}biscuit-terminal{{RESET}}) completions loaded"
+            fi
+        fi
+
+        if has_command "sniff"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh sniff)
+                logc "- {{BOLD}}sniff{{RESET}} completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash sniff)
+                logc "- {{BOLD}}sniff{{RESET}} completions loaded"
+            fi
+        fi
+
+        if has_command "wt"; then
+
+            if is_zsh; then
+                source <(wt --completions zsh)
+                logc "- {{BOLD}}wt{{RESET}} ({{DIM}}worktree{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(wt --completions bash)
+                logc "- {{BOLD}}wt{{RESET}} ({{DIM}}worktree{{RESET}}) completions loaded"
+            fi
+        fi
+
+        if has_command "playa"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh playa)
+                logc "- {{BOLD}}playa{{RESET}} completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash playa)
+                logc "- {{BOLD}}playa{{RESET}} completions loaded"
+            fi
+        fi
+
+        if has_command "so-you-say"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh so-you-say)
+                logc "- {{BOLD}}so-you-say{{RESET}} ({{DIM}}{{ITALIC}}biscuit-speaks{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash so-you-say)
+                logc "- {{BOLD}}so-you-say{{RESET}} ({{DIM}}{{ITALIC}}biscuit-speaks{{RESET}}) completions loaded"
+            fi
+        fi
+
+        if has_command "model"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh model)
+                logc "- {{BOLD}}model{{RESET}} ({{DIM}}{{ITALIC}}model-citizen{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash model)
+                logc "- {{BOLD}}model{{RESET}} ({{DIM}}{{ITALIC}}model-citizen{{RESET}}) completions loaded"
+            fi
+        fi
+
+        if has_command "bh"; then
+
+            if is_zsh; then
+                source <(COMPLETE=zsh bh)
+                logc "- {{BOLD}}bh{{RESET}} ({{DIM}}{{ITALIC}}biscuit-hash{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(COMPLETE=bash bh)
+                logc "- {{BOLD}}bh{{RESET}} ({{DIM}}{{ITALIC}}biscuit-hash{{RESET}}) completions loaded"
+            fi
+        fi
+
+        if has_command "claudine"; then
+
+            if is_zsh; then
+                source <(claudine completions zsh)
+                logc "- {{BOLD}}claudine{{RESET}} completions loaded"
+            elif is_bash; then
+                source <(claudine completions bash)
+                logc "- {{BOLD}}claudine{{RESET}} completions loaded"
+            fi
+        fi
+
+        if has_command "unchained"; then
+
+            if is_zsh; then
+                # source <(unchained completions zsh)
+                logc "- {{BOLD}}unchained{{RESET}} completions loaded"
+            elif is_bash; then
+                # source <(unchained completions bash)
+                logc "- {{BOLD}}unchained{{RESET}} completions loaded"
+            fi
+        fi
+
+        if has_command "question"; then
+
+            if is_zsh; then
+                source <(question completions zsh)
+                logc "- {{BOLD}}question{{RESET}} ({{DIM}}{{ITALIC}}biscuit-tui{{RESET}}) completions loaded"
+            elif is_bash; then
+                source <(question completions bash)
+                logc "- {{BOLD}}question{{RESET}} ({{DIM}}{{ITALIC}}biscuit-tui{{RESET}}) completions loaded"
+            fi
+        fi
+
+    fi # end TTY guard around completion loading
+
     source "${ROOT}/user-functions.sh"
 
-    if type "starship" &>/dev/null; then
+    offer_starship_install
+
+    # NOTE: use `has_command` (not `type`) for every tool initialized via
+    # `eval "$(tool ...)"`. `user-functions.sh` defines wrapper *functions*
+    # for tools that aren't installed; `type` sees those wrappers and we'd
+    # end up running the "install me?" prompt inside a command substitution,
+    # where its prompt is swallowed and its output is eval'd as shell code.
+    if has_command "starship"; then
         if is_zsh; then
             eval "$(starship init zsh)"
         elif is_bash; then
@@ -262,21 +559,25 @@ function adaptive_setup() {
         fi
     fi
 
-    if type "atuin" &>/dev/null; then
-        SHELL="$(get_shell)";
+    if has_command "atuin"; then
+        SHELL="$(get_shell)"
         eval "$(atuin init "${SHELL}" --disable-up-arrow)"
     fi
 
-    if type "direnv" &>/dev/null; then
-        SHELL="$(get_shell)";
+    if has_command "direnv"; then
+        SHELL="$(get_shell)"
         eval "$(direnv hook "${SHELL}")"
     fi
 
+    # zoxide must init last — after compinit and after every other tool
+    # that hooks the prompt or cd (starship, atuin, direnv).
+    if has_command "zoxide"; then
+        eval "$(zoxide init "$(get_shell)")"
+    fi
 
     log ""
     logc "{{DIM}}* use the {{BOLD}}{{GREEN}}about{{RESET}} {{ITALIC}}function{{RESET}} to get details on this machine"
 
 }
-
 
 adaptive_setup
