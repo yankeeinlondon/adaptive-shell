@@ -251,9 +251,9 @@ function install_build_tools {
     source "${UTILS}/detection.sh"
     local SUDO
     if is_root_user; then
-        SUDO="sudo"
-    else
         SUDO=""
+    else
+        SUDO="sudo"
     fi
 
     if is_debian; then
@@ -2132,26 +2132,81 @@ install_btop() {
     fi
 }
 
+# install_starship
+#
+# Installs the Starship prompt via brew (macOS) or the official
+# install script (macOS/Linux).
+#
+# Returns non-zero if `starship` is not on PATH once finished, so
+# callers can rely on `install_starship && unset -f starship`.
+#
+# ## Environment Variables
+#
+# - `STARSHIP_BIN_DIR` -- install location for the script-based install;
+#   defaults to /usr/local/bin when writable, otherwise ~/.local/bin
 install_starship() {
     if has_command "starship"; then
         logc "- {{BOLD}}{{BLUE}}starship{{RESET}} is already installed"
         return 0
     fi
 
+    local bin_dir
 
-    if is_linux || is_macos; then
+    if is_mac && has_command "brew"; then
+        log "- installing ${BOLD}Starship${RESET} prompt via ${BOLD}brew${RESET}"
+        brew install starship || return 1
+    elif is_linux || is_mac; then
         log "- installing ${BOLD}Starship${RESET} prompt"
+        if ! has_command "curl"; then
+            install_curl
+        fi
+
+        # Prefer a bin dir we can write to; the installer otherwise
+        # escalates with `sudo`, which prompts for a password. On a stock
+        # Ubuntu host /usr/local/bin is root-owned, so this lands in
+        # ~/.local/bin.
+        bin_dir="${STARSHIP_BIN_DIR:-}"
+        if [ -z "${bin_dir}" ]; then
+            if [ -w "/usr/local/bin" ]; then
+                bin_dir="/usr/local/bin"
+            else
+                bin_dir="${HOME}/.local/bin"
+            fi
+        fi
+        mkdir -p "${bin_dir}" 2> /dev/null || true
+
         log ""
-        curl -sS https://starship.rs/install.sh | sh
+        # `--yes` is required: without it the installer blocks on stdin
+        # asking for confirmation, which is fatal when this is reached
+        # from a shell startup file.
+        if ! curl -sS https://starship.rs/install.sh | sh -s -- --yes --bin-dir "${bin_dir}"; then
+            logc "- {{RED}}ERROR:{{RESET}} the {{BOLD}}Starship{{RESET}} installer failed"
+            return 1
+        fi
         log ""
-        log "- ${ITALIC}source${RESET} your ${BOLD}${YELLOW}rc${RESET} file to start the prompt"
+
+        case ":${PATH}:" in
+            *":${bin_dir}:"*) ;;
+            *)
+                PATH="${bin_dir}:${PATH}"
+                export PATH
+                ;;
+        esac
     else
         log "- please check the website on how to install ${BOLD}Starship${RESET}"
         log "  on your OS."
         log ""
         log "- https://starship.rs/installing/"
         log ""
+        return 1
     fi
+
+    if ! has_command "starship"; then
+        logc "- {{RED}}ERROR:{{RESET}} {{BOLD}}starship{{RESET}} was installed but is not on {{BOLD}}PATH{{RESET}}"
+        return 1
+    fi
+
+    log "- ${ITALIC}source${RESET} your ${BOLD}${YELLOW}rc${RESET} file to start the prompt"
 }
 
 # update_packages
