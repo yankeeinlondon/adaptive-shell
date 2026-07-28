@@ -74,11 +74,11 @@ function aliases_for_env() {
 
     if has_command "eza"; then
         aliases+=(
-            "ls" "eza --icons=always --hyperlink"
-            "la" "eza -a --icons=always --hyperlink"
-            "ll" "eza -lhga --git --hyperlink --group"
-            "ld" "eza -lDga --git --hyperlink"
-            "lt" "eza -lTL 3 --icons=always --hyperlink"
+            "ls" "eza --icons=always --hyperlink=always"
+            "la" "eza -a --icons=always --hyperlink=always"
+            "ll" "eza -lhga --git --hyperlink=always --group"
+            "ld" "eza -lDga --git --hyperlink=always"
+            "lt" "eza -lTL 3 --icons=always --hyperlink=always"
         )
     elif has_command "exa"; then
         aliases+=(
