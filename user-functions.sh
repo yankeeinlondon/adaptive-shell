@@ -451,7 +451,9 @@ if has_function is_pve_host && { is_pve_host || is_pve_container || is_pve_aware
     }
 fi
 
-if ! has_command "uv"; then
+if has_command "uv"; then
+    unset -f uv 2> /dev/null || true
+else
     function uv() {
         logc "{{BOLD}}{{BLUE}}uv{{RESET}} [{{DIM}}https://docs.astral.sh/uv{{RESET}}] is not currently installed on this system."
         # shellcheck source="./utils/interactive.sh"
@@ -459,12 +461,14 @@ if ! has_command "uv"; then
         if confirm "Install now?"; then
             # shellcheck source="./utils/install.sh"
             source "${UTILS}/install.sh"
-            install_uv && ( unset -f uv )
+            install_uv && unset -f uv
         fi
     }
 fi
 
-if ! has_command "cargo"; then
+if has_command "cargo"; then
+    unset -f cargo 2> /dev/null || true
+else
     function cargo() {
         logc "{{BOLD}}{{BLUE}}Rust{{RESET}} -- {{ITALIC}}and therefore {{BOLD}}cargo{{RESET}} -- are not installed on this system."
         # shellcheck source="./utils/interactive.sh"
@@ -472,25 +476,176 @@ if ! has_command "cargo"; then
         if confirm "Install now?"; then
             # shellcheck source="./utils/install.sh"
             source "${UTILS}/install.sh"
-            install_rust && ( unset -f cargo )
+            install_rust && unset -f cargo
         fi
     }
 fi
 
 
-if ! has_command "starship"; then
+if has_command "starship"; then
+    # A wrapper may still be defined from an earlier source of this file,
+    # back when starship was missing. Shell functions shadow executables,
+    # so a stale wrapper hides the real binary and lies about it being
+    # uninstalled. Clear it.
+    unset -f starship 2> /dev/null || true
+else
 
     function starship() {
         source "${UTILS}/logging.sh"
         source "${UTILS}/interactive.sh"
         source "${UTILS}/install.sh"
 
-        logc "The {{BOLD}}{{GREEN}}starship{{RESET}} program for managing your prompt is not\ninstalled on this host.\n\n"
+        logc "The {{BOLD}}{{GREEN}}starship{{RESET}} program for managing your prompt is not\ninstalled on this host.\n"
         if confirm "Install now?"; then
-            install_starship && ( unset -f starship )
+            install_starship && unset -f starship
         fi
     }
 
+fi
+
+if is_bash; then
+    # upgrade_to_zsh()
+    #
+    # Upgrades the user's default shell from bash to zsh.
+    # Installs zsh if not available, changes the default shell,
+    # and ensures interactive.sh is sourced in the new .zshrc file.
+    function upgrade_to_zsh() {
+        source "${UTILS}/logging.sh"
+        source "${UTILS}/detection.sh"
+        source "${UTILS}/interactive.sh"
+        source "${UTILS}/filesystem.sh"
+        # shellcheck source="./utils/install.sh"
+        source "${UTILS}/install.sh"
+
+        logc "\n{{BOLD}}{{BLUE}}Shell Upgrade{{RESET}}: bash → zsh\n"
+
+        # Check if zsh is already installed
+        if has_command "zsh"; then
+            logc "- {{GREEN}}zsh{{RESET}} is already installed on this system"
+        else
+            logc "- {{YELLOW}}zsh{{RESET}} is not installed"
+            if confirm "Install zsh now?"; then
+                if is_mac; then
+                    install_on_macos "zsh" || {
+                        logc "{{RED}}Failed to install zsh on macOS{{RESET}}"
+                        return 1
+                    }
+                elif is_debian || is_ubuntu || is_mint; then
+                    install_on_debian "zsh" || {
+                        logc "{{RED}}Failed to install zsh on Debian/Ubuntu{{RESET}}"
+                        return 1
+                    }
+                elif is_fedora; then
+                    install_on_fedora "zsh" || {
+                        logc "{{RED}}Failed to install zsh on Fedora{{RESET}}"
+                        return 1
+                    }
+                elif is_arch; then
+                    install_on_arch "zsh" || {
+                        logc "{{RED}}Failed to install zsh on Arch{{RESET}}"
+                        return 1
+                    }
+                elif is_alpine; then
+                    install_on_alpine "zsh" || {
+                        logc "{{RED}}Failed to install zsh on Alpine{{RESET}}"
+                        return 1
+                    }
+                else
+                    logc "{{RED}}Unsupported OS for automatic zsh installation{{RESET}}"
+                    logc "Please install zsh manually and run this function again"
+                    return 1
+                fi
+                logc "- {{GREEN}}zsh{{RESET}} installed successfully"
+            else
+                logc "- Skipping zsh installation"
+                return 0
+            fi
+        fi
+
+        # Verify zsh is available
+        if ! has_command "zsh"; then
+            logc "\n{{RED}}ERROR{{RESET}}: zsh is still not available"
+            return 1
+        fi
+
+        # Get the path to zsh
+        local zsh_path
+        zsh_path="$(command -v zsh)"
+        logc "- zsh location: {{BLUE}}${zsh_path}{{RESET}}"
+
+        # Verify zsh is in /etc/shells
+        if ! grep -q "${zsh_path}" /etc/shells 2>/dev/null; then
+            logc "- {{YELLOW}}Warning{{RESET}}: ${zsh_path} is not in /etc/shells"
+            if is_root_user; then
+                logc "- Adding ${zsh_path} to /etc/shells"
+                echo "${zsh_path}" >> /etc/shells
+            else
+                logc "- You may need to add ${zsh_path} to /etc/shells manually"
+            fi
+        fi
+
+        # Change the default shell
+        logc "\n- Changing default shell to {{GREEN}}zsh{{RESET}}"
+        if is_root_user; then
+            chsh -s "${zsh_path}" || {
+                logc "{{RED}}Failed to change default shell{{RESET}}"
+                return 1
+            }
+        else
+            # Need to prompt for password when not root
+            logc "- You may be prompted for your password"
+            chsh -s "${zsh_path}" || {
+                logc "{{RED}}Failed to change default shell{{RESET}}"
+                return 1
+            }
+        fi
+        logc "- Default shell changed to {{GREEN}}zsh{{RESET}}"
+
+        # Set up .zshrc file
+        local zshrc="${HOME}/.zshrc"
+        local interactive_sh="${UTILS}/interactive.sh"
+
+        if ! file_exists "${interactive_sh}"; then
+            logc "\n{{RED}}ERROR{{RESET}}: interactive.sh not found at ${interactive_sh}"
+            return 1
+        fi
+
+        # Create .zshrc if it doesn't exist
+        if ! file_exists "${zshrc}"; then
+            logc "- Creating new {{BLUE}}.zshrc{{RESET}} file"
+            touch "${zshrc}"
+        else
+            logc "- {{BLUE}}.zshrc{{RESET}} already exists"
+        fi
+
+        # Check if interactive.sh is already sourced in .zshrc
+        if grep -q "interactive.sh" "${zshrc}" 2>/dev/null; then
+            logc "- {{GREEN}}interactive.sh{{RESET}} is already sourced in {{BLUE}}.zshrc{{RESET}}"
+        else
+            logc "- Adding {{GREEN}}interactive.sh{{RESET}} to {{BLUE}}.zshrc{{RESET}}"
+            echo "" >> "${zshrc}"
+            echo "# Source interactive utilities" >> "${zshrc}"
+            echo "source \"${interactive_sh}\"" >> "${zshrc}"
+        fi
+
+        logc "\n{{BOLD}}{{GREEN}}Upgrade complete!{{RESET}}"
+        logc ""
+        logc "{{ITALIC}}Next steps:{{RESET}}"
+        logc "  1. Log out and log back in for the shell change to take effect"
+        logc "  2. Or run: {{BOLD}}zsh{{RESET}} to try it immediately"
+        logc ""
+    }
+    :
+fi
+
+if has_command "just"; then
+
+    alias j="just"
+
+fi
+
+if has_command "claudine"; then
+    alias c="claudine"
 fi
 
 
@@ -512,7 +667,7 @@ if ! has_command "claude"; then
     }
 
     if ! has_command "cc"; then
-        function cc() {
+        function ccc() {
             logc "⚠️ the {{BOLD}}{{RED}}cc{{RESET}} alias was used but Claude Code is not installed\n"
             claude
         }
@@ -530,7 +685,7 @@ else
     # Claude is installed so wrap executable with
     # function which clears the screen before entering
     # shellcheck disable=SC2155
-    function cc() {
+    function ccc() {
         source "${UTILS}/logging.sh" || error "logging utilities not found!"
         source "${UTILS}/filesystem.sh" || error "discovery utilities not found!"
         local -r prompt_filepath_md="${PWD}/docs/system-prompt.md"
