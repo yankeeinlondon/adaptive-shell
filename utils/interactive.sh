@@ -21,7 +21,11 @@ source "${UTILS}/logging.sh"
 
 # confirm(question, [default])
 #
-# Asks the user to confirm yes or no and returns TRUE when they answer yes
+# Asks the user to confirm yes or no and returns TRUE when they answer yes.
+#
+# When there is no terminal to ask (non-interactive shell, cron, an
+# editor capturing the environment) this answers NO without blocking
+# rather than waiting forever on a prompt nobody can see.
 function confirm() {
     local -r question="${1:?confirm() missing question}"
     local -r default="${2:-y}"
@@ -30,15 +34,32 @@ function confirm() {
     # shellcheck source="./text.sh"
     source "${UTILS}/text.sh"
 
-    # Display prompt with printf to avoid zsh/bash compatibility issues
+    # The prompt goes to STDERR, never STDOUT. Callers are routinely
+    # reached from inside a command substitution -- e.g. `eval "$(tool
+    # init bash)"` hitting a wrapper function -- where STDOUT is
+    # captured and eval'd. On STDOUT the question is invisible and the
+    # shell appears to hang, then "Install now? (Y/n)" gets eval'd as
+    # shell code.
     if [[ $(lc "$default") == "y" ]]; then
-        printf "%s (Y/n) " "$question"
+        printf "%s (Y/n) " "$question" >&2
     else
-        printf "%s (y/N) " "$question"
+        printf "%s (y/N) " "$question" >&2
     fi
 
-    # Read input without -p (compatible with all shells)
-    read -r response
+    # Read input without -p (compatible with all shells). Read stdin
+    # first -- that is the terminal during shell startup, and a piped
+    # answer when scripted. Only when stdin is closed or at EOF do we
+    # reach for the controlling terminal, and if that is unavailable
+    # too we answer NO rather than block forever on a question nobody
+    # can answer. Never fall through to the default here: a silent
+    # "yes" would install software unattended.
+    if ! read -r response 2> /dev/null; then
+        if ! { [[ -r /dev/tty ]] && read -r response < /dev/tty; } 2> /dev/null; then
+            printf "\n" >&2
+            log "- no terminal available to answer; assuming ${BOLD}no${RESET}"
+            return 1
+        fi
+    fi
 
     # Rest of the logic remains the same...
     if [[ $(lc "$default") == "y" ]]; then
