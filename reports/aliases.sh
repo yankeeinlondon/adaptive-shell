@@ -2,7 +2,7 @@
 
 if [ -z "${ADAPTIVE_SHELL:-}" ] || [[ "${ADAPTIVE_SHELL:-}" == "" ]]; then
     UTILS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ "${UTILS}" == *"/utils" ]];then
+    if [[ "${UTILS}" == *"/utils" ]]; then
         ROOT="${UTILS%"/utils"}"
     else
         ROOT="$UTILS"
@@ -74,11 +74,11 @@ function aliases_for_env() {
 
     if has_command "eza"; then
         aliases+=(
-            "ls" "eza --icons=always --hyperlink=always"
-            "la" "eza -a --icons=always --hyperlink=always"
+            "ls" "eza --icons=always --hyperlink"
+            "la" "eza -a --icons=always --hyperlink"
             "ll" "eza -lhga --git --hyperlink=always --group"
             "ld" "eza -lDga --git --hyperlink=always"
-            "lt" "eza -lTL 3 --icons=always --hyperlink=always"
+            "lt" "eza -lTL 3 --icons=always --hyperlink"
         )
     elif has_command "exa"; then
         aliases+=(
