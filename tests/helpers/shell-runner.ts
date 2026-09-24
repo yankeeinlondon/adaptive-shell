@@ -56,7 +56,11 @@ export function runInShell(
     ADAPTIVE_SHELL: process.cwd(),
     // Ensure ~/.local/bin is in PATH for user-installed tools (e.g., yq on WSL)
     PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
-    ...options?.env
+    ...options?.env,
+    // PWD must come last and match the spawn cwd: an inherited PWD may
+    // contain symlinked path components (e.g. ~/.config -> ~/config) which
+    // bash/zsh trust as-is, while Node's process.cwd() is physical.
+    PWD: cwd
   }
 
   try {

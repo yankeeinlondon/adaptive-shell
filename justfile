@@ -26,8 +26,8 @@ default:
     echo
 
 # run TS test harness over shell scripts
-test:
-    pnpm test
+test *args="":
+    pnpm test {{ args }}
 
 # commit to git
 commit *args="":

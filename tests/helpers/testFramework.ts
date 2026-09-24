@@ -28,7 +28,12 @@ export function toSpawnOption<T extends TestOptions>(opt: T): ToSpawnOptions<T> 
             ADAPTIVE_SHELL: cwd(),
             // Ensure ~/.local/bin is in PATH for user-installed tools (e.g., yq on WSL)
             PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
-            ...opt.env
+            ...opt.env,
+            // PWD must come last and match the spawn cwd: opt.env defaults to
+            // process.env, whose inherited PWD may contain symlinked path
+            // components (e.g. ~/.config -> ~/config) which bash/zsh trust
+            // as-is, while Node's cwd() is the resolved physical path.
+            PWD: fallback(opt.cwd, cwd()),
         },
         timeout: fallback(opt.timeout, DEFAULT_TIMEOUT),
         stdio: [
