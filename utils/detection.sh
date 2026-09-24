@@ -367,20 +367,20 @@ function is_keyword() {
 # Tests whether the given path is inside a git repository.
 # Returns 0 if inside a git repo, 1 otherwise.
 function is_git_repo() {
-    local path="${1:-${PWD}}"
+    local dir_path="${1:-${PWD}}"
 
     # Handle non-existent paths
-    if [[ ! -e "${path}" ]]; then
+    if [[ ! -e "${dir_path}" ]]; then
         return 1
     fi
 
     # If path is a file, use its directory
-    if [[ -f "${path}" ]]; then
-        path="$(dirname "${path}")"
+    if [[ -f "${dir_path}" ]]; then
+        dir_path="$(dirname "${dir_path}")"
     fi
 
     # Check if inside a git work tree
-    git -C "${path}" rev-parse --is-inside-work-tree &>/dev/null
+    git -C "${dir_path}" rev-parse --is-inside-work-tree &>/dev/null
 }
 
 # repo_is_dirty <path || CWD>
@@ -388,26 +388,26 @@ function is_git_repo() {
 # Tests whether the git repository has uncommitted changes.
 # Returns 0 if dirty (has changes), 1 if clean or not a git repo.
 function repo_is_dirty() {
-    local path="${1:-${PWD}}"
+    local dir_path="${1:-${PWD}}"
 
     # Handle non-existent paths
-    if [[ ! -e "${path}" ]]; then
+    if [[ ! -e "${dir_path}" ]]; then
         return 1
     fi
 
     # If path is a file, use its directory
-    if [[ -f "${path}" ]]; then
-        path="$(dirname "${path}")"
+    if [[ -f "${dir_path}" ]]; then
+        dir_path="$(dirname "${dir_path}")"
     fi
 
     # Must be a git repo
-    if ! is_git_repo "${path}"; then
+    if ! is_git_repo "${dir_path}"; then
         return 1
     fi
 
     # Check for any changes (staged, unstaged, or untracked)
     local status
-    status="$(git -C "${path}" status --porcelain 2>/dev/null)"
+    status="$(git -C "${dir_path}" status --porcelain 2>/dev/null)"
 
     # If status output is non-empty, repo is dirty
     [[ -n "${status}" ]]
@@ -419,25 +419,25 @@ function repo_is_dirty() {
 # Outputs the absolute path to the repo root on success.
 # Returns 0 on success, 1 if not a git repo or path doesn't exist.
 function repo_root() {
-    local path="${1:-${PWD}}"
+    local dir_path="${1:-${PWD}}"
 
     # Handle non-existent paths
-    if [[ ! -e "${path}" ]]; then
+    if [[ ! -e "${dir_path}" ]]; then
         return 1
     fi
 
     # If path is a file, use its directory
-    if [[ -f "${path}" ]]; then
-        path="$(dirname "${path}")"
+    if [[ -f "${dir_path}" ]]; then
+        dir_path="$(dirname "${dir_path}")"
     fi
 
     # Must be a git repo
-    if ! is_git_repo "${path}"; then
+    if ! is_git_repo "${dir_path}"; then
         return 1
     fi
 
     # Get the repo root
-    git -C "${path}" rev-parse --show-toplevel 2>/dev/null
+    git -C "${dir_path}" rev-parse --show-toplevel 2>/dev/null
 }
 
 # is_monorepo <path || $CWD>
@@ -446,16 +446,16 @@ function repo_root() {
 # Checks for: pnpm-workspace.yaml, lerna.json, or workspaces field in package.json.
 # Returns 0 if monorepo, 1 otherwise.
 function is_monorepo() {
-    local path="${1:-${PWD}}"
+    local dir_path="${1:-${PWD}}"
     local root
 
     # Get repo root (or use path directly if not a git repo)
-    if is_git_repo "${path}"; then
-        root="$(repo_root "${path}")"
+    if is_git_repo "${dir_path}"; then
+        root="$(repo_root "${dir_path}")"
     else
         # Not a git repo - check the path directly
-        if [[ -d "${path}" ]]; then
-            root="${path}"
+        if [[ -d "${dir_path}" ]]; then
+            root="${dir_path}"
         else
             return 1
         fi
@@ -486,27 +486,27 @@ function is_monorepo() {
 # Checks if a `package.json` file can be found in the path or repo root.
 # Returns 0 if found, 1 otherwise.
 function has_package_json() {
-    local path="${1:-${PWD}}"
+    local dir_path="${1:-${PWD}}"
 
     # Handle non-existent paths
-    if [[ ! -e "${path}" ]]; then
+    if [[ ! -e "${dir_path}" ]]; then
         return 1
     fi
 
     # If path is a file, use its directory
-    if [[ -f "${path}" ]]; then
-        path="$(dirname "${path}")"
+    if [[ -f "${dir_path}" ]]; then
+        dir_path="$(dirname "${dir_path}")"
     fi
 
     # Check directly in path
-    if [[ -f "${path}/package.json" ]]; then
+    if [[ -f "${dir_path}/package.json" ]]; then
         return 0
     fi
 
     # Check in repo root if in a git repo
-    if is_git_repo "${path}"; then
+    if is_git_repo "${dir_path}"; then
         local root
-        root="$(repo_root "${path}")"
+        root="$(repo_root "${dir_path}")"
         if [[ -f "${root}/package.json" ]]; then
             return 0
         fi
@@ -520,36 +520,36 @@ function has_package_json() {
 # Looks for TypeScript files (.ts, .tsx) in the path, repo root, and src/ subdirectory.
 # Returns 0 if found, 1 otherwise.
 function has_typescript_files() {
-    local path="${1:-${PWD}}"
+    local dir_path="${1:-${PWD}}"
     local root
     local found
 
     # Handle non-existent paths
-    if [[ ! -e "${path}" ]]; then
+    if [[ ! -e "${dir_path}" ]]; then
         return 1
     fi
 
     # If path is a file, use its directory
-    if [[ -f "${path}" ]]; then
-        path="$(dirname "${path}")"
+    if [[ -f "${dir_path}" ]]; then
+        dir_path="$(dirname "${dir_path}")"
     fi
 
     # Determine root directory to search
-    if is_git_repo "${path}"; then
-        root="$(repo_root "${path}")"
+    if is_git_repo "${dir_path}"; then
+        root="$(repo_root "${dir_path}")"
     else
-        root="${path}"
+        root="${dir_path}"
     fi
 
     # Check in path directly (with limited depth for performance)
     # Use -quit for efficiency and capture result to avoid pipefail issues
-    found="$(find "${path}" -maxdepth 3 \( -name '*.ts' -o -name '*.tsx' \) -print -quit 2>/dev/null || true)"
+    found="$(find "${dir_path}" -maxdepth 3 \( -name '*.ts' -o -name '*.tsx' \) -print -quit 2>/dev/null || true)"
     if [[ -n "${found}" ]]; then
         return 0
     fi
 
     # Check in repo root if different from path
-    if [[ "${root}" != "${path}" ]]; then
+    if [[ "${root}" != "${dir_path}" ]]; then
         found="$(find "${root}" -maxdepth 3 \( -name '*.ts' -o -name '*.tsx' \) -print -quit 2>/dev/null || true)"
         if [[ -n "${found}" ]]; then
             return 0
@@ -703,15 +703,15 @@ function in_package_json() {
 # Returns 0 if found, 1 otherwise.
 function has_package_json_script() {
     local -r script_name="${1:?script name is missing}"
-    local path="${PWD}"
+    local dir_path="${PWD}"
     local pkg_path=""
 
     # Find package.json
-    if [[ -f "${path}/package.json" ]]; then
-        pkg_path="${path}/package.json"
-    elif is_git_repo "${path}"; then
+    if [[ -f "${dir_path}/package.json" ]]; then
+        pkg_path="${dir_path}/package.json"
+    elif is_git_repo "${dir_path}"; then
         local root
-        root="$(repo_root "${path}")"
+        root="$(repo_root "${dir_path}")"
         if [[ -f "${root}/package.json" ]]; then
             pkg_path="${root}/package.json"
         fi
@@ -745,15 +745,15 @@ function has_package_json_script() {
 function inject_package_json_script() {
     local -r script_name="${1:?script name is missing}"
     local -r script_path="${2:?script path is missing}"
-    local path="${PWD}"
+    local dir_path="${PWD}"
     local pkg_path=""
 
     # Find package.json
-    if [[ -f "${path}/package.json" ]]; then
-        pkg_path="${path}/package.json"
-    elif is_git_repo "${path}"; then
+    if [[ -f "${dir_path}/package.json" ]]; then
+        pkg_path="${dir_path}/package.json"
+    elif is_git_repo "${dir_path}"; then
         local root
-        root="$(repo_root "${path}")"
+        root="$(repo_root "${dir_path}")"
         if [[ -f "${root}/package.json" ]]; then
             pkg_path="${root}/package.json"
         fi
