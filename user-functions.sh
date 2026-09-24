@@ -355,6 +355,51 @@ EOF
     fi
 }
 
+# justfile()
+#
+# Creates a starter `justfile` in the current working directory from
+# `resources/justfile.template` when no justfile already exists (checks
+# `justfile`, `Justfile`, and `.justfile`). When run inside a git repo
+# the template's `{{ repo }}` placeholder is interpolated with the
+# repo's name; outside a repo it is interpolated as "not repo".
+function justfile() {
+    source "${UTILS}/logging.sh"
+    source "${UTILS}/color.sh"
+    source "${UTILS}/detection.sh"
+
+    local -r template="${ROOT}/resources/justfile.template"
+
+    if [ -f "./justfile" ] || [ -f "./Justfile" ] || [ -f "./.justfile" ]; then
+        logc "- a {{BLUE}}justfile{{RESET}} already exists, {{ITALIC}}skipping{{RESET}}"
+        return 0
+    fi
+
+    if [ ! -f "${template}" ]; then
+        error "justfile template not found at ${template}"
+        return 1
+    fi
+
+    logc "- creating {{BLUE}}justfile{{RESET}} file"
+    logc ""
+
+    local content
+    content="$(command cat "${template}")"
+
+    # pattern via a variable: portable literal match in both bash and zsh
+    local -r placeholder='{{ repo }}'
+    local repo_name=""
+
+    if is_git_repo; then
+        repo_name="$(basename "$(repo_root)")"
+    else
+        repo_name="not repo"
+    fi
+    content="${content//${placeholder}/${repo_name}}"
+    logc "- interpolated {{DIM}}{{ITALIC}}{{ repo }}{{RESET}} as {{GREEN}}${repo_name}{{RESET}}"
+
+    printf '%s\n' "${content}" >"./justfile"
+}
+
 # unset login_message
 
 # net()
