@@ -63,12 +63,15 @@ function ensure_autoload() {
     echo "autoload -Uz compinit && compinit" >>"${zshrc}"
 }
 
-# add_to_fpath <path>
+# add_to_fpath <dir>
 #
-# Adds the given path to the fpath in ~/.zshrc if not already present.
+# Adds the given directory to the fpath in ~/.zshrc if not already present.
 # Only operates in zsh shells.
+#
+# Note: avoid naming a local `path` -- in zsh it is tied to PATH (and is
+# read-only under `local -r`).
 function add_to_fpath() {
-    local -r path="${1:?path is missing in call to add_to_fpath!}"
+    local -r fpath_dir="${1:?directory is missing in call to add_to_fpath!}"
 
     # Only proceed if running in zsh
     if ! is_zsh; then
@@ -79,14 +82,14 @@ function add_to_fpath() {
 
     # Check if path is already in fpath in .zshrc
     if file_exists "${zshrc}"; then
-        if grep -q "fpath.*${path}" "${zshrc}" 2>/dev/null; then
+        if grep -qF "${fpath_dir}" "${zshrc}" 2>/dev/null; then
             # Path already present
             return 0
         fi
     fi
 
     # Add the path to fpath
-    echo "fpath+=( \"${path}\" )" >>"${zshrc}"
+    echo "fpath+=( \"${fpath_dir}\" )" >>"${zshrc}"
 }
 
 # offer_starship_install
@@ -359,8 +362,9 @@ function adaptive_setup() {
                     logc "- {{BOLD}}just{{RESET}} completions loaded"
                 else
                     logc "- {{ITALIC}}adding {{RESET}}{{BOLD}}just{{RESET}} completions"
+                    mkdir -p "${HOME}/.zsh/completion"
                     just --completions zsh >"${HOME}/.zsh/completion/_just"
-                    add_to_fpath "_just"
+                    add_to_fpath "${HOME}/.zsh/completion"
                     ensure_autoload
                 fi
             elif is_bash; then
@@ -382,8 +386,9 @@ function adaptive_setup() {
                     logc "- {{BOLD}}hug{{RESET}} ({{DIM}}{{ITALIC}}tree-hugger{{RESET}}) completions loaded"
                 else
                     logc "- {{ITALIC}}adding {{RESET}}{{BOLD}}hug{{RESET}} ({{DIM}}{{ITALIC}}tree-hugger{{RESET}}) completions"
+                    mkdir -p "${HOME}/.zsh/completion"
                     hug completions zsh >"${HOME}/.zsh/completion/_hug"
-                    add_to_fpath "_hug"
+                    add_to_fpath "${HOME}/.zsh/completion"
                     ensure_autoload
                 fi
             elif is_bash; then
