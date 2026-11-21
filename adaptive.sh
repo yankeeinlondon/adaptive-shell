@@ -164,9 +164,9 @@ function adaptive_setup() {
     # shellcheck source="./reports/aliases.sh"
     source "${REPORTS}/aliases.sh"
 
-    # Set up aliases and PATH variables
-    set_aliases
+    # Add tool directories before detecting commands for aliases.
     append_to_path # Add detected paths (e.g., ~/.local/bin, ~/.cargo/bin) to PATH
+    set_aliases
 
     if is_zsh; then
         emulate zsh -R
