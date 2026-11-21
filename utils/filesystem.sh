@@ -286,39 +286,19 @@ function relative_path() {
         return 0
     fi
 
-    # Find common prefix by iterating through path components
-    local IFS='/'
-    local -a pwd_parts=($abs_pwd)
-    local -a path_parts=($abs_path)
-
-    # Find where paths diverge
-    local common_idx=0
-    local max_idx=${#pwd_parts[@]}
-    [[ ${#path_parts[@]} -lt $max_idx ]] && max_idx=${#path_parts[@]}
-
-    for ((i=0; i<max_idx; i++)); do
-        if [[ "${pwd_parts[$i]}" == "${path_parts[$i]}" ]]; then
-            common_idx=$((i + 1))
-        else
-            break
-        fi
+    # Walk PWD up until it is a prefix of the target. String-based (no
+    # IFS splitting or array indexing) so it behaves the same in bash and zsh.
+    local common="${abs_pwd%/}"
+    local up=""
+    while [[ "$abs_path" != "$common" ]] && [[ "$abs_path" != "$common"/* ]]; do
+        common="${common%/*}"
+        up="../${up}"
     done
 
-    # Build relative path
-    local rel_path=""
-
-    # Add ../ for each remaining PWD component
-    local up_count=$((${#pwd_parts[@]} - common_idx))
-    for ((i=0; i<up_count; i++)); do
-        rel_path="${rel_path}../"
-    done
-
-    # Add remaining path components
-    for ((i=common_idx; i<${#path_parts[@]}; i++)); do
-        if [[ -n "${path_parts[$i]}" ]]; then
-            rel_path="${rel_path}${path_parts[$i]}/"
-        fi
-    done
+    # Append whatever remains of the target below the common prefix
+    local rest="${abs_path#"$common"}"
+    rest="${rest#/}"
+    local rel_path="${up}${rest}"
 
     # Remove trailing slash
     rel_path="${rel_path%/}"
