@@ -44,11 +44,11 @@ API_BASE="/api2/json/"
 #
 # Wrapper for pve_endpoint for backward compatibility.
 function pve_api_get() {
-    local -r path="${1:?pve_api_get requires an API path}"
+    local -r api_path="${1:?pve_api_get requires an API path}"
     local -r filter="${2:-none}"
     local -r host="${3:-}"
 
-    pve_endpoint "${path}" "${filter}" "${host}"
+    pve_endpoint "${api_path}" "${filter}" "${host}"
 }
 
 # has_pve_api_key

@@ -129,13 +129,13 @@ function pve_resources() {
 
 
 function pve_vm_containers() {
-    local -r path="/cluster/resources"
+    local -r api_path="/cluster/resources"
     local -r filter='.data.[] | map(select(.type == "qemu"))'
     local resources
     if is_pve_host; then
-        resources=$(get_pvesh "${path}" '. | map(select(.type == "qemu"))')
+        resources=$(get_pvesh "${api_path}" '. | map(select(.type == "qemu"))')
     else
-        resources=$(get_pve "${path}" '.data | map(select(.type == "qemu"))')
+        resources=$(get_pve "${api_path}" '.data | map(select(.type == "qemu"))')
     fi
 
     printf "%s" "${resources}"
@@ -153,13 +153,13 @@ function pve_storage() {
 }
 
 function pve_sdn() {
-    local -r path="/cluster/resources"
+    local -r api_path="/cluster/resources"
     local -r filter=".data | map(select(.type == \"sdn\"))"
     local resources
     if is_pve_host; then
-        resources="$(get_pvesh "${path}" "${filter}")"
+        resources="$(get_pvesh "${api_path}" "${filter}")"
     else
-        resources="$(get_pve "${path}" "${filter}")"
+        resources="$(get_pve "${api_path}" "${filter}")"
     fi
 
     printf "%s" "$(list "${resources}")"

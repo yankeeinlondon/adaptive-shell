@@ -60,7 +60,7 @@ function link_file() {
 # to an `https` based URL.
 function link_repo() {
     local -r repo="${1:?no URI representing a Repo was passed to link_repo() function!}"
-    local trimmed display uri host path converted
+    local trimmed display uri host repo_path converted
 
     trimmed="${repo}"
     trimmed="${trimmed#"${trimmed%%[![:space:]]*}"}"
@@ -79,21 +79,21 @@ function link_repo() {
     elif [[ "${trimmed}" == git@*:* ]]; then
         converted="${trimmed#*@}"
         host="${converted%%:*}"
-        path="${converted#*:}"
-        path="${path%.git}"
-        uri="https://${host}/${path}"
+        repo_path="${converted#*:}"
+        repo_path="${repo_path%.git}"
+        uri="https://${host}/${repo_path}"
     elif [[ "${trimmed}" == ssh://git@* ]]; then
         converted="${trimmed#ssh://git@}"
         host="${converted%%/*}"
-        path="${converted#*/}"
-        path="${path%.git}"
-        uri="https://${host}/${path}"
+        repo_path="${converted#*/}"
+        repo_path="${repo_path%.git}"
+        uri="https://${host}/${repo_path}"
     elif [[ "${trimmed}" == git+ssh://git@* ]]; then
         converted="${trimmed#git+ssh://git@}"
         host="${converted%%/*}"
-        path="${converted#*/}"
-        path="${path%.git}"
-        uri="https://${host}/${path}"
+        repo_path="${converted#*/}"
+        repo_path="${repo_path%.git}"
+        uri="https://${host}/${repo_path}"
     elif [[ "${trimmed}" == git://* ]]; then
         uri="https://${trimmed#git://}"
         uri="${uri%.git}"

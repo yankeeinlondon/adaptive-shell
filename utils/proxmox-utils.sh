@@ -82,7 +82,7 @@ function pve_request_url() {
 # An abstraction over whether we'll make an API call or a CLI call
 # based on if the host machine is a PVE node or not.
 function pve_endpoint() {
-    local -r path="${1:?No path passed to pve_endpoint()}"
+    local -r api_path="${1:?No path passed to pve_endpoint()}"
     local -r filter="${2:-}"
     local -r suggested_host="${3}"
     local sanitized
@@ -102,11 +102,11 @@ function pve_endpoint() {
     fi
 
     if is_pve_host; then
-        debug "pve_endpoint" "using CLI to get '${path}' with filter '${sanitized}'"
-        printf "%s" "$(pve_cli_call "${path}" "$sanitized")"
+        debug "pve_endpoint" "using CLI to get '${api_path}' with filter '${sanitized}'"
+        printf "%s" "$(pve_cli_call "${api_path}" "$sanitized")"
     else
-        debug "pve_endpoint" "using API to get '${path}' with filter '${sanitized}'"
-        printf "%s" "$(pve_api_call "${path}" "$sanitized" "${suggested_host}")"
+        debug "pve_endpoint" "using API to get '${api_path}' with filter '${sanitized}'"
+        printf "%s" "$(pve_api_call "${api_path}" "$sanitized" "${suggested_host}")"
     fi
 }
 
@@ -419,10 +419,10 @@ function pve_api_call() {
 }
 
 function pve_cli_call() {
-    local -r path=${1:?no path provided to get_pvesh())}
+    local -r api_path=${1:?no path provided to get_pvesh())}
     local -r filter=${2:-}
 
-    local -r request="pvesh get ${path} --output-format=json"
+    local -r request="pvesh get ${api_path} --output-format=json"
 
     local response
     local exit_code
@@ -430,7 +430,7 @@ function pve_cli_call() {
     response="$(eval "$request")"
     exit_code=$?
     debug "pve_cli_call" "got a response from CLI of ${#response} characters"
-    debug "pve_cli_call(${path})" "now filtering with: ${filter}"
+    debug "pve_cli_call(${api_path})" "now filtering with: ${filter}"
 
     if [[ $exit_code -ne 0 ]] || is_empty "$response"; then
         error "CLI call to {{BOLD}}${request}{{RESET}} failed to return successfully (or returned nothing)"

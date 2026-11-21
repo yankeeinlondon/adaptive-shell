@@ -269,13 +269,14 @@ function file_dependencies() {
 
     # Deduplicate files
     local -a files=()
+    local file_path
     if [ "${#function_files[@]}" -gt 0 ]; then
         local temp_files
         temp_files=$(mktemp)
         printf '%s\n' "${function_files[@]}" | sort -u > "$temp_files"
-        while IFS= read -r path; do
-            [ -z "$path" ] && continue
-            files+=("$path")
+        while IFS= read -r file_path; do
+            [ -z "$file_path" ] && continue
+            files+=("$file_path")
         done < "$temp_files"
         rm -f "$temp_files"
     fi
@@ -296,13 +297,13 @@ function file_dependencies() {
     # Build JSON output
     local files_json="["
     local first=1
-    for path in "${files[@]}"; do
+    for file_path in "${files[@]}"; do
         if [ $first -eq 1 ]; then
             first=0
         else
             files_json+=","
         fi
-        files_json+=$(printf '"%s"' "$(__fd_json_escape "$path")")
+        files_json+=$(printf '"%s"' "$(__fd_json_escape "$file_path")")
     done
     files_json+="]"
 
@@ -353,18 +354,19 @@ bash_functions_summary() {
     # - files with NO dot in the basename (no extension)
     # We also prune common VCS/build dirs for speed.
     local -a __BFS_FILES=()
-    while IFS= read -r path; do
-        [ -z "$path" ] && continue
+    local file_path
+    while IFS= read -r file_path; do
+        [ -z "$file_path" ] && continue
         local base
-        base=${path##*/}
+        base=${file_path##*/}
         case "$base" in
         *.sh|*.bash)
-            __BFS_FILES+=("$path")
+            __BFS_FILES+=("$file_path")
             ;;
         *.*)
             ;; # ignore other extensions
         *)
-            __BFS_FILES+=("$path")
+            __BFS_FILES+=("$file_path")
             ;;
         esac
     done < <(
@@ -375,9 +377,9 @@ bash_functions_summary() {
 
     if [ "${#__BFS_FILES[@]}" -gt 1 ]; then
         local -a __BFS_UNIQUE=()
-        while IFS= read -r path; do
-        [ -z "$path" ] && continue
-        __BFS_UNIQUE+=("$path")
+        while IFS= read -r file_path; do
+        [ -z "$file_path" ] && continue
+        __BFS_UNIQUE+=("$file_path")
         done < <(printf '%s\n' "${__BFS_FILES[@]}" | sort -u)
         __BFS_FILES=("${__BFS_UNIQUE[@]}")
     fi

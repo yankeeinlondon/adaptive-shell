@@ -148,45 +148,45 @@ function lxc_status() {
 }
 
 function pve_lxc_containers() {
-    local -r path="/cluster/resources"
+    local -r api_path="/cluster/resources"
     local -r filter="| map(select(.type == 'lxc'))"
     local -r suggested_host="${1:-}"
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }
 
 function pve_vm_containers() {
-    local -r path="/cluster/resources"
+    local -r api_path="/cluster/resources"
     local -r filter="| map(select(.type == 'qemu'))"
     local -r suggested_host="${1:-}"
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }
 
 function pve_storage() {
-    local -r path="/cluster/resources"
+    local -r api_path="/cluster/resources"
     local -r filter="| map(select(.type == 'storage'))"
     local -r suggested_host="${1:-}"
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }
 
 function pve_cifs_storage() {
-    local -r path="/cluster/resources"
+    local -r api_path="/cluster/resources"
     local -r filter="| map(select(.type == 'storage' && .plugintype == 'cifs'))"
     local -r suggested_host="${1:-}"
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }
@@ -195,12 +195,12 @@ function pve_cifs_storage() {
 #
 # Provides the lowest available container ID.
 function pve_next_id() {
-    local -r path="/cluster/nextid"
+    local -r api_path="/cluster/nextid"
     local -r filter="none"
     local -r suggested_host="${1:-}"
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }
@@ -209,23 +209,23 @@ function pve_next_id() {
 #
 # A list of the backups schedule across the cluster
 function pve_backups() {
-    local -r path="/cluster/backup"
+    local -r api_path="/cluster/backup"
     local -r filter="none"
     local -r suggested_host="${1:-}"
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }
 
 function pve_version() {
-    local -r path="/version"
+    local -r api_path="/version"
     local -r filter=".version"
     local -r suggested_host="${1:-}"
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }
@@ -235,7 +235,7 @@ function pve_version() {
 # Get's the logs from a specific node or across all of them.
 function pve_node_log() {
     local -r node="${1:-none}"
-    local -r path="/cluster/log"
+    local -r api_path="/cluster/log"
     local -r suggested_host="${2:-}"
     local filter
     if [[ "${node}" == "none" ]]; then
@@ -245,7 +245,7 @@ function pve_node_log() {
     fi
     local resources
 
-    resources="$(pve_endpoint "${path}" "${filter}" "${suggested_host}" )"
+    resources="$(pve_endpoint "${api_path}" "${filter}" "${suggested_host}" )"
 
     printf "%s" "${resources}"
 }

@@ -197,7 +197,7 @@ function join() {
 # 2. Repository root (repo_root)
 # Returns error if path cannot be resolved.
 function absolute_path() {
-    local path="${1:?no path passed to absolute_path()!}"
+    local target_path="${1:?no path passed to absolute_path()!}"
 
     # shellcheck source="./detection.sh"
     source "${UTILS}/detection.sh"
@@ -205,19 +205,19 @@ function absolute_path() {
     source "${UTILS}/logging.sh"
 
     # If already absolute, validate and return
-    if [[ "$path" == /* ]] || [[ "$path" == \\* ]]; then
-        if [[ -e "$path" ]]; then
-            printf '%s' "$path"
+    if [[ "$target_path" == /* ]] || [[ "$target_path" == \\* ]]; then
+        if [[ -e "$target_path" ]]; then
+            printf '%s' "$target_path"
             return 0
         else
-            error "absolute_path: path '${path}' does not exist" 1
+            error "absolute_path: path '${target_path}' does not exist" 1
             return 1
         fi
     fi
 
     # Try joining with PWD
     local pwd_path
-    pwd_path="$(join "${PWD}" "${path}")"
+    pwd_path="$(join "${PWD}" "${target_path}")"
     if [[ -e "$pwd_path" ]]; then
         printf '%s' "$pwd_path"
         return 0
@@ -229,7 +229,7 @@ function absolute_path() {
     repo="$(repo_root 2>/dev/null)" || true
 
     if [[ -n "$repo" ]]; then
-        root_path="$(join "$repo" "${path}")"
+        root_path="$(join "$repo" "${target_path}")"
         if [[ -e "$root_path" ]]; then
             printf '%s' "$root_path"
             return 0
@@ -237,7 +237,7 @@ function absolute_path() {
     fi
 
     # Path could not be resolved
-    error "absolute_path: cannot resolve path '${path}' (tried PWD and repo_root)" 1
+    error "absolute_path: cannot resolve path '${target_path}' (tried PWD and repo_root)" 1
     return 1
 }
 
@@ -247,23 +247,23 @@ function absolute_path() {
 # If the path is already relative, validates and returns it.
 # If the path is absolute, computes the relative path from PWD.
 function relative_path() {
-    local path="${1:?no path passed to relative_path()!}"
+    local target_path="${1:?no path passed to relative_path()!}"
 
     # shellcheck source="./logging.sh"
     source "${UTILS}/logging.sh"
 
     # If path doesn't exist, try to resolve it first
-    if [[ ! -e "$path" ]]; then
+    if [[ ! -e "$target_path" ]]; then
         # Try to resolve as absolute first
-        path="$(absolute_path "$path" 2>/dev/null)" || {
+        target_path="$(absolute_path "$target_path" 2>/dev/null)" || {
             error "relative_path: path '${1}' does not exist and cannot be resolved" 1
             return 1
         }
     fi
 
     # If path is already relative, return it
-    if [[ "$path" != /* ]] && [[ "$path" != \\* ]]; then
-        printf '%s' "$path"
+    if [[ "$target_path" != /* ]] && [[ "$target_path" != \\* ]]; then
+        printf '%s' "$target_path"
         return 0
     fi
 
@@ -271,10 +271,10 @@ function relative_path() {
     local abs_path abs_pwd
 
     # Get absolute path of the target (resolve symlinks and normalize)
-    if [[ -d "$path" ]]; then
-        abs_path="$(cd "$path" && pwd)"
+    if [[ -d "$target_path" ]]; then
+        abs_path="$(cd "$target_path" && pwd)"
     else
-        abs_path="$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
+        abs_path="$(cd "$(dirname "$target_path")" && pwd)/$(basename "$target_path")"
     fi
 
     # Get absolute PWD (resolve symlinks)
