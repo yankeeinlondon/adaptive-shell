@@ -95,7 +95,8 @@ function add_to_fpath() {
 # adaptive_bootstrap [--first-run]
 #
 # Runs the host setup from utils/bootstrap.sh: asks, in turn, whether to
-# install Starship, the core utilities, Rust and the AI agent CLIs.
+# install Starship, switch a bash login shell to zsh, the core
+# utilities, Rust and the AI agent CLIs.
 #
 # With `--first-run` (how adaptive_setup calls it) it runs at most once
 # per host -- `~/.adaptive-initialized` records that it has run. Called

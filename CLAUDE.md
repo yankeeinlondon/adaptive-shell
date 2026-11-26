@@ -21,7 +21,7 @@ The scripts follow a hierarchical dependency structure:
 ### Key Modules
 
 - **adaptive.sh**: Main initialization script that sources other modules and sets up completions
-- **utils/bootstrap.sh**: First-run host setup, triggered once per host from `adaptive.sh` (marker `~/.adaptive-initialized`; re-run with `adaptive_bootstrap`). Asks in turn whether to install Starship (+ `resources/starship.toml`), core utilities, Rust + cargo-binstall, and AI agent CLIs, across macOS/Linux distros/NixOS/Windows (Git Bash). All host-changing commands go through `_bootstrap_exec` so tests can record them — see `tests/unit/bootstrap.test.ts`
+- **utils/bootstrap.sh**: First-run host setup, triggered once per host from `adaptive.sh` (marker `~/.adaptive-initialized`; re-run with `adaptive_bootstrap`). Asks in turn whether to install Starship (+ `resources/starship.toml`), switch a bash login shell to zsh, core utilities, Rust + cargo-binstall, and AI agent CLIs, across macOS/Linux distros/NixOS/Windows (Git Bash). All host-changing commands go through `_bootstrap_exec` so tests can record them — see `tests/unit/bootstrap.test.ts`
 - **utils.sh**: Extensive utility functions for file operations, string manipulation, system detection
 - **aliases.sh**: Dynamic alias generation based on available commands (kubectl, nvim, lazygit, eza/exa)
 - **initialize.sh**: System initialization for Debian systems (package installation, tool setup)

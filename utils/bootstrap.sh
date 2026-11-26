@@ -6,9 +6,10 @@
 # whether to install:
 #
 #   1. the Starship prompt (and a config showing `user@host`)
-#   2. a set of core CLI utilities
-#   3. Rust (via rustup) plus `cargo-binstall`
-#   4. a set of AI agent CLIs (only when `curl` is available)
+#   2. switching the login shell to zsh (only when it is bash)
+#   3. a set of core CLI utilities
+#   4. Rust (via rustup) plus `cargo-binstall`
+#   5. a set of AI agent CLIs (only when `curl` is available)
 #
 # Everything here is written for bash 3.2+ and runs in a bash child
 # process -- `adaptive.sh` may be sourced from zsh, but the install logic
@@ -51,6 +52,8 @@ BOOTSTRAP_AI_AGENTS=(claude codex opencode agy pi)
 # Outcome tracking for the end-of-run summary.
 BOOTSTRAP_INSTALLED=()
 BOOTSTRAP_FAILED=()
+# Manual follow-ups the bootstrap could not do itself.
+BOOTSTRAP_TODO=()
 
 # Package managers whose index has already been refreshed this run.
 __BOOTSTRAP_REFRESHED=" "
@@ -1088,6 +1091,206 @@ function install_starship_for_host() {
 }
 
 # ---------------------------------------------------------------------------
+# Login shell (bash -> zsh)
+# ---------------------------------------------------------------------------
+
+# login_shell
+#
+# Prints the current user's login shell as recorded for the account
+# (`dscl` on macOS, the passwd database elsewhere), falling back to
+# `$SHELL`. Prints nothing and fails on Windows, which has no login shell
+# to change.
+function login_shell() {
+    local -r user="${USER:-$(id -un 2> /dev/null)}"
+    local sh=""
+
+    if is_windows; then
+        return 1
+    fi
+
+    if is_mac; then
+        sh="$(dscl . -read "/Users/${user}" UserShell 2> /dev/null | awk '{print $2}')"
+    elif has_command "getent"; then
+        sh="$(getent passwd "${user}" 2> /dev/null | cut -d: -f7)"
+    elif [ -r /etc/passwd ]; then
+        sh="$(awk -F: -v u="${user}" '$1 == u { print $7 }' /etc/passwd)"
+    fi
+    [ -n "${sh}" ] || sh="${SHELL:-}"
+
+    [ -n "${sh}" ] || return 1
+    echo "${sh}"
+}
+
+# install_zsh_for_host
+#
+# Installs zsh with the host's package manager (macOS already ships
+# /bin/zsh).
+function install_zsh_for_host() {
+    if has_command "zsh"; then
+        return 0
+    fi
+
+    install_from_spec "zsh" brew:zsh port:zsh apt:zsh dnf:zsh yum:zsh pacman:zsh apk:zsh zypper:zsh nix:zsh \
+        || return 1
+    _bootstrap_refresh_path
+    has_command "zsh"
+}
+
+# zsh_path
+#
+# Prints the absolute path of the zsh to use as a login shell: the
+# system /bin/zsh on macOS; otherwise a zsh /etc/shells already lists
+# (its canonical path -- on Fedora root's PATH finds /usr/sbin/zsh
+# through the merged sbin, which is not); otherwise the one on PATH.
+function zsh_path() {
+    local -r shells_file="${ADAPTIVE_ETC_SHELLS:-/etc/shells}"
+
+    if is_mac && [ -x /bin/zsh ]; then
+        echo "/bin/zsh"
+        return 0
+    fi
+
+    local listed
+    if [ -r "${shells_file}" ]; then
+        while IFS= read -r listed; do
+            case "${listed}" in
+                /*/zsh)
+                    if [ -x "${listed}" ]; then
+                        echo "${listed}"
+                        return 0
+                    fi
+                    ;;
+            esac
+        done < "${shells_file}"
+    fi
+
+    command -v zsh 2> /dev/null
+}
+
+# _ensure_in_etc_shells <path>
+#
+# Adds `path` to /etc/shells when it is missing; `chsh` refuses shells
+# that are not listed there.
+function _ensure_in_etc_shells() {
+    local -r shell_path="${1:?path missing in call to _ensure_in_etc_shells}"
+    local -r shells_file="${ADAPTIVE_ETC_SHELLS:-/etc/shells}"
+
+    if [ -r "${shells_file}" ] && grep -qxF "${shell_path}" "${shells_file}"; then
+        return 0
+    fi
+    logc "- adding {{BLUE}}${shell_path}{{RESET}} to ${shells_file}"
+    printf '%s\n' "${shell_path}" | _bootstrap_privileged tee -a "${shells_file}" > /dev/null
+}
+
+# set_login_shell <path>
+#
+# Changes the current user's login shell with `chsh`, or `usermod -s`
+# where chsh is not installed (e.g. minimal Fedora images).
+function set_login_shell() {
+    local -r shell_path="${1:?path missing in call to set_login_shell}"
+    local -r user="${USER:-$(id -un 2> /dev/null)}"
+
+    if has_command "chsh"; then
+        if is_mac || [ "$(id -u)" -eq 0 ] || ! has_command "sudo"; then
+            # macOS (and a non-root user without sudo) authenticate with
+            # the user's own password.
+            _bootstrap_exec chsh -s "${shell_path}" "${user}"
+        else
+            _bootstrap_privileged chsh -s "${shell_path}" "${user}"
+        fi
+    elif has_command "usermod"; then
+        _bootstrap_privileged usermod -s "${shell_path}" "${user}"
+    else
+        logc "- {{RED}}ERROR:{{RESET}} neither {{BOLD}}chsh{{RESET}} nor {{BOLD}}usermod{{RESET}} is available to change the login shell"
+        return 1
+    fi
+}
+
+# configure_zsh_for_user
+#
+# Gives the user a ~/.zshrc (honoring ZDOTDIR) that keeps a shared,
+# de-duplicated history and sources adaptive.sh -- which also keeps
+# zsh's first-run `zsh-newuser-install` wizard from appearing.
+#
+# The settings live in a marked block; an existing ~/.zshrc that already
+# sources adaptive.sh is left alone.
+function configure_zsh_for_user() {
+    local -r zshrc="${ZDOTDIR:-${HOME}}/.zshrc"
+    local -r begin="# >>> adaptive-shell >>>"
+    local adaptive="${ADAPTIVE_SHELL:-${ROOT}}/adaptive.sh"
+
+    if [ -f "${zshrc}" ] && grep -qF "adaptive.sh" "${zshrc}"; then
+        logc "- {{DIM}}${zshrc} already sources adaptive.sh; left unchanged{{RESET}}"
+        return 0
+    fi
+
+    # Write the path relative to $HOME so the file survives a moved home.
+    case "${adaptive}" in
+        "${HOME}"/*) adaptive="\${HOME}${adaptive#"${HOME}"}" ;;
+    esac
+
+    mkdir -p "$(dirname "${zshrc}")" || return 1
+    {
+        [ -s "${zshrc}" ] && printf '\n'
+        printf '%s\n' "${begin}"
+        printf '%s\n' '# History: large, shared between sessions, without duplicates.'
+        printf '%s\n' 'HISTFILE="${HISTFILE:-${HOME}/.zsh_history}"'
+        printf '%s\n' 'HISTSIZE=50000'
+        printf '%s\n' 'SAVEHIST=50000'
+        printf '%s\n' 'setopt APPEND_HISTORY SHARE_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE'
+        printf '\n'
+        printf 'source "%s"\n' "${adaptive}"
+        printf '%s\n' "# <<< adaptive-shell <<<"
+    } >> "${zshrc}" || return 1
+
+    logc "- configured {{BLUE}}${zshrc}{{RESET}} to load adaptive-shell"
+}
+
+# switch_to_zsh
+#
+# Installs zsh, configures it for the user and makes it their login
+# shell. On NixOS the login shell is declared in configuration.nix, so
+# that last part becomes a printed follow-up.
+function switch_to_zsh() {
+    if ! has_command "zsh"; then
+        logc "- installing {{BOLD}}{{BLUE}}zsh{{RESET}}"
+        if install_zsh_for_host; then
+            BOOTSTRAP_INSTALLED+=("zsh")
+        else
+            BOOTSTRAP_FAILED+=("zsh")
+            return 1
+        fi
+    fi
+
+    configure_zsh_for_user || BOOTSTRAP_FAILED+=("zsh config (.zshrc)")
+
+    if is_nixos; then
+        logc "- on NixOS the login shell is declared in {{BOLD}}configuration.nix{{RESET}}; add:"
+        logc "    {{BOLD}}programs.zsh.enable = true;{{RESET}}"
+        logc "    {{BOLD}}users.users.${USER:-<you>}.shell = pkgs.zsh;{{RESET}}"
+        logc "  then run {{BOLD}}sudo nixos-rebuild switch{{RESET}}"
+        BOOTSTRAP_TODO+=("set zsh as the login shell in configuration.nix")
+        return 0
+    fi
+
+    local shell_path
+    shell_path="$(zsh_path)"
+    if [ -z "${shell_path}" ]; then
+        BOOTSTRAP_FAILED+=("login shell -> zsh")
+        return 1
+    fi
+
+    if _ensure_in_etc_shells "${shell_path}" && set_login_shell "${shell_path}"; then
+        BOOTSTRAP_INSTALLED+=("login shell -> zsh")
+        logc "- login shell is now {{BOLD}}${shell_path}{{RESET}} {{DIM}}(from your next login; {{BOLD}}exec zsh{{RESET}}{{DIM}} starts it now){{RESET}}"
+    else
+        logc "- {{YELLOW}}WARN:{{RESET}} could not change the login shell; run {{BOLD}}chsh -s ${shell_path}{{RESET}} yourself"
+        BOOTSTRAP_FAILED+=("login shell -> zsh")
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -1134,11 +1337,34 @@ function bootstrap_step_starship() {
     fi
 }
 
+# bootstrap_step_shell
+#
+# Step 2: when the user's login shell is bash, offers to switch to zsh.
+function bootstrap_step_shell() {
+    logc "\n{{BOLD}}2. Shell{{RESET}}"
+
+    local current
+    if ! current="$(login_shell)"; then
+        logc "- {{DIM}}skipped: no login shell to change on this host{{RESET}}"
+        return 0
+    fi
+
+    if [[ "${current##*/}" != "bash" ]]; then
+        logc "- login shell is {{BOLD}}${current##*/}{{RESET}}"
+        return 0
+    fi
+
+    logc "- login shell is {{BOLD}}bash{{RESET}} {{DIM}}(${current}){{RESET}}"
+    if confirm "Do you want to switch to zsh?"; then
+        switch_to_zsh
+    fi
+}
+
 # bootstrap_step_core_utils
 #
-# Step 2: offers to install the missing core utilities.
+# Step 3: offers to install the missing core utilities.
 function bootstrap_step_core_utils() {
-    logc "\n{{BOLD}}2. Core utilities{{RESET}}"
+    logc "\n{{BOLD}}3. Core utilities{{RESET}}"
 
     local -a missing=()
     local line
@@ -1160,9 +1386,9 @@ function bootstrap_step_core_utils() {
 
 # bootstrap_step_rust
 #
-# Step 3: offers to install Rust and cargo-binstall.
+# Step 4: offers to install Rust and cargo-binstall.
 function bootstrap_step_rust() {
-    logc "\n{{BOLD}}3. Rust{{RESET}}"
+    logc "\n{{BOLD}}4. Rust{{RESET}}"
 
     if has_command "cargo" && has_command "cargo-binstall"; then
         logc "- {{BOLD}}Rust{{RESET}} and {{BOLD}}cargo-binstall{{RESET}} are already installed"
@@ -1198,10 +1424,10 @@ function bootstrap_step_rust() {
 
 # bootstrap_step_ai_agents
 #
-# Step 4: offers to install the missing AI agent CLIs. Skipped when
+# Step 5: offers to install the missing AI agent CLIs. Skipped when
 # `curl` is not installed.
 function bootstrap_step_ai_agents() {
-    logc "\n{{BOLD}}4. AI agents{{RESET}}"
+    logc "\n{{BOLD}}5. AI agents{{RESET}}"
 
     if ! has_command "curl"; then
         logc "- {{DIM}}skipped: the agent installers need {{BOLD}}curl{{RESET}}{{DIM}}, which is not installed{{RESET}}"
@@ -1228,8 +1454,8 @@ function bootstrap_step_ai_agents() {
 
 # adaptive_bootstrap_run
 #
-# Runs the interactive first-run setup: Starship, core utilities, Rust and
-# AI agents, each behind its own question. Returns non-zero when anything
+# Runs the interactive first-run setup: Starship, the login shell (bash ->
+# zsh), core utilities, Rust and AI agents, each behind its own question. Returns non-zero when anything
 # the user asked for failed to install.
 function adaptive_bootstrap_run() {
     local where
@@ -1241,11 +1467,12 @@ function adaptive_bootstrap_run() {
     fi
 
     logc ""
-    logc "{{BOLD}}First-time setup{{RESET}} for {{BOLD}}{{BLUE}}$(uname -n 2> /dev/null || hostname){{RESET}} {{DIM}}(${where}; package manager: $(host_pkg_manager || echo none)){{RESET}}"
+    logc "{{BOLD}}Host setup{{RESET}} for {{BOLD}}{{BLUE}}$(uname -n 2> /dev/null || hostname){{RESET}} {{DIM}}(${where}; package manager: $(host_pkg_manager || echo none)){{RESET}}"
 
     _bootstrap_refresh_path
 
     bootstrap_step_starship
+    bootstrap_step_shell
     bootstrap_step_core_utils
     bootstrap_step_rust
     bootstrap_step_ai_agents
@@ -1256,6 +1483,9 @@ function adaptive_bootstrap_run() {
     fi
     if [ "${#BOOTSTRAP_FAILED[@]}" -gt 0 ]; then
         logc "{{RED}}Failed:{{RESET}} $(_bootstrap_join "${BOOTSTRAP_FAILED[@]}")"
+    fi
+    if [ "${#BOOTSTRAP_TODO[@]}" -gt 0 ]; then
+        logc "{{YELLOW}}To do:{{RESET}} $(_bootstrap_join "${BOOTSTRAP_TODO[@]}")"
     fi
     logc "{{DIM}}- run {{BOLD}}{{BLUE}}adaptive_bootstrap{{RESET}}{{DIM}} at any time to go through these questions again{{RESET}}"
     logc ""

@@ -882,6 +882,261 @@ install_starship_for_host`,
       expect(template).toMatch(/\[container\]\s*\ndisabled = true/)
     })
   })
+
+  describe('login shell (bash -> zsh)', () => {
+    /** mocks that make `zsh` appear once a package manager installs it */
+    const zshAppearsOnInstall = `
+eval "recording_$(declare -f _bootstrap_exec)"
+_bootstrap_exec() {
+  recording__bootstrap_exec "$@"
+  local rc=$?
+  [[ "$*" == *"install -y zsh" ]] && MOCK_COMMANDS="\${MOCK_COMMANDS}zsh "
+  return $rc
+}
+zsh_path() { echo /usr/bin/zsh; }
+`
+
+    describe('login_shell()', () => {
+      it('reads the passwd database on Linux', () => {
+        const result = runBootstrap({
+          script: `getent() { echo "dev:x:1000:1000::/home/dev:/bin/bash"; }; login_shell`,
+          commands: ['getent'],
+          env: { USER: 'dev', SHELL: '/bin/zsh' }
+        })
+
+        expect(result.stdout.trim()).toBe('/bin/bash')
+      })
+
+      it('reads the account record with dscl on macOS', () => {
+        const result = runBootstrap({
+          script: `dscl() { echo "UserShell: /bin/bash"; }; login_shell`,
+          host: 'mac',
+          env: { USER: 'dev', SHELL: '/bin/zsh' }
+        })
+
+        expect(result.stdout.trim()).toBe('/bin/bash')
+      })
+
+      it('falls back to $SHELL', () => {
+        const result = runBootstrap({
+          script: `getent() { return 2; }; login_shell`,
+          commands: ['getent'],
+          env: { USER: 'dev', SHELL: '/usr/bin/fish' }
+        })
+
+        expect(result.stdout.trim()).toBe('/usr/bin/fish')
+      })
+
+      it('fails on Windows', () => {
+        const result = runBootstrap({ script: 'login_shell', host: 'windows' })
+
+        expect(result.code).toBe(1)
+        expect(result.stdout.trim()).toBe('')
+      })
+    })
+
+    describe('bootstrap_step_shell()', () => {
+      it('asks "Do you want to switch to zsh?" when the login shell is bash', () => {
+        const result = runBootstrap({
+          script: `login_shell() { echo /bin/bash; }; confirm() { echo "ASKED: $1"; return 1; }; bootstrap_step_shell`
+        })
+
+        expect(result.stdout).toContain('ASKED: Do you want to switch to zsh?')
+        expect(result.calls).toEqual([])
+      })
+
+      it.each(['/bin/zsh', '/usr/bin/fish', '/bin/sh'])('does not ask when the login shell is %s', (shell) => {
+        const result = runBootstrap({
+          script: `login_shell() { echo ${shell}; }; confirm() { echo "ASKED: $1"; return 0; }; bootstrap_step_shell`
+        })
+
+        expect(result.stdout).not.toContain('ASKED')
+        expect(result.calls).toEqual([])
+      })
+
+      it('skips Windows without asking', () => {
+        const result = runBootstrap({
+          script: `confirm() { echo "ASKED: $1"; return 0; }; bootstrap_step_shell`,
+          host: 'windows'
+        })
+
+        expect(result.stdout).not.toContain('ASKED')
+        expect(result.stderr).toContain('skipped')
+      })
+    })
+
+    describe('switch_to_zsh()', () => {
+      it('installs zsh, registers it in /etc/shells and changes the login shell via sudo', () => {
+        const result = runBootstrap({
+          script: `${zshAppearsOnInstall}
+printf '/bin/sh\\n/bin/bash\\n' > "$HOME/shells"
+ADAPTIVE_ETC_SHELLS="$HOME/shells" switch_to_zsh
+echo "INSTALLED: \${BOOTSTRAP_INSTALLED[*]}"
+grep -c 'adaptive-shell' "$HOME/.zshrc"`,
+          commands: ['apt-get', 'sudo', 'chsh'],
+          env: { USER: 'dev' }
+        })
+
+        expect(result.code).toBe(0)
+        expect(result.calls).toEqual([
+          'sudo apt-get update',
+          'sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y zsh',
+          expect.stringMatching(/^sudo tee -a \S+\/shells$/),
+          'sudo chsh -s /usr/bin/zsh dev'
+        ])
+        expect(result.stdout).toContain('INSTALLED: zsh login shell -> zsh')
+        expect(result.stdout.trim().endsWith('2')).toBe(true)
+      })
+
+      it('does not touch /etc/shells when zsh is already listed', () => {
+        const result = runBootstrap({
+          script: `${zshAppearsOnInstall}
+printf '/bin/bash\\n/usr/bin/zsh\\n' > "$HOME/shells"
+ADAPTIVE_ETC_SHELLS="$HOME/shells" switch_to_zsh`,
+          commands: ['zsh', 'chsh'],
+          uid: 0,
+          env: { USER: 'root' }
+        })
+
+        expect(result.calls).toEqual(['chsh -s /usr/bin/zsh root'])
+      })
+
+      it('uses usermod where chsh is not installed', () => {
+        const result = runBootstrap({
+          script: `${zshAppearsOnInstall}
+printf '/usr/bin/zsh\\n' > "$HOME/shells"
+ADAPTIVE_ETC_SHELLS="$HOME/shells" switch_to_zsh`,
+          commands: ['zsh', 'usermod'],
+          uid: 0,
+          env: { USER: 'root' }
+        })
+
+        expect(result.calls).toEqual(['usermod -s /usr/bin/zsh root'])
+      })
+
+      it('runs chsh as the user on macOS (it asks for their password)', () => {
+        const result = runBootstrap({
+          script: `${zshAppearsOnInstall}
+printf '/usr/bin/zsh\\n' > "$HOME/shells"
+ADAPTIVE_ETC_SHELLS="$HOME/shells" switch_to_zsh`,
+          host: 'mac',
+          commands: ['zsh', 'chsh', 'sudo'],
+          env: { USER: 'dev' }
+        })
+
+        expect(result.calls).toEqual(['chsh -s /usr/bin/zsh dev'])
+      })
+
+      it('configures zsh but leaves the login shell to configuration.nix on NixOS', () => {
+        const result = runBootstrap({
+          script: `${zshAppearsOnInstall}
+switch_to_zsh
+echo "TODO: \${BOOTSTRAP_TODO[*]}"
+test -f "$HOME/.zshrc" && echo ZSHRC`,
+          host: 'nixos',
+          commands: ['zsh', 'chsh'],
+          env: { USER: 'dev' }
+        })
+
+        expect(result.code).toBe(0)
+        expect(result.calls).toEqual([])
+        expect(result.stderr).toContain('users.users.dev.shell = pkgs.zsh;')
+        expect(result.stdout).toContain('TODO: set zsh as the login shell in configuration.nix')
+        expect(result.stdout).toContain('ZSHRC')
+      })
+
+      it('reports failure when zsh cannot be installed', () => {
+        const result = runBootstrap({
+          script: `${zshAppearsOnInstall}
+switch_to_zsh
+echo "FAILED: \${BOOTSTRAP_FAILED[*]}"`,
+          commands: ['apt-get', 'sudo', 'chsh'],
+          failingCalls: ['install -y zsh']
+        })
+
+        expect(result.code).toBe(0)
+        expect(result.stdout).toContain('FAILED: zsh')
+        expect(result.calls.some(c => c.includes('chsh'))).toBe(false)
+      })
+    })
+
+    describe('zsh_path()', () => {
+      it('prefers an executable zsh that /etc/shells already lists', () => {
+        const result = runBootstrap({
+          script: `
+mkdir -p "$HOME/bin" && printf '#!/bin/sh\\n' > "$HOME/bin/zsh" && chmod +x "$HOME/bin/zsh"
+printf '/bin/sh\\n/nonexistent/zsh\\n%s\\n' "$HOME/bin/zsh" > "$HOME/shells"
+ADAPTIVE_ETC_SHELLS="$HOME/shells" zsh_path | sed "s|$HOME|~|"`
+        })
+
+        expect(result.stdout.trim()).toBe('~/bin/zsh')
+      })
+
+      it('falls back to the zsh on PATH when /etc/shells lists none', () => {
+        const result = runBootstrap({
+          script: `
+mkdir -p "$HOME/bin" && printf '#!/bin/sh\\n' > "$HOME/bin/zsh" && chmod +x "$HOME/bin/zsh"
+printf '/bin/sh\\n' > "$HOME/shells"
+PATH="$HOME/bin:$PATH" ADAPTIVE_ETC_SHELLS="$HOME/shells" zsh_path | sed "s|$HOME|~|"`
+        })
+
+        expect(result.stdout.trim()).toBe('~/bin/zsh')
+      })
+
+      it('uses /bin/zsh on macOS', () => {
+        const result = runBootstrap({ script: 'zsh_path', host: 'mac' })
+
+        expect(result.stdout.trim()).toBe('/bin/zsh')
+      })
+    })
+
+    describe('configure_zsh_for_user()', () => {
+      it('writes a history + adaptive-shell block, with the path relative to $HOME', () => {
+        const result = runBootstrap({
+          script: `ADAPTIVE_SHELL="$HOME/.config/sh" configure_zsh_for_user && cat "$HOME/.zshrc"`
+        })
+
+        expect(result.code).toBe(0)
+        expect(result.stdout).toContain('# >>> adaptive-shell >>>')
+        expect(result.stdout).toContain('SAVEHIST=50000')
+        expect(result.stdout).toContain('setopt APPEND_HISTORY SHARE_HISTORY')
+        expect(result.stdout).toContain('source "${HOME}/.config/sh/adaptive.sh"')
+        expect(result.stdout).toContain('# <<< adaptive-shell <<<')
+      })
+
+      it('appends to an existing .zshrc and is idempotent', () => {
+        const result = runBootstrap({
+          script: `
+printf 'export EDITOR=nvim\\n' > "$HOME/.zshrc"
+configure_zsh_for_user && configure_zsh_for_user
+head -n 1 "$HOME/.zshrc"
+grep -c '>>> adaptive-shell >>>' "$HOME/.zshrc"`
+        })
+
+        expect(result.stdout.trim().split('\n')).toEqual(['export EDITOR=nvim', '1'])
+        expect(result.stderr).toContain('left unchanged')
+      })
+
+      it('leaves a .zshrc that already sources adaptive.sh alone', () => {
+        const result = runBootstrap({
+          script: `
+printf 'source ~/.config/sh/adaptive.sh\\n' > "$HOME/.zshrc"
+configure_zsh_for_user
+cat "$HOME/.zshrc"`
+        })
+
+        expect(result.stdout.trim()).toBe('source ~/.config/sh/adaptive.sh')
+      })
+
+      it('honors ZDOTDIR', () => {
+        const result = runBootstrap({
+          script: `ZDOTDIR="$HOME/zdot" configure_zsh_for_user && test -f "$HOME/zdot/.zshrc" && echo OK`
+        })
+
+        expect(result.stdout.trim()).toBe('OK')
+      })
+    })
+  })
 })
 
 describe('adaptive_bootstrap()', () => {
