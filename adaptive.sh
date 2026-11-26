@@ -92,59 +92,64 @@ function add_to_fpath() {
     echo "fpath+=( \"${fpath_dir}\" )" >>"${zshrc}"
 }
 
-# offer_starship_install
+# adaptive_bootstrap [--first-run]
 #
-# Offers -- at most once per host -- to install the starship prompt.
+# Runs the host setup from utils/bootstrap.sh: asks, in turn, whether to
+# install Starship, the core utilities, Rust and the AI agent CLIs.
 #
-# Declining writes a marker file so later shells stay silent; delete it
-# (or run `install_starship`) to revisit the decision.
-function offer_starship_install() {
-    local -r marker="${HOME}/.adaptive-no-starship"
+# With `--first-run` (how adaptive_setup calls it) it runs at most once
+# per host -- `~/.adaptive-initialized` records that it has run. Called
+# by hand it always runs.
+#
+# It only ever prompts from an interactive shell with a terminal
+# attached. A prompt raised during a non-interactive startup (an editor
+# capturing the environment, scp, cron) blocks forever with nothing on
+# screen explaining why.
+function adaptive_bootstrap() {
+    local -r marker="${HOME}/.adaptive-initialized"
+    local force=1
 
-    if has_command "starship"; then
+    if [ "${1:-}" = "--first-run" ]; then
+        force=0
+    fi
+
+    if [ "${force}" -eq 0 ]; then
+        if [ -e "${marker}" ]; then
+            return 0
+        fi
+        case "$-" in
+            *i*) ;;
+            *) return 0 ;;
+        esac
+    fi
+    if [ ! -t 0 ] || [ ! -t 2 ]; then
+        [ "${force}" -eq 1 ] && echo "adaptive_bootstrap: needs a terminal" >&2
         return 0
     fi
 
-    # Only ever prompt from an interactive shell with a terminal
-    # attached. A prompt raised during a non-interactive startup (an
-    # editor capturing the environment, scp, cron) blocks forever with
-    # nothing on screen explaining why.
-    case "$-" in
-        *i*) ;;
-        *) return 0 ;;
-    esac
-    if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
-        return 0
+    # Written before running so an interrupted run never re-prompts on
+    # every new shell; `adaptive_bootstrap` re-runs it on demand.
+    : > "${marker}"
+
+    local rc=0
+    bash "${ADAPTIVE_SHELL}/utils/bootstrap.sh" adaptive_bootstrap_run || rc=$?
+
+    # Pick up whatever was just installed in *this* shell: new PATH
+    # entries, and drop the "install me?" wrapper functions that
+    # user-functions.sh defines for tools that were missing (functions
+    # shadow executables).
+    if declare -f append_to_path > /dev/null 2>&1; then
+        append_to_path
     fi
-    if file_exists "${marker}"; then
-        return 0
-    fi
+    local tool
+    for tool in starship cargo rustup; do
+        if has_command "${tool}"; then
+            unset -f "${tool}" 2> /dev/null || true
+        fi
+    done
+    hash -r 2> /dev/null || true
 
-    # shellcheck source="./utils/interactive.sh"
-    source "${UTILS}/interactive.sh"
-
-    log ""
-    logc "{{BOLD}}{{GREEN}}starship{{RESET}} -- the prompt this config expects -- is not installed on this host."
-
-    if ! confirm "Install it now?"; then
-        : > "${marker}"
-        logc "{{DIM}}- ok, not asking again{{RESET}}"
-        logc "{{DIM}}- run {{BOLD}}{{BLUE}}install_starship{{RESET}}{{DIM}} whenever you change your mind{{RESET}}"
-        return 0
-    fi
-
-    # shellcheck source="./utils/install.sh"
-    source "${UTILS}/install.sh"
-
-    if ! install_starship; then
-        logc "{{DIM}}- run {{BOLD}}{{BLUE}}install_starship{{RESET}}{{DIM}} to try again{{RESET}}"
-        return 1
-    fi
-
-    # user-functions.sh defines a `starship` wrapper when the binary is
-    # missing, and functions shadow executables -- drop it or the real
-    # starship stays unreachable for the rest of this shell.
-    unset -f starship 2> /dev/null || true
+    return "${rc}"
 }
 
 function adaptive_setup() {
@@ -290,36 +295,6 @@ function adaptive_setup() {
                 source <"$(aws_completer "$(get_shell)" 2>/dev/null || echo)" 2>/dev/null || true
             fi
         fi
-    fi
-
-    if ! file_exists "${HOME}/.adaptive-initialized"; then
-        OS="$(os)"
-        distro="$(distro)"
-
-        log ""
-        log "It appears this system hasn't yet been initialized for your OS."
-        log "Initialization just ensures that the core utils for your OS are"
-        log "installed as a baseline."
-        log ""
-        if is_linux; then
-            log "The detected OS is: ${BOLD}${BRIGHT_BLUE}${OS}${RESET} → ${BOLD}${distro}${RESET}"
-        else
-            log "The detected OS is: ${BOLD}${BRIGHT_BLUE}${OS}${RESET}"
-        fi
-        log ""
-        if confirm "Would you like to do this now?"; then
-
-            log "Installing"
-            touch "${HOME}/.adaptive-initialized"
-
-            bash "${HOME}/.config/sh/initialize.sh"
-        else
-            log "Ok bye."
-            log "${DIM}- run ${BOLD}${BLUE}initialize${RESET}${DIM} at any time to "
-
-            touch "${HOME}/.adaptive-initialized"
-        fi
-
     fi
 
     if not_empty "${WEZTERM_CONFIG_DIR}"; then
@@ -549,7 +524,7 @@ function adaptive_setup() {
 
     source "${ROOT}/user-functions.sh"
 
-    offer_starship_install
+    adaptive_bootstrap --first-run
 
     # NOTE: use `has_command` (not `type`) for every tool initialized via
     # `eval "$(tool ...)"`. `user-functions.sh` defines wrapper *functions*

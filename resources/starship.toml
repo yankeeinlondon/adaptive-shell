@@ -1,0 +1,24 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Starship configuration installed by adaptive-shell.
+#
+# Only the modules below differ from Starship's defaults; everything else
+# renders exactly as a stock install would.
+
+# `user` -- always shown, so the prompt reads `user@host in <dir>`.
+[username]
+show_always = true
+format = "[$user]($style)"
+
+# `@host` -- always shown, dimmed so it reads as a qualifier of the user
+# rather than a second, equally loud name.
+[hostname]
+ssh_only = false
+style = "dimmed"
+format = "[@$hostname]($style) in "
+
+# The container module prints `[Systemd]` on the second line of the
+# prompt of any host where `/run/systemd/container` exists, which is noise
+# rather than information.
+[container]
+disabled = true

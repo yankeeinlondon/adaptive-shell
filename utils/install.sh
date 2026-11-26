@@ -244,66 +244,17 @@ function install_ninja_build {
 
 # install_build_tools
 #
-# Installs essential build tools (compilers, make, cmake) on the current system.
-# Uses OS-appropriate meta-packages where available for comprehensive coverage.
+# Installs essential build tools (C/C++ compiler, make) using the host's
+# conventional meta-package (see `install_build_tools_for_host` in
+# bootstrap.sh).
 function install_build_tools {
-    source "${UTILS}/logging.sh"
-    source "${UTILS}/detection.sh"
-    local SUDO
-    if is_root_user; then
-        SUDO=""
-    else
-        SUDO="sudo"
+    # shellcheck source="./bootstrap.sh"
+    source "${UTILS}/bootstrap.sh"
+    if build_tools_present; then
+        logc "- {{BOLD}}{{BLUE}}build tools{{RESET}} are already installed"
+        return 0
     fi
-
-    if is_debian; then
-        "${SUDO}" apt install -y build-essential make cmake ninja-build pkgconf unzip xz-utils zip file gettext openssl || error "failed to install base build tools ccache"
-    elif is_ubuntu; then
-        sudo apt install -y "build-essential make cmake ninja-build pkgconf unzip xz-utils zip file gettext openssl ccache" || error "failed to install base build tools"
-    elif is_mint; then
-        "${SUDO}" apt install -y "build-essential make cmake ninja-build pkgconf unzip xz-utils zip file gettext openssl ccache" || error "failed to install base build tools"
-    elif is_alpine; then
-        "${SUDO}" apk add --no-cache "build-base ca-certificates pkgconf unzip zip xz file gettext openssl-dev" || error "failed to install base build tools"
-    elif is_opensuse; then
-        "${SUDO}" zypper install "-y pattern devel_basis gcc gcc-c++ make cmake ninja pkg-config ca-certificates unzip zip xz file gettext-tools libopenssl-devel" || error "failed to install base build tools"
-    elif is_fedora; then
-        sudo dnf install -y @development-tools || error "failed to install base build tools"
-        sudo dnf install -y \
-        gcc gcc-c++ make \
-        cmake ninja-build pkgconf-pkg-config \
-        git curl wget ca-certificates \
-        python3 python3-pip \
-        unzip zip xz \
-        file gettext \
-        openssl-devel autoconf automake libtool meson gcb strace || error "failed to install base build tools"
-
-    elif is_arch; then
-        "${SUDO}" pacman -Syu --needed \
-            base-devel \
-            git curl wget ca-certificates \
-            cmake ninja \
-            pkgconf \
-            python python-pip \
-            unzip zip xz \
-            file gettext \
-            openssl || error "failed to install base build tools"
-    elif is_mac; then
-        if has_command "brew"; then
-            brew install -y autoconf automake libtool meson openssl ninja ca-certificates pkg-config coreutils gnu-sed gnu-tar unzip zip || error "failed to install base build tools"
-        elif has_command "port"; then
-            port install "-N ca-certificates cmake ninja pkgconfig gmake unzip zip xz gettext openssl"
-        else
-            error "can not install the build tools on macOS when neither Homebrew or MacPorts are installed!"
-        fi
-    elif is_windows; then
-        winget install -e --id Microsoft.VisualStudio.2022.BuildTools || error "failed to install base build tools"
-        winget install -e --id Kitware.CMake || error "failed to install base build tools"
-        winget install -e --id Ninja-build.Ninja || error "failed to install base build tools"
-        winget install -e --id Git.Git || error "failed to install base build tools"
-    fi
-
-
-
+    install_build_tools_for_host
 }
 
 
@@ -1846,11 +1797,17 @@ function install_deno() {
     fi
 }
 
+# install_rust
+#
+# Installs Rust via rustup (see `install_rust_toolchain` in bootstrap.sh).
 function install_rust() {
-    if has_command "rustc"; then
+    if has_command "cargo"; then
         logc "- {{BOLD}}{{BLUE}}Rust{{RESET}} is already installed"
         return 0
     fi
+    # shellcheck source="./bootstrap.sh"
+    source "${UTILS}/bootstrap.sh"
+    install_rust_toolchain
 }
 
 
@@ -1962,7 +1919,7 @@ install_claude_code() {
 # https://opencode.ai/
 install_opencode() {
     if has_command "opencode"; then
-        logc "- {{BOLD}}{{BLUE}}OpenCode CLI{RESET}} is already installed"
+        logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} is already installed"
         return 0
     fi
 
@@ -1977,7 +1934,7 @@ install_opencode() {
         (curl -fsSL https://opencode.ai/install | bash && logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} installed ({{ITALIC}}via {{BOLD}}curl{{RESET}})") || error "failed to install OpenCode via curl" 1
     else
         logc "- installing {{BOLD}}{{BLUE}}opencode{{RESET}} requires that either {{BOLD}}curl{{RESET}} is installed or you have the {{BOLD}}brew{{RESET}} or {{BOLD}}paru{{RESET}} package managers."
-        if commit "Install curl now?"; then
+        if confirm "Install curl now?"; then
             install_curl || error "failed to install curl!" 1
             (curl -fsSL https://opencode.ai/install | bash && logc "- {{BOLD}}{{BLUE}}OpenCode CLI{{RESET}} installed ({{ITALIC}}via {{BOLD}}curl{{RESET}})") || error "failed to install OpenCode via curl" 1
         else
