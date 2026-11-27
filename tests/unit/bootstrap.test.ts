@@ -1185,4 +1185,54 @@ ${script}`], {
     expect(result.stdout).not.toContain('BOOTSTRAP RAN')
     expect(result.stderr).toContain('needs a terminal')
   })
+
+  describe('prompt editing', () => {
+    function runPromptEdit({ setup = '', offer = true }: { setup?: string; offer?: boolean } = {}) {
+      return spawnSync('bash', ['--norc', '-ic', `
+eval "$(sed -n '/^function _adaptive_prompt_edit()/,/^}/p' adaptive.sh)"
+source utils/detection.sh
+source utils/interactive.sh
+has_command() { return 1; }
+confirm() { echo "PROMPT: $*"; return 0; }
+${setup}
+_adaptive_prompt_edit ${offer ? '--offer' : ''} || exit
+has_function edit_prompt
+`], {
+        cwd: REPO_ROOT,
+        encoding: 'utf-8',
+        env: { ...process.env, HOME: home, ADAPTIVE_SHELL: REPO_ROOT, INPUTRC: '/dev/null' }
+      })
+    }
+
+    it('enables prompt editing immediately and restores it in a new shell', () => {
+      const result = runPromptEdit()
+      expect(result.status).toBe(0)
+      expect(result.stdout).toContain('PROMPT: Enable Ctrl+X Ctrl+E')
+      expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(true)
+
+      const next = runPromptEdit({ offer: false })
+      expect(next.status).toBe(0)
+      expect(next.stdout).toBe('')
+    })
+
+    it('skips the offer when zoxide is installed', () => {
+      const result = runPromptEdit({ setup: 'has_command() { [ "$1" = zoxide ]; }' })
+      expect(result.stdout).toBe('')
+      expect(result.status).toBe(1)
+      expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(false)
+    })
+
+    it('keeps an existing edit_prompt function', () => {
+      const result = runPromptEdit({ setup: 'edit_prompt() { :; }; readonly -f edit_prompt' })
+      expect(result.stdout).toBe('')
+      expect(result.status).toBe(0)
+      expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(false)
+    })
+
+    it('leaves prompt editing disabled when declined', () => {
+      const result = runPromptEdit({ setup: 'confirm() { return 1; }' })
+      expect(result.status).toBe(1)
+      expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(false)
+    })
+  })
 })

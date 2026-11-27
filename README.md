@@ -16,6 +16,39 @@ and MACHINE_DESC as well as include any content found in the file `${HOME}/about
 
 To help you get your system up and running with a useful set of utilities you always want to have installed (per OS/distro)
 
+### Edit the current command
+
+Adaptive offers prompt editing on first run and when you run `adaptive_bootstrap`,
+unless it finds `zoxide` on PATH or `edit_prompt` in the current shell. Saying yes
+enables **Ctrl+X, Ctrl+E** for this and future interactive shells.
+
+The shortcut opens the current command in `VISUAL` or `EDITOR`. In zsh and Bash
+4+, the saved text returns to the prompt for review. Bash 3 uses its built-in
+`edit-and-execute-command`, which runs the edited command after a successful editor exit.
+
+For **Cmd+E**, configure the terminal app you type into to send the same two
+keys. This also works when the shell is on a remote host.
+
+**WezTerm** — add this entry to your `config.keys` table.
+
+```lua
+{ key = "e", mods = "SUPER", action = wezterm.action.SendString("\x18\x05") },
+```
+
+**Rex** — add this to your `rex/init.lua`.
+
+```lua
+rex.action{
+  name = "edit_shell_prompt",
+  title = "Edit shell prompt",
+  run = function()
+    rex.client.queue("pane.send_key", { key = "ctrl+x" })
+    rex.client.queue("pane.send_key", { key = "ctrl+e" })
+  end,
+}
+rex.bind("cmd+e", "edit_shell_prompt")
+```
+
 ### Adaptive Features
 
 - **Auto Aliasing** - detects some commonly found utilities on a system and uses them to create useful aliases. Examples include:

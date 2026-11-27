@@ -92,11 +92,41 @@ function add_to_fpath() {
     echo "fpath+=( \"${fpath_dir}\" )" >>"${zshrc}"
 }
 
+# _adaptive_prompt_edit [--offer]
+#
+# Loads the saved prompt editor preference, or offers to enable it during
+# bootstrap. This runs in the caller so it can see and bind shell functions.
+function _adaptive_prompt_edit() {
+    [[ "$-" == *i* ]] || return 0
+    has_function edit_prompt && return 0
+
+    local -r preference="${HOME}/.adaptive-prompt-edit"
+    if [ "${1:-}" != "--offer" ]; then
+        [ -f "${preference}" ] || return 0
+        source "${ADAPTIVE_SHELL}/utils/prompt-edit.sh"
+        return
+    fi
+
+    has_command zoxide && return 0
+    if [ ! -f "${preference}" ]; then
+        local question="Enable Ctrl+X Ctrl+E to edit the current command in your editor?"
+        if [[ -n "${BASH_VERSION:-}" ]] && [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+            question="Enable Ctrl+X Ctrl+E to edit and run the current command (Bash 3)?"
+        fi
+        source "${ADAPTIVE_SHELL}/utils/interactive.sh" || return
+        confirm "${question}" n || return 0
+    fi
+
+    source "${ADAPTIVE_SHELL}/utils/prompt-edit.sh" || return
+    touch "${preference}" || return
+    printf '%s\n' 'Prompt editing enabled. Ctrl+X Ctrl+E also works over SSH.' >&2
+}
+
 # adaptive_bootstrap [--first-run]
 #
 # Runs the host setup from utils/bootstrap.sh: asks, in turn, whether to
 # install Starship, switch a bash login shell to zsh, the core
-# utilities, Rust and the AI agent CLIs.
+# utilities, Rust and the AI agent CLIs, and enable prompt editing.
 #
 # With `--first-run` (how adaptive_setup calls it) it runs at most once
 # per host -- `~/.adaptive-initialized` records that it has run. Called
@@ -149,6 +179,7 @@ function adaptive_bootstrap() {
         fi
     done
     hash -r 2> /dev/null || true
+    _adaptive_prompt_edit --offer || rc=1
 
     return "${rc}"
 }
@@ -525,6 +556,7 @@ function adaptive_setup() {
 
     source "${ROOT}/user-functions.sh"
 
+    _adaptive_prompt_edit
     adaptive_bootstrap --first-run
 
     # NOTE: use `has_command` (not `type`) for every tool initialized via
