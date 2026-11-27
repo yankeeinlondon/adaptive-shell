@@ -97,35 +97,56 @@ function add_to_fpath() {
 # Loads the saved prompt editor preference, or offers to enable it during
 # bootstrap. This runs in the caller so it can see and bind shell functions.
 function _adaptive_prompt_edit() {
-    [[ "$-" == *i* ]] || return 0
-    has_function edit_prompt && return 0
-
     local -r preference="${HOME}/.adaptive-prompt-edit"
     if [ "${1:-}" != "--offer" ]; then
+        [[ "$-" == *i* ]] || return 0
+        has_function edit_prompt && return 0
         [ -f "${preference}" ] || return 0
         source "${ADAPTIVE_SHELL}/utils/prompt-edit.sh"
         return
     fi
 
-    has_command zoxide && return 0
+    logc "\n{{BOLD}}6. Prompt editing{{RESET}}"
+    if [[ "$-" != *i* ]]; then
+        logc "- skipped because prompt editing requires an interactive shell"
+        return 0
+    fi
+    if has_function edit_prompt; then
+        logc "- {{BOLD}}edit_prompt{{RESET}} is already loaded"
+        return 0
+    fi
+    if has_command zoxide; then
+        logc "- skipped the prompt editing offer because {{BOLD}}zoxide{{RESET}} is installed"
+        return 0
+    fi
+
     if [ ! -f "${preference}" ]; then
         local question="Enable Ctrl+X Ctrl+E to edit the current command in your editor?"
         if [[ -n "${BASH_VERSION:-}" ]] && [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
             question="Enable Ctrl+X Ctrl+E to edit and run the current command (Bash 3)?"
         fi
         source "${ADAPTIVE_SHELL}/utils/interactive.sh" || return
-        confirm "${question}" n || return 0
+        if ! confirm "${question}" n; then
+            logc "- prompt editing is disabled"
+            return 0
+        fi
     fi
 
-    source "${ADAPTIVE_SHELL}/utils/prompt-edit.sh" || return
-    touch "${preference}" || return
-    printf '%s\n' 'Prompt editing enabled. Ctrl+X Ctrl+E also works over SSH.' >&2
+    if ! source "${ADAPTIVE_SHELL}/utils/prompt-edit.sh"; then
+        logc "- {{RED}}could not enable prompt editing{{RESET}}"
+        return 1
+    fi
+    if ! touch "${preference}"; then
+        logc "- enabled prompt editing for this shell. Could not save the preference"
+        return 1
+    fi
+    logc "- enabled {{BOLD}}Ctrl+X, then Ctrl+E{{RESET}} for this and future interactive shells"
 }
 
 # adaptive_bootstrap [--first-run]
 #
 # Runs the host setup from utils/bootstrap.sh: asks, in turn, whether to
-# install Starship, switch a bash login shell to zsh, the core
+# install Starship, switch a bash login shell to zsh or upgrade Bash 3, the core
 # utilities, Rust and the AI agent CLIs, and enable prompt editing.
 #
 # With `--first-run` (how adaptive_setup calls it) it runs at most once
@@ -163,7 +184,7 @@ function adaptive_bootstrap() {
     : > "${marker}"
 
     local rc=0
-    bash "${ADAPTIVE_SHELL}/utils/bootstrap.sh" adaptive_bootstrap_run || rc=$?
+    bash "${ADAPTIVE_SHELL}/utils/bootstrap.sh" adaptive_bootstrap_run "${BASH_VERSION:-}" || rc=$?
 
     # Pick up whatever was just installed in *this* shell: new PATH
     # entries, and drop the "install me?" wrapper functions that
@@ -180,6 +201,8 @@ function adaptive_bootstrap() {
     done
     hash -r 2> /dev/null || true
     _adaptive_prompt_edit --offer || rc=1
+    logc "\n{{DIM}}- run {{BOLD}}{{BLUE}}adaptive_bootstrap{{RESET}}{{DIM}} at any time to go through these questions again{{RESET}}"
+    logc ""
 
     return "${rc}"
 }

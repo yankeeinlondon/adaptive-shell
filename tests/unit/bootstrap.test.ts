@@ -3,6 +3,7 @@ import { spawnSync } from 'child_process'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { isShellAvailable } from '../helpers'
 
 /**
  * Host the bash code under test should believe it is running on.
@@ -1137,6 +1138,99 @@ cat "$HOME/.zshrc"`
       })
     })
   })
+
+  describe('Bash 3 upgrade', () => {
+    it.each(['', '5.3.0'])('reports the Bash check for a zsh login with running Bash version %j', (version) => {
+      const result = runBootstrap({
+        script: `
+login_shell() { echo /bin/zsh; }
+confirm() { echo "ASKED: $1"; return 0; }
+bootstrap_step_shell "${version}"
+`
+      })
+
+      expect(result.code).toBe(0)
+      expect(result.stderr).toContain(version ? 'running Bash 5.3.0' : 'bootstrap is using Bash')
+      expect(result.stderr).toContain('Bash upgrade skipped')
+      expect(result.stdout).not.toContain('ASKED')
+    })
+
+    it('finds modern Bash behind an older executable on PATH', () => {
+      const result = runBootstrap({
+        script: `
+mkdir "$HOME/old" "$HOME/new"
+printf '#!/bin/sh\\necho 3\\n' > "$HOME/old/bash"
+printf '#!/bin/sh\\necho 5\\n' > "$HOME/new/bash"
+chmod +x "$HOME/old/bash" "$HOME/new/bash"
+PATH="$HOME/old:$HOME/new" modern_bash_path
+`
+      })
+
+      expect(result.code).toBe(0)
+      expect(result.stdout.trim()).toMatch(/\/new\/bash$/)
+    })
+
+    it('can move a Bash 3 login to an installed Bash after the user declines zsh', () => {
+      const result = runBootstrap({
+        script: `
+mkdir "$HOME/old"
+printf '#!/bin/sh\\necho 3\\n' > "$HOME/old/bash"
+chmod +x "$HOME/old/bash"
+login_shell() { echo "$HOME/old/bash"; }
+modern_bash_path() { echo /opt/homebrew/bin/bash; }
+confirm() { echo "ASKED: $1"; [[ "$1" != *zsh* ]]; }
+ADAPTIVE_ETC_SHELLS="$HOME/shells" bootstrap_step_shell 5.3.0
+`,
+        host: 'mac',
+        commands: ['chsh', 'sudo'],
+        env: { USER: 'dev' }
+      })
+
+      expect(result.stdout).toContain('ASKED: Bash 3 detected. Use /opt/homebrew/bin/bash as your login shell?')
+      expect(result.calls).toEqual([
+        expect.stringMatching(/^sudo tee -a \S+\/shells$/),
+        'chsh -s /opt/homebrew/bin/bash dev'
+      ])
+    })
+
+    it('installs modern Bash for a Bash 3 session without changing a zsh login', () => {
+      const result = runBootstrap({
+        script: `
+login_shell() { echo /bin/zsh; }
+confirm() { echo "ASKED: $1"; return 0; }
+modern_bash_path() { [ -f "$HOME/bash-installed" ] && echo /opt/homebrew/bin/bash; }
+eval "recording_$(declare -f _bootstrap_exec)"
+_bootstrap_exec() {
+  recording__bootstrap_exec "$@" || return
+  : > "$HOME/bash-installed"
+}
+bootstrap_step_shell 3.2.57
+`,
+        host: 'mac',
+        commands: ['brew']
+      })
+
+      expect(result.stdout).toContain('ASKED: Bash 3 detected. Install Bash 4 or newer?')
+      expect(result.calls).toEqual(['brew install bash'])
+      expect(result.stderr).toContain('exec /opt/homebrew/bin/bash -l')
+    })
+
+    it('reports failure if the package manager still leaves only Bash 3', () => {
+      const result = runBootstrap({
+        script: `
+confirm() { return 0; }
+modern_bash_path() { return 1; }
+bootstrap_step_bash 3.2.57 /bin/zsh
+`,
+        host: 'mac',
+        commands: ['port', 'sudo']
+      })
+
+      expect(result.calls).toEqual(['sudo port -N install bash'])
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain('could not find Bash 4 or newer')
+    })
+  })
 })
 
 describe('adaptive_bootstrap()', () => {
@@ -1186,9 +1280,10 @@ ${script}`], {
     expect(result.stderr).toContain('needs a terminal')
   })
 
-  describe('prompt editing', () => {
+  describe.each((['bash', 'zsh'] as const).filter(isShellAvailable))('prompt editing in %s', (shell) => {
     function runPromptEdit({ setup = '', offer = true }: { setup?: string; offer?: boolean } = {}) {
-      return spawnSync('bash', ['--norc', '-ic', `
+      const args = shell === 'bash' ? ['--noprofile', '--norc', '-ic'] : ['-dfic']
+      return spawnSync(shell, [...args, `
 eval "$(sed -n '/^function _adaptive_prompt_edit()/,/^}/p' adaptive.sh)"
 source utils/detection.sh
 source utils/interactive.sh
@@ -1208,23 +1303,29 @@ has_function edit_prompt
       const result = runPromptEdit()
       expect(result.status).toBe(0)
       expect(result.stdout).toContain('PROMPT: Enable Ctrl+X Ctrl+E')
+      expect(result.stderr).toContain('6. Prompt editing')
+      expect(result.stderr).toContain('for this and future interactive shells')
       expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(true)
 
       const next = runPromptEdit({ offer: false })
       expect(next.status).toBe(0)
       expect(next.stdout).toBe('')
+      expect(next.stderr).not.toContain('6. Prompt editing')
     })
 
     it('skips the offer when zoxide is installed', () => {
       const result = runPromptEdit({ setup: 'has_command() { [ "$1" = zoxide ]; }' })
       expect(result.stdout).toBe('')
+      expect(result.stderr).toContain('skipped the prompt editing offer')
+      expect(result.stderr).toContain('zoxide')
       expect(result.status).toBe(1)
       expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(false)
     })
 
     it('keeps an existing edit_prompt function', () => {
-      const result = runPromptEdit({ setup: 'edit_prompt() { :; }; readonly -f edit_prompt' })
+      const result = runPromptEdit({ setup: 'edit_prompt() { :; }; readonly -f edit_prompt > /dev/null' })
       expect(result.stdout).toBe('')
+      expect(result.stderr).toContain('is already loaded')
       expect(result.status).toBe(0)
       expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(false)
     })
@@ -1232,6 +1333,7 @@ has_function edit_prompt
     it('leaves prompt editing disabled when declined', () => {
       const result = runPromptEdit({ setup: 'confirm() { return 1; }' })
       expect(result.status).toBe(1)
+      expect(result.stderr).toContain('prompt editing is disabled')
       expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(false)
     })
   })

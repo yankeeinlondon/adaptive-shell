@@ -6,7 +6,7 @@
 # whether to install:
 #
 #   1. the Starship prompt (and a config showing `user@host`)
-#   2. switching the login shell to zsh (only when it is bash)
+#   2. switching a Bash login shell to zsh or upgrading Bash 3
 #   3. a set of core CLI utilities
 #   4. Rust (via rustup) plus `cargo-binstall`
 #   5. a set of AI agent CLIs (only when `curl` is available)
@@ -1091,7 +1091,7 @@ function install_starship_for_host() {
 }
 
 # ---------------------------------------------------------------------------
-# Login shell (bash -> zsh)
+# Shell setup
 # ---------------------------------------------------------------------------
 
 # login_shell
@@ -1290,6 +1290,124 @@ function switch_to_zsh() {
     fi
 }
 
+# bash_major_version <shell>
+#
+# Prints the major version of a Bash executable without loading startup files.
+function bash_major_version() {
+    BASH_ENV=/dev/null "${1:?Bash executable missing}" --noprofile --norc -c 'printf "%s\n" "${BASH_VERSINFO[0]}"'
+}
+
+# modern_bash_path [login_bash]
+#
+# Prints the first Bash 4+ executable, even when an older Bash precedes it on PATH.
+function modern_bash_path() {
+    local shell_path brew_prefix
+    while IFS= read -r shell_path; do
+        [[ "${shell_path}" == /* ]] && [ -x "${shell_path}" ] || continue
+        if [ "$(bash_major_version "${shell_path}")" -ge 4 ] 2> /dev/null; then
+            printf '%s\n' "${shell_path}"
+            return 0
+        fi
+    done < <(
+        printf '%s\n' "${1:-}"
+        type -aP bash
+        if is_mac; then
+            printf '%s\n' /opt/local/bin/bash
+            if has_command brew && brew_prefix="$(brew --prefix bash 2> /dev/null)"; then
+                printf '%s/bin/bash\n' "${brew_prefix}"
+            fi
+        fi
+    )
+    return 1
+}
+
+# bootstrap_step_bash <running_version> <login_shell>
+#
+# Offers modern Bash when Bash 3 is the running or configured login shell.
+function bootstrap_step_bash() {
+    local -r running_version="${1:-}" current="${2:-}"
+    local login_bash="" login_major="" shell_path question start_command
+
+    if [[ "${current##*/}" == bash ]] && [ -x "${current}" ]; then
+        login_bash="${current}"
+        login_major="$(bash_major_version "${login_bash}")" || login_major=""
+    fi
+
+    if [ -n "${running_version}" ]; then
+        logc "- running Bash ${running_version%%(*}"
+    else
+        logc "- bootstrap is using Bash ${BASH_VERSION%%(*}"
+    fi
+    if [ -n "${login_major}" ]; then
+        logc "- login shell uses Bash major version ${login_major}"
+    fi
+    if is_windows; then
+        logc "- Bash upgrades are managed by Git for Windows"
+        return 0
+    fi
+    if [[ "${running_version}" != 3.* && "${login_major}" != 3 ]]; then
+        logc "- Bash upgrade skipped (requires Bash 3 as the running or login shell)"
+        return 0
+    fi
+
+    shell_path="$(modern_bash_path "${login_bash}")" || shell_path=""
+    if [ -z "${shell_path}" ]; then
+        question="Bash 3 detected. Install Bash 4 or newer?"
+        if [ "${login_major}" = 3 ]; then
+            question="Bash 3 detected. Install Bash 4 or newer and use it as your login shell?"
+        fi
+        if ! confirm "${question}" n; then
+            logc "- Bash upgrade declined"
+            return 0
+        fi
+
+        if is_mac && ! has_command brew && ! has_command port; then
+            if ! confirm "Install Homebrew to install Bash?" n; then
+                logc "- Bash installation skipped because Homebrew setup was declined"
+                return 0
+            fi
+            if ! install_homebrew; then
+                BOOTSTRAP_FAILED+=("Homebrew")
+                return 1
+            fi
+        fi
+
+        if install_from_spec "Bash" brew:bash port:bash apt:bash dnf:bash yum:bash pacman:bash apk:bash zypper:bash nix:bashInteractive; then
+            _bootstrap_refresh_path
+            shell_path="$(modern_bash_path "${login_bash}")" || shell_path=""
+        fi
+        if [ -z "${shell_path}" ]; then
+            logc "- {{YELLOW}}WARN:{{RESET}} could not find Bash 4 or newer after installation"
+            BOOTSTRAP_FAILED+=("Bash")
+            return 1
+        fi
+        BOOTSTRAP_INSTALLED+=("Bash")
+    else
+        logc "- modern Bash is already installed at ${shell_path}"
+        if [ "${login_major}" = 3 ] && ! confirm "Bash 3 detected. Use ${shell_path} as your login shell?" n; then
+            logc "- Bash login shell upgrade declined"
+            return 0
+        fi
+    fi
+
+    printf -v start_command 'exec %q -l' "${shell_path}"
+    logc "- start modern Bash in this terminal with {{BOLD}}${start_command}{{RESET}}"
+
+    if [ "${login_major}" = 3 ] && [ "${shell_path}" != "${current}" ]; then
+        if is_nixos; then
+            logc "- set {{BOLD}}users.users.${USER:-<you>}.shell = pkgs.bashInteractive;{{RESET}} in configuration.nix, then run {{BOLD}}sudo nixos-rebuild switch{{RESET}}"
+            BOOTSTRAP_TODO+=("set Bash as the login shell in configuration.nix")
+        elif _ensure_in_etc_shells "${shell_path}" && set_login_shell "${shell_path}"; then
+            logc "- your next login will use {{BOLD}}${shell_path}{{RESET}}"
+            BOOTSTRAP_INSTALLED+=("login shell -> Bash")
+        else
+            logc "- {{YELLOW}}WARN:{{RESET}} could not set ${shell_path} as the login shell"
+            BOOTSTRAP_FAILED+=("login shell -> Bash")
+            return 1
+        fi
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
@@ -1337,27 +1455,24 @@ function bootstrap_step_starship() {
     fi
 }
 
-# bootstrap_step_shell
+# bootstrap_step_shell [running_bash_version]
 #
-# Step 2: when the user's login shell is bash, offers to switch to zsh.
+# Step 2: offers to switch a Bash login shell to zsh or upgrade Bash 3.
 function bootstrap_step_shell() {
     logc "\n{{BOLD}}2. Shell{{RESET}}"
 
     local current
     if ! current="$(login_shell)"; then
         logc "- {{DIM}}skipped: no login shell to change on this host{{RESET}}"
-        return 0
+    else
+        logc "- login shell is {{BOLD}}${current##*/}{{RESET}} {{DIM}}(${current}){{RESET}}"
+        if [[ "${current##*/}" == bash ]] && confirm "Do you want to switch to zsh?"; then
+            logc "- Bash upgrade skipped because you chose zsh"
+            switch_to_zsh
+            return
+        fi
     fi
-
-    if [[ "${current##*/}" != "bash" ]]; then
-        logc "- login shell is {{BOLD}}${current##*/}{{RESET}}"
-        return 0
-    fi
-
-    logc "- login shell is {{BOLD}}bash{{RESET}} {{DIM}}(${current}){{RESET}}"
-    if confirm "Do you want to switch to zsh?"; then
-        switch_to_zsh
-    fi
+    bootstrap_step_bash "${1:-}" "${current}"
 }
 
 # bootstrap_step_core_utils
@@ -1452,11 +1567,10 @@ function bootstrap_step_ai_agents() {
     fi
 }
 
-# adaptive_bootstrap_run
+# adaptive_bootstrap_run [running_bash_version]
 #
-# Runs the interactive first-run setup: Starship, the login shell (bash ->
-# zsh), core utilities, Rust and AI agents, each behind its own question. Returns non-zero when anything
-# the user asked for failed to install.
+# Runs the interactive first-run setup for Starship, the login shell, core
+# utilities, Rust and AI agents. Returns non-zero when a requested step fails.
 function adaptive_bootstrap_run() {
     local where
     where="$(os)"
@@ -1472,12 +1586,14 @@ function adaptive_bootstrap_run() {
     _bootstrap_refresh_path
 
     bootstrap_step_starship
-    bootstrap_step_shell
+    bootstrap_step_shell "${1-${BASH_VERSION}}"
     bootstrap_step_core_utils
     bootstrap_step_rust
     bootstrap_step_ai_agents
 
-    logc ""
+    if [ "${#BOOTSTRAP_INSTALLED[@]}" -gt 0 ] || [ "${#BOOTSTRAP_FAILED[@]}" -gt 0 ] || [ "${#BOOTSTRAP_TODO[@]}" -gt 0 ]; then
+        logc ""
+    fi
     if [ "${#BOOTSTRAP_INSTALLED[@]}" -gt 0 ]; then
         logc "{{GREEN}}Installed:{{RESET}} $(_bootstrap_join "${BOOTSTRAP_INSTALLED[@]}")"
     fi
@@ -1487,9 +1603,6 @@ function adaptive_bootstrap_run() {
     if [ "${#BOOTSTRAP_TODO[@]}" -gt 0 ]; then
         logc "{{YELLOW}}To do:{{RESET}} $(_bootstrap_join "${BOOTSTRAP_TODO[@]}")"
     fi
-    logc "{{DIM}}- run {{BOLD}}{{BLUE}}adaptive_bootstrap{{RESET}}{{DIM}} at any time to go through these questions again{{RESET}}"
-    logc ""
-
     [ "${#BOOTSTRAP_FAILED[@]}" -eq 0 ]
 }
 

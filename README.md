@@ -16,11 +16,24 @@ and MACHINE_DESC as well as include any content found in the file `${HOME}/about
 
 To help you get your system up and running with a useful set of utilities you always want to have installed (per OS/distro)
 
+On first run and when you run `adaptive_bootstrap`, Adaptive checks the running
+shell and the account's login shell for Bash 3. It can install Bash 4 or newer
+through the host's package manager, or reuse a copy you already have. If Bash 3
+is your login shell and you choose to keep using Bash, the offer can also make
+the newer Bash your login shell. Start a new shell to use the installed version.
+
 ### Edit the current command
 
 Adaptive offers prompt editing on first run and when you run `adaptive_bootstrap`,
 unless it finds `zoxide` on PATH or `edit_prompt` in the current shell. Saying yes
-enables **Ctrl+X, Ctrl+E** for this and future interactive shells.
+enables **Ctrl+X, Ctrl+E** for this and future interactive shells. Check
+**Prompt editing** in the bootstrap output for the result. If setup is skipped
+because zoxide is installed, you can still use Adaptive's binding by adding
+the following line after you source Adaptive in `.bashrc` or `.zshrc`.
+
+```sh
+source "$ADAPTIVE_SHELL/utils/prompt-edit.sh"
+```
 
 The shortcut opens the current command in `VISUAL` or `EDITOR`. In zsh and Bash
 4+, the saved text returns to the prompt for review. Bash 3 uses its built-in
