@@ -1326,6 +1326,7 @@ function modern_bash_path() {
 # Offers modern Bash when Bash 3 is the running or configured login shell.
 function bootstrap_step_bash() {
     local -r running_version="${1:-}" current="${2:-}"
+    local -r detected_version="${running_version:-${BASH_VERSION}}"
     local login_bash="" login_major="" shell_path question start_command
 
     if [[ "${current##*/}" == bash ]] && [ -x "${current}" ]; then
@@ -1346,7 +1347,11 @@ function bootstrap_step_bash() {
         return 0
     fi
     if [[ "${running_version}" != 3.* && "${login_major}" != 3 ]]; then
-        logc "- Bash upgrade skipped (requires Bash 3 as the running or login shell)"
+        if [ "${detected_version%%.*}" -ge 4 ]; then
+            logc "- Bash upgrade skipped. Bash ${detected_version%%(*} is modern"
+        else
+            logc "- Bash upgrade skipped (requires Bash 3 as the running or login shell)"
+        fi
         return 0
     fi
 

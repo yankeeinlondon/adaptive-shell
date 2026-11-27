@@ -27,7 +27,8 @@ the newer Bash your login shell. Start a new shell to use the installed version.
 Adaptive offers prompt editing on first run and when you run `adaptive_bootstrap`,
 unless it finds `zoxide` on PATH or `edit_prompt` in the current shell. Saying yes
 enables **Ctrl+X, Ctrl+E** for this and future interactive shells. Check
-**Prompt editing** in the bootstrap output for the result. If setup is skipped
+**Prompt editing** in the bootstrap output for the result and to see if the shell
+is ready for Cmd+E. If setup is skipped
 because zoxide is installed, you can still use Adaptive's binding by adding
 the following line after you source Adaptive in `.bashrc` or `.zshrc`.
 

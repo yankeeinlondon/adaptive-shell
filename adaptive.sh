@@ -143,6 +143,37 @@ function _adaptive_prompt_edit() {
     logc "- enabled {{BOLD}}Ctrl+X, then Ctrl+E{{RESET}} for this and future interactive shells"
 }
 
+# _adaptive_report_cmd_e
+#
+# Reports whether the shell handles the sequence sent by the terminal's Cmd+E.
+function _adaptive_report_cmd_e() {
+    local binding
+    if [[ "$-" != *i* ]]; then
+        logc "- Cmd+E requires an interactive shell"
+        return 0
+    elif [[ -n "${ZSH_VERSION:-}" ]]; then
+        binding="$(bindkey '^X^E' 2> /dev/null)" || binding=""
+        case "${binding}" in
+            *" edit_prompt"|*" edit-command-line")
+                logc "- Cmd+E shell binding is ready. The terminal must send Ctrl+X, then Ctrl+E"
+                return 0
+                ;;
+        esac
+    elif [[ -n "${BASH_VERSION:-}" ]]; then
+        binding="$(bind -X 2> /dev/null)" || binding=""
+        if [[ "${binding}" == *'"\C-x\C-e" "edit_prompt"'* ]]; then
+            logc "- Cmd+E shell binding is ready. The terminal must send Ctrl+X, then Ctrl+E"
+            return 0
+        fi
+        binding="$(bind -q edit-and-execute-command 2> /dev/null)" || binding=""
+        if [[ "${binding}" == *'"\C-x\C-e"'* ]]; then
+            logc "- Cmd+E uses Bash's edit-and-execute binding when the terminal sends Ctrl+X, then Ctrl+E"
+            return 0
+        fi
+    fi
+    logc "- Cmd+E needs a command-line editor bound to Ctrl+X, then Ctrl+E in this shell"
+}
+
 # adaptive_bootstrap [--first-run]
 #
 # Runs the host setup from utils/bootstrap.sh: asks, in turn, whether to
@@ -201,6 +232,7 @@ function adaptive_bootstrap() {
     done
     hash -r 2> /dev/null || true
     _adaptive_prompt_edit --offer || rc=1
+    _adaptive_report_cmd_e
     logc "\n{{DIM}}- run {{BOLD}}{{BLUE}}adaptive_bootstrap{{RESET}}{{DIM}} at any time to go through these questions again{{RESET}}"
     logc ""
 

@@ -1152,6 +1152,7 @@ bootstrap_step_shell "${version}"
       expect(result.code).toBe(0)
       expect(result.stderr).toContain(version ? 'running Bash 5.3.0' : 'bootstrap is using Bash')
       expect(result.stderr).toContain('Bash upgrade skipped')
+      if (version) expect(result.stderr).toContain('Bash 5.3.0 is modern')
       expect(result.stdout).not.toContain('ASKED')
     })
 
@@ -1285,12 +1286,14 @@ ${script}`], {
       const args = shell === 'bash' ? ['--noprofile', '--norc', '-ic'] : ['-dfic']
       return spawnSync(shell, [...args, `
 eval "$(sed -n '/^function _adaptive_prompt_edit()/,/^}/p' adaptive.sh)"
+eval "$(sed -n '/^function _adaptive_report_cmd_e()/,/^}/p' adaptive.sh)"
 source utils/detection.sh
 source utils/interactive.sh
 has_command() { return 1; }
 confirm() { echo "PROMPT: $*"; return 0; }
 ${setup}
 _adaptive_prompt_edit ${offer ? '--offer' : ''} || exit
+${offer ? '_adaptive_report_cmd_e' : ''}
 has_function edit_prompt
 `], {
         cwd: REPO_ROOT,
@@ -1305,6 +1308,7 @@ has_function edit_prompt
       expect(result.stdout).toContain('PROMPT: Enable Ctrl+X Ctrl+E')
       expect(result.stderr).toContain('6. Prompt editing')
       expect(result.stderr).toContain('for this and future interactive shells')
+      expect(result.stderr).toMatch(/Cmd\+E (shell binding is ready|uses Bash's edit-and-execute binding)/)
       expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(true)
 
       const next = runPromptEdit({ offer: false })
@@ -1318,6 +1322,9 @@ has_function edit_prompt
       expect(result.stdout).toBe('')
       expect(result.stderr).toContain('skipped the prompt editing offer')
       expect(result.stderr).toContain('zoxide')
+      if (shell === 'zsh') {
+        expect(result.stderr).toContain('Cmd+E needs a command-line editor bound')
+      }
       expect(result.status).toBe(1)
       expect(existsSync(join(home, '.adaptive-prompt-edit'))).toBe(false)
     })
